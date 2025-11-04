@@ -1,0 +1,86 @@
+// Make sure to set the package name in your Android Studio project
+// This file assumes you\'ve already set namespace to "com.example.callyn"
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+}
+
+android {
+    namespace = "com.example.callyn" // <-- Your package name
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.example.callyn"
+        minSdk = 27 // InCallService requires API 26 (Android 8.0)
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+    buildFeatures {
+        compose = true // Enable Jetpack Compose
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+dependencies {
+    // Core Android & Kotlin
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // Jetpack Compose
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.material)
+    implementation(libs.androidx.navigation.compose)
+
+
+    // For observing state from the CallManager (e.g., callState.collectAsState())
+    implementation(libs.androidx.lifecycle.runtime.compose)
+
+    // Icons
+    implementation(libs.androidx.compose.material.icons.extended)
+
+    // Testing
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// NOTE: Your `gradle/libs.versions.toml` file will define what \'libs.androidx.core.ktx\' 
+// maps to (e.g., androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.1" })

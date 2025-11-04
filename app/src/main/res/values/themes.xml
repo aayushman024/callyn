@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Callyn" parent="Theme.Material3.DayNight.NoActionBar">
+    </style>
+
+    <style name="Theme.Callyn.InCall" parent="Theme.Callyn">
+<!--        <item name="android:windowShowWhenLocked">true</item>-->
+<!--        <item name="android:windowTurnScreenOn">true</item>-->
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
+</resources>
