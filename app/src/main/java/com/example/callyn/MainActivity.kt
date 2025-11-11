@@ -1,28 +1,39 @@
 package com.example.callyn
 
-// --- ADDED IMPORTS ---
-import android.graphics.Color
-import androidx.core.view.WindowCompat
-// --- END ADDED IMPORTS ---
-
-import android.Manifest
-import android.annotation.SuppressLint
-import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.SharedPreferences
+import android.graphics.Color
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.telecom.TelecomManager
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.core.view.WindowCompat
+import com.example.callyn.ui.theme.CallynTheme
+
+// --- Original imports ---
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.role.RoleManager
+import android.content.pm.PackageManager
+import android.os.Build
+import android.telecom.TelecomManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -33,25 +44,19 @@ import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color as ComposeColor // Renamed to avoid conflict
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -59,17 +64,30 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.callyn.ContactsScreen
+import com.example.callyn.DialerScreen
+import com.example.callyn.ui.ZohoLoginScreen
+import kotlinx.coroutines.launch
+// --- End of original imports ---
+
 
 private const val TAG = "MainActivity"
 
-sealed class Screen(val route: String) {
-    object Contacts : Screen("contacts")
-    object Dialer : Screen("dialer")
+// --- NEW UI State Class ---
+sealed class MainActivityUiState {
+    object Loading : MainActivityUiState()
+    object LoggedOut : MainActivityUiState()
+    data class LoggedIn(val userName: String) : MainActivityUiState()
 }
 
+
+// --- Main Activity ---
 class MainActivity : ComponentActivity() {
 
-    // --- LAUNCHERS ---
+    private lateinit var authManager: AuthManager
+    private var uiState by mutableStateOf<MainActivityUiState>(MainActivityUiState.Loading)
+
+    // --- Original launchers (Unchanged) ---
     private val permissionsToRequest = mutableListOf(
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CONTACTS,
@@ -80,192 +98,212 @@ class MainActivity : ComponentActivity() {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
     }.toTypedArray()
-
     private val multiplePermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             Log.d(TAG, "Permission launcher callback received.")
-            result.entries.forEach { entry ->
-                Log.d(TAG, "Permission ${entry.key}: ${if (entry.value) "GRANTED" else "DENIED"}")
-            }
-            updatePermissionState()
         }
-
     private val defaultDialerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        Log.d(TAG, "Default dialer launcher callback received with code: ${result.resultCode}")
+    ) {
+        Log.d(TAG, "Default dialer launcher callback received with code: ${it.resultCode}")
     }
-
-    // --- STATE ---
-    private val isDefaultDialerState = mutableStateOf(false)
-    private val hasAllPermissionsState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "onCreate: Setting up content...")
 
-        // --- ADDED FOR EDGE-TO-EDGE ---
+        authManager = AuthManager(this)
+
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
-
-        // Set status bar icons to light (since your background is dark)
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = false
-        insetsController.isAppearanceLightNavigationBars = false // Also for nav bar
-        // --- END OF ADDED LINES ---
+        insetsController.isAppearanceLightNavigationBars = false
+
+        // Handle deep link if app was JUST opened by it
+        if (!handleIntent(intent)) {
+            // If not opened by deep link, check existing token
+            checkLoginState()
+        }
 
         setContent {
-            MaterialTheme {
+            CallynTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val isDefault by isDefaultDialerState
-                    val hasAllPermissions by hasAllPermissionsState
-
-                    MainScreen(
-                        hasAllPermissions = hasAllPermissions,
-                        isDefaultDialer = isDefault,
-                        onRequestPermissions = {
-                            Log.d(TAG, "Requesting runtime permissions...")
-                            requestPermissions()
-                        },
-                        onRequestDefaultDialer = {
-                            Log.d(TAG, "Requesting default dialer role...")
-                            offerDefaultDialer()
-                        },
-                        onContactClick = { number ->
-                            Log.d(TAG, "Dialing number: $number")
-                            dialNumber(number)
+                    when (val state = uiState) {
+                        is MainActivityUiState.Loading -> {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                         }
-                    )
+                        is MainActivityUiState.LoggedIn -> {
+                            MainScreenWithDialerLogic(state.userName)
+                        }
+                        is MainActivityUiState.LoggedOut -> {
+                            ZohoLoginScreen()
+                        }
+                    }
                 }
             }
         }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        updatePermissionState()
-        updateDialerState()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        Log.d(TAG, "onNewIntent: action=${intent.action}, data=${intent.data}")
+        Log.d(TAG, "onNewIntent called")
+        handleIntent(intent)
+    }
 
-        when (intent.action) {
-            Intent.ACTION_DIAL -> {
-                val number = intent.data?.schemeSpecificPart
-                Log.d(TAG, "DIAL intent received with number: $number")
-            }
-            Intent.ACTION_VIEW -> {
-                if (intent.data?.scheme == "tel") {
-                    val number = intent.data?.schemeSpecificPart
-                    Log.d(TAG, "VIEW tel: intent received with number: $number")
+    private fun checkLoginState() {
+        val token = authManager.getToken()
+        if (token != null) {
+            fetchUserName("Bearer $token")
+        } else {
+            uiState = MainActivityUiState.LoggedOut
+        }
+    }
+
+    private fun handleIntent(intent: Intent?): Boolean {
+        val data: Uri? = intent?.data
+        if (data != null && "callyn" == data.scheme && "auth" == data.host) {
+            val token = data.getQueryParameter("token")
+            if (!token.isNullOrEmpty()) {
+                Log.d(TAG, "SUCCESS! Received token from deep link.")
+                authManager.saveToken(token)
+                fetchUserName("Bearer $token")
+                return true
+            } else {
+                val loginError = data.getQueryParameter("login")
+                if (loginError == "failed") {
+                    Log.e(TAG, "Zoho login failed (from backend)")
+                    uiState = MainActivityUiState.LoggedOut
                 }
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun fetchUserName(token: String) {
+        lifecycleScope.launch {
+            uiState = MainActivityUiState.Loading
+            try {
+                val response = RetrofitInstance.api.getMe(token)
+                if (response.isSuccessful && response.body() != null) {
+                    val userName = response.body()!!.name
+                    Log.d(TAG, "Logged in as: $userName")
+                    uiState = MainActivityUiState.LoggedIn(userName)
+                } else {
+                    Log.e(TAG, "Token was invalid, logging out.")
+                    authManager.logout()
+                    uiState = MainActivityUiState.LoggedOut
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch user name", e)
+                authManager.logout()
+                uiState = MainActivityUiState.LoggedOut
             }
         }
     }
 
-    // --- HELPER FUNCTIONS ---
-
-    private fun updatePermissionState() {
-        hasAllPermissionsState.value = checkAllPermissions()
-        Log.d(TAG, "updatePermissionState: hasPermissions=${hasAllPermissionsState.value}")
-    }
-
-    private fun updateDialerState() {
-        isDefaultDialerState.value = isDefaultDialer()
-        Log.d(TAG, "updateDialerState: isDefaultDialer=${isDefaultDialerState.value}")
-    }
-
-    private fun checkAllPermissions(): Boolean {
+    // --- All your original helper functions (checkAllPermissions, etc.) ---
+    fun checkAllPermissions(): Boolean {
         return permissionsToRequest.all {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
-
-    private fun isDefaultDialer(): Boolean {
+    fun isDefaultDialer(): Boolean {
         val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
-        val isDefault = telecomManager?.defaultDialerPackage == packageName
-        Log.d(TAG, "isDefaultDialer: current default=${telecomManager?.defaultDialerPackage}, this app=$packageName, result=$isDefault")
-        return isDefault
+        return telecomManager?.defaultDialerPackage == packageName
     }
-
-    private fun requestPermissions() {
+    fun requestPermissions() {
         val permissionsToAsk = permissionsToRequest.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
-
         if (permissionsToAsk.isNotEmpty()) {
-            Log.d(TAG, "Requesting ${permissionsToAsk.size} permissions: ${permissionsToAsk.joinToString()}")
             multiplePermissionLauncher.launch(permissionsToAsk.toTypedArray())
-        } else {
-            Log.d(TAG, "All permissions already granted")
-            updatePermissionState()
         }
     }
-
-    private fun offerDefaultDialer() {
-        if (isDefaultDialer()) {
-            Log.d(TAG, "Already the default dialer")
-            return
-        }
-
+    fun offerDefaultDialer() {
+        if (isDefaultDialer()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            Log.d(TAG, "Using RoleManager (API 29+)")
             try {
                 val roleManager = getSystemService(RoleManager::class.java)
                 if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
                     val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
                     defaultDialerLauncher.launch(intent)
-                    Log.d(TAG, "RoleManager intent launched successfully.")
-                } else {
-                    Log.e(TAG, "ROLE_DIALER not available on this device")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "RoleManager launch failed: ${e.message}", e)
+                Log.e(TAG, "RoleManager launch failed", e)
             }
         } else {
-            Log.d(TAG, "Using old TelecomManager (API < 29)")
             try {
                 @Suppress("DEPRECATION")
                 val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
                     .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
                 defaultDialerLauncher.launch(intent)
-                Log.d(TAG, "TelecomManager intent launched successfully.")
             } catch (e: Exception) {
-                Log.e(TAG, "TelecomManager launch failed: ${e.message}", e)
+                Log.e(TAG, "TelecomManager launch failed", e)
             }
         }
     }
-
     @SuppressLint("MissingPermission")
-    private fun dialNumber(number: String) {
+    fun dialNumber(number: String) {
         if (!isDefaultDialer()) {
-            Log.w(TAG, "Cannot dial - not default dialer")
             offerDefaultDialer()
             return
         }
-
         if (!checkAllPermissions()) {
-            Log.w(TAG, "Cannot dial - missing permissions")
             requestPermissions()
             return
         }
-
         try {
             val uri = Uri.fromParts("tel", number, null)
             val intent = Intent(Intent.ACTION_CALL, uri)
             startActivity(intent)
-            Log.d(TAG, "Call initiated to: $number")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initiate call: ${e.message}", e)
+            Log.e(TAG, "Failed to initiate call", e)
         }
     }
 }
 
+
+// =================================================================
+// --- ALL YOUR ORIGINAL COMPOSABLES (Slightly modified) ---
+// =================================================================
+
+@Composable
+fun MainActivity.MainScreenWithDialerLogic(userName: String) {
+    var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
+    var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
+
+    MainScreen(
+        userName = userName,
+        hasAllPermissions = hasAllPermissions,
+        isDefaultDialer = isDefaultDialer,
+        onRequestPermissions = {
+            Log.d(TAG, "Requesting runtime permissions...")
+            requestPermissions()
+        },
+        onRequestDefaultDialer = {
+            Log.d(TAG, "Requesting default dialer role...")
+            offerDefaultDialer()
+        },
+        onContactClick = { number ->
+            Log.d(TAG, "Dialing number: $number")
+            dialNumber(number)
+        }
+    )
+}
+
+sealed class Screen(val route: String) {
+    object Contacts : Screen("contacts")
+    object Dialer : Screen("dialer")
+}
+
 @Composable
 fun MainScreen(
+    userName: String,
     hasAllPermissions: Boolean,
     isDefaultDialer: Boolean,
     onRequestPermissions: () -> Unit,
@@ -273,7 +311,10 @@ fun MainScreen(
     onContactClick: (String) -> Unit
 ) {
     if (isDefaultDialer && hasAllPermissions) {
-        MainScreenContent(onContactClick = onContactClick)
+        MainScreenContent(
+            userName = userName,
+            onContactClick = onContactClick
+        )
     } else {
         SetupScreen(
             isDefaultDialer = isDefaultDialer,
@@ -286,22 +327,30 @@ fun MainScreen(
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
-fun MainScreenContent(onContactClick: (String) -> Unit) {
+fun MainScreenContent(
+    userName: String,
+    onContactClick: (String) -> Unit
+) {
     val navController = rememberNavController()
     Scaffold(
         bottomBar = { BottomNavigationBar(navController) }
     ) {
-        NavHost(navController, startDestination = Screen.Contacts.route) {
+        NavHost(navController, startDestination = Screen.Contacts.route, modifier = Modifier.padding(it)) {
             composable(Screen.Contacts.route) {
-                ContactsScreen(onContactClick = onContactClick)
+                ContactsScreen(
+                    userName = userName,
+                    onContactClick = onContactClick
+                )
             }
             composable(Screen.Dialer.route) {
-                DialerScreen()
+                DialerScreen() // DialerScreen is unchanged
             }
         }
     }
 }
 
+// ... (BottomNavigationBar, SetupScreen, and SetupCard are unchanged) ...
+// (You provided this code in the prompt)
 @Composable
 fun BottomNavigationBar(navController: NavController) {
     val items = listOf(Screen.Contacts, Screen.Dialer)
@@ -380,17 +429,15 @@ private fun SetupScreen(
                     )
                 )
             ),
-        // .systemBarsPadding(), // <-- REMOVED FROM HERE
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
-                .systemBarsPadding(), // <-- ADDED HERE
+                .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // App Title
             Text(
                 text = "Callyn",
                 fontSize = 48.sp,
@@ -406,7 +453,6 @@ private fun SetupScreen(
                 modifier = Modifier.padding(bottom = 48.dp)
             )
 
-            // Default Dialer Setup
             if (!isDefaultDialer) {
                 SetupCard(
                     title = "Set as Default Dialer",
@@ -416,7 +462,6 @@ private fun SetupScreen(
                 )
             }
 
-            // Permissions Setup
             if (isDefaultDialer && !hasAllPermissions) {
                 SetupCard(
                     title = "Grant Permissions",

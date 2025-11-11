@@ -1,10 +1,11 @@
 // Make sure to set the package name in your Android Studio project
-// This file assumes you\'ve already set namespace to "com.example.callyn"
+// This file assumes you've already set namespace to "com.example.callyn"
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -65,12 +66,28 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.navigation.compose)
 
+    // --- THIS IS THE FIX ---
+    implementation(libs.androidx.browser) // Use alias, not hardcoded version
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    // -----------------------
 
     // For observing state from the CallManager (e.g., callState.collectAsState())
     implementation(libs.androidx.lifecycle.runtime.compose)
 
     // Icons
     implementation(libs.androidx.compose.material.icons.extended)
+
+    // --- THIS IS THE FIX (Incorrect aliases) ---
+    // Networking
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)  // Was libs.converter.gson
+    implementation(libs.okhttp.logging.interceptor) // Was libs.logging.interceptor
+    // implementation(libs.okhttp) // This alias doesn't exist and is not needed
+    // -------------------------------------------
 
     // Testing
     testImplementation(libs.junit)
@@ -82,5 +99,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-// NOTE: Your `gradle/libs.versions.toml` file will define what \'libs.androidx.core.ktx\' 
+// NOTE: Your `gradle/libs.versions.toml` file will define what 'libs.androidx.core.ktx'
 // maps to (e.g., androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.1" })

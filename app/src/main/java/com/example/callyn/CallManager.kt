@@ -29,7 +29,7 @@ object CallManager {
     @SuppressLint("MissingPermission")
     fun onCallAdded(call: Call) {
         val number = call.details.handle.schemeSpecificPart
-        val name = ContactRepository.getNameByNumber(number) ?: number ?: "Unknown"
+        val name = ContactRepository.getNameByNumber(number) ?: "Unknown"
         val isIncoming = call.state == Call.STATE_RINGING
 
         _callState.value = CallState(

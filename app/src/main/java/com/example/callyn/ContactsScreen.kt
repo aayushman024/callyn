@@ -1,19 +1,16 @@
 package com.example.callyn
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,28 +20,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.callyn.db.AppContact
+import com.example.callyn.ui.ContactsViewModel
+import com.example.callyn.ui.ContactsViewModelFactory
 import kotlinx.coroutines.launch
+import com.example.callyn.CallynApplication
+import com.example.callyn.AuthManager
 
-// ----- Color generator -----
+// --- Helper functions (can be moved) ---
+
 private fun getColorForName(name: String): Color {
     val palette = listOf(
-        Color(0xFF6366F1),
-        Color(0xFFEC4899),
-        Color(0xFF8B5CF6),
-        Color(0xFF10B981),
-        Color(0xFFF59E0B),
-        Color(0xFFEF4444),
-        Color(0xFF3B82F6),
-        Color(0xFF14B8A6)
+        Color(0xFF6366F1), Color(0xFFEC4899), Color(0xFF8B5CF6),
+        Color(0xFF10B981), Color(0xFFF59E0B), Color(0xFFEF4444),
+        Color(0xFF3B82F6), Color(0xFF14B8A6)
     )
-    return palette[name.hashCode().mod(palette.size)]
+    return palette[kotlin.math.abs(name.hashCode()) % palette.size]
 }
 
-// ----- Initials extractor -----
 private fun getInitials(name: String): String {
     return name.split(" ")
         .take(2)
@@ -53,22 +52,60 @@ private fun getInitials(name: String): String {
         .ifEmpty { name.take(1).uppercase() }
 }
 
+// --- Main Contact Screen Composable ---
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ContactsScreen(onContactClick: (String) -> Unit) {
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("My Contacts") }
-    val allContacts = remember { ContactRepository.getAllContacts() }
+fun ContactsScreen(
+    userName: String, // 1. Received from MainActivity
+    onContactClick: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val application = context.applicationContext as? CallynApplication
 
-    val filteredContacts = remember(searchQuery, selectedFilter, allContacts) {
-        val baseList = when (selectedFilter) {
-            "Work" -> allContacts.filter { it.type == "work" }
-            else -> allContacts.filter { it.type == "default" }
+    if (application == null) {
+        // Show a loading or error state if the application is not available
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Application context not available.")
         }
-        if (searchQuery.isBlank()) baseList
-        else baseList.filter { it.name.contains(searchQuery, true) }
+        return
     }
 
+    // 2. Initialize the ViewModel safely
+    val viewModel: ContactsViewModel = viewModel(
+        factory = ContactsViewModelFactory(application.repository)
+    )
+
+    var searchQuery by remember { mutableStateOf("") }
+
+    // 3. Get the token for API calls
+    val authManager = remember { AuthManager(context) }
+    val token by remember(authManager) { mutableStateOf(authManager.getToken()) }
+
+    // 4. Observe the UI state and the local contacts flow from the ViewModel
+    val uiState by viewModel.uiState.collectAsState()
+    val localContacts by viewModel.localContacts.collectAsState()
+
+    // 5. Trigger an initial refresh when the screen first loads
+    LaunchedEffect(key1 = userName, key2 = token) {
+        token?.let {
+            viewModel.onRefresh(it, userName)
+        }
+    }
+
+    // 6. Search logic now uses the localContacts list
+    val filteredContacts = remember(searchQuery, localContacts) {
+        if (searchQuery.isBlank()) {
+            localContacts
+        } else {
+            localContacts.filter {
+                it.name.contains(searchQuery, true) ||
+                        it.number.contains(searchQuery)
+            }
+        }
+    }
+
+    // --- Bottom Sheet state ---
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val coroutineScope = rememberCoroutineScope()
     var selectedContact by remember { mutableStateOf<AppContact?>(null) }
@@ -78,7 +115,7 @@ fun ContactsScreen(onContactClick: (String) -> Unit) {
             .fillMaxSize()
             .background(Color(0xFFF9FAFB))
     ) {
-        // ----- Gradient Header -----
+        // ----- Gradient Header with REFRESH button -----
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -89,23 +126,42 @@ fun ContactsScreen(onContactClick: (String) -> Unit) {
                 )
                 .padding(top = 56.dp, bottom = 28.dp, start = 20.dp, end = 20.dp)
         ) {
-            Column {
-                Text(
-                    text = "Callyn",
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Text(
-                    text = "${filteredContacts.size} contact${if (filteredContacts.size != 1) "s" else ""}",
-                    fontSize = 15.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Hi, $userName", // Show logged-in user's name
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "${filteredContacts.size} contact${if (filteredContacts.size != 1) "s" else ""}",
+                        fontSize = 15.sp,
+                        color = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                // --- 7. REFRESH BUTTON ---
+                IconButton(onClick = {
+                    token?.let {
+                        viewModel.onRefresh(it, userName)
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh Contacts",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
 
-        // ----- Search Bar -----
+        // ----- Search Bar (Unchanged) -----
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -140,88 +196,50 @@ fun ContactsScreen(onContactClick: (String) -> Unit) {
             )
         }
 
-        // ----- Filter buttons -----
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            val filters = listOf("My Contacts", "Work")
-            filters.forEach { label ->
-                val isSelected = selectedFilter == label
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { selectedFilter = label },
-                    label = { Text(label) },
-                    leadingIcon = {
-                        if (isSelected) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = "Selected",
-                                modifier = Modifier.size(FilterChipDefaults.IconSize)
-                            )
-                        }
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color.White,
-                        labelColor = Color(0xFF374151),
-                        selectedContainerColor = Color.Blue.copy(alpha = 0.8f),
-                        selectedLabelColor = Color.White,
-                        selectedLeadingIconColor = Color.White
-                    ),
-                )
-            }
-        }
-
         Spacer(modifier = Modifier.height(10.dp))
 
-        // ----- Contacts List -----
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+        // ----- 8. Contacts List Area (Updated) -----
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center
         ) {
-            itemsIndexed(filteredContacts, key = { _, c -> c.number }) { index, contact ->
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn() + slideInVertically(initialOffsetY = { it / 3 })
-                ) {
-                    ModernContactCard(contact, onClick = {
-                        selectedContact = contact
-                        coroutineScope.launch { sheetState.show() }
-                    }, index)
+            // Show loading spinner *over* the list if refreshing
+            if (uiState.isLoading && filteredContacts.isEmpty()) {
+                CircularProgressIndicator()
+            } else if (uiState.errorMessage != null) {
+                uiState.errorMessage?.let { errorMsg ->
+                    Text(
+                        text = errorMsg,
+                        color = Color.Red,
+                        fontSize = 16.sp
+                    )
                 }
-            }
-
-            if (filteredContacts.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 80.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "No results found",
-                                color = Color(0xFF6B7280),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                text = "Try searching a different name",
-                                color = Color(0xFF9CA3AF),
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                        }
+            } else if (filteredContacts.isEmpty()) {
+                Text(
+                    text = if (searchQuery.isNotBlank()) "No results found" else "You have no contacts.",
+                    color = Color(0xFF6B7280),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    items(filteredContacts, key = { it.id }) { contact ->
+                        ModernContactCard(contact, onClick = {
+                            selectedContact = contact
+                            coroutineScope.launch { sheetState.show() }
+                        })
                     }
                 }
             }
         }
     }
 
-    // ----- Modal Bottom Sheet -----
+    // ----- Modal Bottom Sheet (Updated to use AppContact) -----
     if (selectedContact != null) {
         ModalBottomSheet(
             onDismissRequest = {
@@ -233,104 +251,78 @@ fun ContactsScreen(onContactClick: (String) -> Unit) {
             containerColor = Color(0xFF1C1C1E),
             contentColor = Color.White
         ) {
-            val contact = selectedContact!!
-            val avatarColor = getColorForName(contact.name)
-            val gradient = Brush.linearGradient(
-                listOf(
-                    avatarColor.copy(alpha = 0.9f),
-                    avatarColor.copy(alpha = 0.6f)
-                )
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
+            val contact = selectedContact
+            if (contact != null) {
+                Column(
                     modifier = Modifier
-                        .size(90.dp)
-                        .clip(CircleShape)
-                        .background(gradient),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(90.dp)
+                            .clip(CircleShape)
+                            .background(getColorForName(contact.name)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = getInitials(contact.name),
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Text(
-                        text = getInitials(contact.name),
+                        text = contact.name,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color.White,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.padding(top = 12.dp)
                     )
-                }
-
-                Text(
-                    text = contact.name,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
-
-                if (contact.type == "default") {
-                    Text(
-                        text = contact.number,
-                        fontSize = 16.sp,
-                        color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                } else {
                     Text(
                         text = "Work Contact",
                         fontSize = 14.sp,
                         color = Color(0xFF60A5FA),
                         modifier = Modifier.padding(top = 4.dp)
                     )
-                }
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                Button(
-                    onClick = {
-                        coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onContactClick(contact.number)
-                            selectedContact = null
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFF10B981), Color(0xFF059669))
-                            )
-                        ),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White
+                    Text(
+                        text = contact.number,
+                        fontSize = 16.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 4.dp)
                     )
-                ) {
-                    Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Call", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                    Spacer(modifier = Modifier.height(28.dp))
+                    Button(
+                        onClick = {
+                            coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                                onContactClick(contact.number)
+                                selectedContact = null
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(28.dp)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF10B981)
+                        )
+                    ) {
+                        Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "Call", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+                    }
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
-
-                Spacer(modifier = Modifier.height(20.dp))
             }
         }
     }
 }
 
-// ----- Contact Card -----
+// ----- Contact Card (Updated to take AppContact) -----
 @Composable
-private fun ModernContactCard(contact: AppContact, onClick: () -> Unit, index: Int) {
+private fun ModernContactCard(contact: AppContact, onClick: () -> Unit) {
     val avatarColor = getColorForName(contact.name)
-    val gradient = Brush.linearGradient(
-        listOf(
-            avatarColor.copy(alpha = 0.9f),
-            avatarColor.copy(alpha = 0.6f)
-        )
-    )
 
     Card(
         modifier = Modifier
@@ -350,7 +342,7 @@ private fun ModernContactCard(contact: AppContact, onClick: () -> Unit, index: I
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(gradient),
+                    .background(avatarColor),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -360,9 +352,7 @@ private fun ModernContactCard(contact: AppContact, onClick: () -> Unit, index: I
                     fontWeight = FontWeight.Bold
                 )
             }
-
             Spacer(modifier = Modifier.width(16.dp))
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = contact.name,
@@ -372,41 +362,26 @@ private fun ModernContactCard(contact: AppContact, onClick: () -> Unit, index: I
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
-                if (contact.type == "default") {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .background(Color(0xFF2563EB).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
                     Text(
-                        text = contact.number,
-                        fontSize = 14.sp,
-                        color = Color(0xFF6B7280),
-                        modifier = Modifier.padding(top = 2.dp)
+                        text = "Work",
+                        fontSize = 12.sp,
+                        color = Color(0xFF2563EB),
+                        fontWeight = FontWeight.Medium
                     )
-                } else if (contact.type == "work") {
-                    Box(
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .background(Color(0xFF2563EB).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "Work",
-                            fontSize = 12.sp,
-                            color = Color(0xFF2563EB),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                 }
             }
-
             IconButton(
                 onClick = onClick,
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(
-                        Brush.horizontalGradient(
-                            listOf(Color(0xFF10B981), Color(0xFF059669))
-                        )
-                    )
+                    .background(Color(0xFF10B981)),
             ) {
                 Icon(
                     Icons.Default.Call,
