@@ -65,7 +65,6 @@ fun InCallScreen() {
             if (showDialpad) {
                 DialpadComponent(
                     onDigitClick = { digit ->
-                        // You need to implement this in your CallManager
                         CallManager.playDtmfTone(digit)
                     },
                     modifier = Modifier.padding(top = 64.dp)
@@ -90,25 +89,17 @@ fun InCallScreen() {
 
 @Composable
 private fun CallerInfo(currentState: CallState) {
-    // --- Caller Info ---
-    val contact = ContactRepository.getAllContacts()
-        .find { it.number == currentState.number }
 
-    val displayName: String
-    val displayNumber: String?
+    // The CallManager now provides the correct name and type
+    val displayName = currentState.name
 
-    if (contact != null) {
-        if (contact.type == "default") {
-            displayName = contact.name
-            displayNumber = contact.number
-        } else {
-            displayName = contact.name
-            displayNumber = null
-        }
+    // Only show the number if it's NOT a work contact
+    val displayNumber = if (currentState.type != "work") {
+        currentState.number
     } else {
-        displayName = "UNKNOWN"
-        displayNumber = currentState.number
+        null // Hide number for work contacts
     }
+    // ----------------------------------------------------
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -121,6 +112,8 @@ private fun CallerInfo(currentState: CallState) {
             color = Color.White,
             textAlign = TextAlign.Center
         )
+
+        // This logic now correctly hides the number for work contacts
         displayNumber?.let {
             Text(
                 text = it,
@@ -130,6 +123,7 @@ private fun CallerInfo(currentState: CallState) {
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
+
         Text(
             text = currentState.status,
             fontSize = 16.sp,

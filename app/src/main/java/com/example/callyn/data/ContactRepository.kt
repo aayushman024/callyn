@@ -58,4 +58,11 @@ class ContactRepository(
             Log.e(TAG, "Failed to refresh contacts", e)
         }
     }
+
+    /**
+     * FIX: Function now accepts a normalized number for lookup.
+     */
+    suspend fun findWorkContactByNumber(normalizedNumber: String): AppContact? {
+        return contactDao.getContactByNumber(normalizedNumber)
+    }
 }

@@ -1,16 +1,28 @@
 package com.example.callyn
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.net.Uri
+import android.provider.ContactsContract
 import android.telecom.Call
 import android.telecom.CallAudioState
+import android.util.Log
+import com.example.callyn.data.ContactRepository // <-- FIX: Import real repository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import android.provider.CallLog
+import kotlinx.coroutines.delay
 
 // 1. Define all possible states for the UI
 data class CallState(
     val name: String,
     val number: String,
     val status: String,
+    val type: String = "unknown", // <-- FIX: Add type to distinguish contact source
     val isMuted: Boolean = false,
     val isHolding: Boolean = false,
     val isSpeakerOn: Boolean = false,
@@ -26,19 +38,77 @@ object CallManager {
     private val _callState = MutableStateFlow<CallState?>(null)
     val callState = _callState.asStateFlow()
 
+    // --- FIX: Add fields for dependencies ---
+    private var repository: ContactRepository? = null
+    private var appContext: Context? = null
+    private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    /**
+     * Called from CallynApplication to inject dependencies.
+     */
+    fun initialize(repository: ContactRepository, context: Context) {
+        this.repository = repository
+        this.appContext = context.applicationContext
+    }
+    // ----------------------------------------
+
+    // --- FIX: Add normalization function ---
+    /**
+     * Normalizes a phone number to its last 10 digits for reliable lookup.
+     * Handles formats like +91, 91, or 0.
+     */
+    private fun normalizeNumber(number: String): String {
+        // Remove all non-digit characters
+        val digitsOnly = number.filter { it.isDigit() }
+        // Return the last 10 digits, or fewer if the number is shorter
+        return digitsOnly.takeLast(10)
+    }
+    // -------------------------------------
+
     @SuppressLint("MissingPermission")
     fun onCallAdded(call: Call) {
         val number = call.details.handle.schemeSpecificPart
-        val name = ContactRepository.getNameByNumber(number) ?: "Unknown"
         val isIncoming = call.state == Call.STATE_RINGING
 
+        // --- FIX: Normalize the number immediately ---
+        val normalizedNumber = normalizeNumber(number)
+        // -------------------------------------------
+
+        // Set initial state (showing original number as name temporarily)
         _callState.value = CallState(
-            name = name,
-            number = number,
+            name = number, // Show original number initially
+            number = number, // Store original number
             status = call.getStateString(),
             isIncoming = isIncoming,
             call = call
         )
+
+        // --- FIX: Use normalizedNumber for all lookups ---
+        coroutineScope.launch {
+            // 1. Check Work Contacts (from our DB)
+            val workContact = repository?.findWorkContactByNumber(normalizedNumber) // Use normalized
+            if (workContact != null) {
+                _callState.value = _callState.value?.copy(
+                    name = workContact.name,
+                    type = workContact.type // This will be "work"
+                )
+            } else {
+                // 2. Check Personal Contacts (from phone)
+                val personalContactName = findPersonalContactName(normalizedNumber) // Use normalized
+                if (personalContactName != null) {
+                    _callState.value = _callState.value?.copy(
+                        name = personalContactName,
+                        type = "personal" // Mark as personal
+                    )
+                } else {
+                    // 3. No match, set name to "Unknown"
+                    _callState.value = _callState.value?.copy(
+                        name = "Unknown"
+                    )
+                }
+            }
+        }
+        // -----------------------------------------------
 
         // Register callback for state changes
         call.registerCallback(object : Call.Callback() {
@@ -52,8 +122,101 @@ object CallManager {
         })
     }
 
+    /**
+     * FIX: Helper function to query the phone's native contact list.
+     * Now accepts the normalized number.
+     */
+    @SuppressLint("Range")
+    private fun findPersonalContactName(normalizedNumber: String): String? { // Use normalized
+        val context = appContext ?: return null
+        var contactName: String? = null
+        // Use the normalized number to query the phone's contact lookup
+        val uri = Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            Uri.encode(normalizedNumber) // Use normalized
+        )
+        val projection = arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME)
+
+        try {
+            context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    contactName = cursor.getString(cursor.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("CallManager", "Failed to query personal contacts", e)
+        }
+        return contactName
+    }
+
     fun onCallRemoved(call: Call) {
-        _callState.value = null
+        // --- MODIFIED: Capture state BEFORE clearing it ---
+        val lastState = _callState.value
+        val remainingCall = MyInCallService.instance?.calls?.firstOrNull { it != call }
+        //updateMultiCallState(remainingCall) // This will set _callState.value to null if no calls are left
+
+        // Check if the call that just ended was a work call
+        if (lastState != null && lastState.type == "work") {
+            Log.d("CallManager", "Work call ended. Deleting from call log...")
+            // Launch a coroutine to handle the deletion
+            coroutineScope.launch {
+                deleteLastCallLogEntry(lastState.number)
+            }
+        }
+        // --------------------------------------------------
+    }
+
+    // --- NEW: Function to delete the call log entry ---
+    @SuppressLint("MissingPermission")
+    private suspend fun deleteLastCallLogEntry(number: String) {
+        val context = appContext ?: return
+
+        // We must delay slightly. The InCallService is notified of a call's
+        // removal *before* the system's CallLog provider has written the entry.
+        // 1-2 seconds is usually safe.
+        delay(1500) // Wait 1.5 seconds
+
+        try {
+            val contentResolver = context.contentResolver
+            val numberToQuery = normalizeNumber(number)
+
+            // 1. Find the most recent call log entry for this number
+            val queryUri = CallLog.Calls.CONTENT_URI
+            val projection = arrayOf(CallLog.Calls._ID)
+            // Use LIKE to match normalized number, just in case
+            val selection = "${CallLog.Calls.NUMBER} LIKE ?"
+            val selectionArgs = arrayOf("%$numberToQuery")
+            val sortOrder = "${CallLog.Calls.DATE} DESC LIMIT 1"
+
+            var entryId: String? = null
+
+            contentResolver.query(queryUri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    entryId = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls._ID))
+                }
+            }
+
+            // 2. If we found an entry, delete it by its ID
+            if (entryId != null) {
+                val deleteUri = CallLog.Calls.CONTENT_URI
+                val deleteSelection = "${CallLog.Calls._ID} = ?"
+                val deleteSelectionArgs = arrayOf(entryId)
+
+                val rowsDeleted = contentResolver.delete(deleteUri, deleteSelection, deleteSelectionArgs)
+                if (rowsDeleted > 0) {
+                    Log.d("CallManager", "Successfully deleted call log entry $entryId for number $number")
+                } else {
+                    Log.w("CallManager", "Could not delete call log entry, 0 rows affected.")
+                }
+            } else {
+                Log.w("CallManager", "Could not find call log entry for number $number to delete.")
+            }
+
+        } catch (e: SecurityException) {
+            Log.e("CallManager", "SecurityException: Missing WRITE_CALL_LOG permission.", e)
+        } catch (e: Exception) {
+            Log.e("CallManager", "Failed to delete call log entry", e)
+        }
     }
 
     // *** NEW: Update audio state from InCallService ***

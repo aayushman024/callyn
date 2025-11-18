@@ -92,7 +92,8 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CONTACTS,
         Manifest.permission.READ_PHONE_STATE,
-        Manifest.permission.READ_CALL_LOG
+        Manifest.permission.READ_CALL_LOG,
+        Manifest.permission.WRITE_CALL_LOG
     ).apply {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
@@ -268,8 +269,6 @@ class MainActivity : ComponentActivity() {
 }
 
 
-// =================================================================
-// --- ALL YOUR ORIGINAL COMPOSABLES (Slightly modified) ---
 // =================================================================
 
 @Composable
@@ -447,7 +446,7 @@ private fun SetupScreen(
             )
 
             Text(
-                text = "Your Modern Dialer",
+                text = "Your Personal + Work Dialer",
                 fontSize = 16.sp,
                 color = ComposeColor.White.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 48.dp)

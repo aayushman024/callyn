@@ -16,4 +16,10 @@ class CallynApplication : Application() {
     val repository by lazy {
         ContactRepository(database.contactDao(), RetrofitInstance.api)
     }
+
+    override fun onCreate() {
+        super.onCreate()
+        // *** FIX: Initialize the CallManager with the real repository and context ***
+        CallManager.initialize(repository, this)
+    }
 }

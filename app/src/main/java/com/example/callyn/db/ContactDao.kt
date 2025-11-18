@@ -25,6 +25,11 @@ interface ContactDao {
     fun getAllContacts(): Flow<List<AppContact>>
 
     /**
+     */
+    @Query("SELECT * FROM contacts WHERE number LIKE '%' || :normalizedNumber LIMIT 1")
+    suspend fun getContactByNumber(normalizedNumber: String): AppContact?
+
+    /**
      * Deletes all contacts from the table.
      * This is used before a refresh.
      */

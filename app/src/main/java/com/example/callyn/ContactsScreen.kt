@@ -243,7 +243,7 @@ fun ContactsScreen(
                             )
                         )
                     )
-                    .padding(top = 40.dp, bottom = 20.dp, start = 24.dp, end = 24.dp)
+                    .padding(top = 20.dp, bottom = 15.dp, start = 24.dp, end = 24.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -252,11 +252,10 @@ fun ContactsScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Hey, $userName 👋",
-                            fontSize = 28.sp,
+                            text = "Hey, $userName",
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
-                            letterSpacing = (-0.5).sp
                         )
                         val totalCount = if (selectedTabIndex == 0) deviceContacts.size else workContacts.size
                         Text(
