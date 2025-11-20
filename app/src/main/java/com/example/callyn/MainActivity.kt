@@ -107,7 +107,10 @@ class MainActivity : ComponentActivity() {
                             MainScreenWithDialerLogic(state.userName)
                         }
                         is MainActivityUiState.LoggedOut -> {
-                            ZohoLoginScreen()
+                            //for testing purposes, on local
+//                            ZohoLoginScreen()
+                            //using hardcoded name for testing
+                            MainScreenWithDialerLogic("Ishu Mavar")
                         }
                     }
                 }
@@ -234,8 +237,8 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String) {
 }
 
 sealed class Screen(val route: String) {
-    object Contacts : Screen("contacts")
     object Recents : Screen("recents")
+    object Contacts : Screen("contacts")
     object Dialer : Screen("dialer")
 }
 
@@ -270,11 +273,11 @@ fun MainScreenContent(
             startDestination = Screen.Contacts.route,
             modifier = Modifier.padding(padding)
         ) {
-            composable(Screen.Contacts.route) {
-                ContactsScreen(userName = userName, onContactClick = onContactClick)
-            }
             composable(Screen.Recents.route) {
                 RecentCallsScreen(onCallClick = onContactClick)
+            }
+            composable(Screen.Contacts.route) {
+                ContactsScreen(userName = userName, onContactClick = onContactClick)
             }
             composable(Screen.Dialer.route) {
                 DialerScreen()
@@ -285,7 +288,7 @@ fun MainScreenContent(
 
 @Composable
 fun BottomNavigationBar(navController: NavController) {
-    val items = listOf(Screen.Contacts, Screen.Recents, Screen.Dialer)
+    val items = listOf(Screen.Recents, Screen.Contacts, Screen.Dialer)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
@@ -300,8 +303,8 @@ fun BottomNavigationBar(navController: NavController) {
             NavigationBarItem(
                 icon = {
                     when (screen) {
-                        Screen.Contacts -> Icon(Icons.Filled.Contacts, "Contacts")
                         Screen.Recents -> Icon(Icons.Filled.History, "Recents")
+                        Screen.Contacts -> Icon(Icons.Filled.Contacts, "Contacts")
                         Screen.Dialer -> Icon(Icons.Filled.Dialpad, "Dialer")
                     }
                 },

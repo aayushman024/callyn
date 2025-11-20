@@ -18,8 +18,6 @@ interface ContactDao {
     suspend fun insertAll(contacts: List<AppContact>)
 
     /**
-     * Gets all contacts from the table, ordered by name.
-     * Returns a Flow, so the UI can observe changes automatically.
      */
     @Query("SELECT * FROM contacts ORDER BY name ASC")
     fun getAllContacts(): Flow<List<AppContact>>
