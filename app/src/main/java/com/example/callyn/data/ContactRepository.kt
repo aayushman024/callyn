@@ -56,4 +56,10 @@ class ContactRepository(
     suspend fun insertWorkLog(log: WorkCallLog) {
         workCallLogDao.insert(log)
     }
+
+    // --- NEW: Wipes everything ---
+    suspend fun clearAllData() {
+        contactDao.deleteAll()
+        workCallLogDao.deleteAll()
+    }
 }

@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.telecom.TelecomManager
 import android.util.Log
+import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,12 +28,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -58,14 +62,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private var uiState by mutableStateOf<MainActivityUiState>(MainActivityUiState.Loading)
 
-    // *** UPDATE: Added RECORD_AUDIO ***
     private val permissionsToRequest = mutableListOf(
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CONTACTS,
         Manifest.permission.READ_PHONE_STATE,
         Manifest.permission.READ_CALL_LOG,
         Manifest.permission.WRITE_CALL_LOG,
-        Manifest.permission.RECORD_AUDIO // <--- NEW
+        Manifest.permission.RECORD_AUDIO // <--- CRITICAL
     ).apply {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
@@ -74,12 +77,12 @@ class MainActivity : ComponentActivity() {
 
     private val multiplePermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            Log.d(TAG, "Permission launcher callback received.")
+            Log.d(TAG, "Permissions callback received.")
         }
     private val defaultDialerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        Log.d(TAG, "Default dialer launcher callback received with code: ${it.resultCode}")
+        Log.d(TAG, "Dialer callback received.")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,7 +91,6 @@ class MainActivity : ComponentActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
 
         if (!handleIntent(intent)) {
             checkLoginState()
@@ -104,13 +106,17 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         is MainActivityUiState.LoggedIn -> {
-                            MainScreenWithDialerLogic(state.userName)
+                            MainScreenWithDialerLogic(
+                                userName = state.userName,
+                                onLogout = { performLogout() }
+                            )
                         }
                         is MainActivityUiState.LoggedOut -> {
-                            //for testing purposes, on local
-//                            ZohoLoginScreen()
-                            //using hardcoded name for testing
-                            MainScreenWithDialerLogic("Ishu Mavar")
+                            //ZohoLoginScreen()
+                            MainScreenWithDialerLogic(
+                                userName = "Ishu Mavar",
+                                onLogout = { performLogout()}
+                            )
                         }
                     }
                 }
@@ -121,6 +127,18 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    private fun performLogout() {
+        lifecycleScope.launch {
+            uiState = MainActivityUiState.Loading
+            val app = application as CallynApplication
+            app.repository.clearAllData()
+            authManager.logout()
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            uiState = MainActivityUiState.LoggedOut
+        }
     }
 
     private fun checkLoginState() {
@@ -140,9 +158,6 @@ class MainActivity : ComponentActivity() {
                 authManager.saveToken(token)
                 fetchUserName("Bearer $token")
                 return true
-            } else if (data.getQueryParameter("login") == "failed") {
-                uiState = MainActivityUiState.LoggedOut
-                return true
             }
         }
         return false
@@ -155,14 +170,7 @@ class MainActivity : ComponentActivity() {
                 val response = RetrofitInstance.api.getMe(token)
                 if (response.isSuccessful && response.body() != null) {
                     val name = response.body()!!.name
-                    //authManager.saveUserName(name)
-
                     uiState = MainActivityUiState.LoggedIn(name)
-
-                    // Trigger Sync
-                    val app = application as CallynApplication
-                  //  app.repository.syncPendingLogs(token, name)
-
                 } else {
                     authManager.logout()
                     uiState = MainActivityUiState.LoggedOut
@@ -179,10 +187,18 @@ class MainActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
+
+    fun getMissingPermissions(): List<String> {
+        return permissionsToRequest.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }.map { it.substringAfterLast(".") }
+    }
+
     fun isDefaultDialer(): Boolean {
         val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
         return telecomManager?.defaultDialerPackage == packageName
     }
+
     fun requestPermissions() {
         val permissionsToAsk = permissionsToRequest.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
@@ -191,6 +207,7 @@ class MainActivity : ComponentActivity() {
             multiplePermissionLauncher.launch(permissionsToAsk.toTypedArray())
         }
     }
+
     fun offerDefaultDialer() {
         if (isDefaultDialer()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -200,15 +217,16 @@ class MainActivity : ComponentActivity() {
                     val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
                     defaultDialerLauncher.launch(intent)
                 }
-            } catch (e: Exception) { Log.e(TAG, "RoleManager failed", e) }
+            } catch (e: Exception) {}
         } else {
             try {
                 val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
                     .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
                 defaultDialerLauncher.launch(intent)
-            } catch (e: Exception) { Log.e(TAG, "TelecomManager failed", e) }
+            } catch (e: Exception) {}
         }
     }
+
     @SuppressLint("MissingPermission")
     fun dialNumber(number: String) {
         if (!isDefaultDialer()) { offerDefaultDialer(); return }
@@ -222,17 +240,33 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MainActivity.MainScreenWithDialerLogic(userName: String) {
+fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
     var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
     var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
+    var missingPermissions by remember { mutableStateOf(getMissingPermissions()) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasAllPermissions = checkAllPermissions()
+                isDefaultDialer = isDefaultDialer()
+                missingPermissions = getMissingPermissions()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     MainScreen(
         userName = userName,
         hasAllPermissions = hasAllPermissions,
         isDefaultDialer = isDefaultDialer,
+        missingPermissions = missingPermissions,
         onRequestPermissions = { requestPermissions() },
         onRequestDefaultDialer = { offerDefaultDialer() },
-        onContactClick = { number -> dialNumber(number) }
+        onContactClick = { number -> dialNumber(number) },
+        onLogout = onLogout
     )
 }
 
@@ -247,14 +281,30 @@ fun MainScreen(
     userName: String,
     hasAllPermissions: Boolean,
     isDefaultDialer: Boolean,
+    missingPermissions: List<String>,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
-    onContactClick: (String) -> Unit
+    onContactClick: (String) -> Unit,
+    onLogout: () -> Unit
 ) {
-    if (isDefaultDialer && hasAllPermissions) {
-        MainScreenContent(userName, onContactClick)
+    if (!isDefaultDialer) {
+        SetupScreen(
+            isDefaultDialer = false,
+            hasAllPermissions = hasAllPermissions,
+            missingPermissions = emptyList(),
+            onRequestPermissions = onRequestPermissions,
+            onRequestDefaultDialer = onRequestDefaultDialer
+        )
+    } else if (!hasAllPermissions) {
+        SetupScreen(
+            isDefaultDialer = true,
+            hasAllPermissions = false,
+            missingPermissions = missingPermissions,
+            onRequestPermissions = onRequestPermissions,
+            onRequestDefaultDialer = onRequestDefaultDialer
+        )
     } else {
-        SetupScreen(isDefaultDialer, hasAllPermissions, onRequestPermissions, onRequestDefaultDialer)
+        MainScreenContent(userName, onContactClick, onLogout)
     }
 }
 
@@ -262,7 +312,8 @@ fun MainScreen(
 @Composable
 fun MainScreenContent(
     userName: String,
-    onContactClick: (String) -> Unit
+    onContactClick: (String) -> Unit,
+    onLogout: () -> Unit
 ) {
     val navController = rememberNavController()
     Scaffold(
@@ -277,7 +328,11 @@ fun MainScreenContent(
                 RecentCallsScreen(onCallClick = onContactClick)
             }
             composable(Screen.Contacts.route) {
-                ContactsScreen(userName = userName, onContactClick = onContactClick)
+                ContactsScreen(
+                    userName = userName,
+                    onContactClick = onContactClick,
+                    onLogout = onLogout
+                )
             }
             composable(Screen.Dialer.route) {
                 DialerScreen()
@@ -333,6 +388,7 @@ fun BottomNavigationBar(navController: NavController) {
 private fun SetupScreen(
     isDefaultDialer: Boolean,
     hasAllPermissions: Boolean,
+    missingPermissions: List<String>,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit
 ) {
@@ -351,9 +407,13 @@ private fun SetupScreen(
 
             if (!isDefaultDialer) {
                 SetupCard("Set as Default", "Required to make calls.", "Set Default", onRequestDefaultDialer)
-            }
-            if (isDefaultDialer && !hasAllPermissions) {
-                SetupCard("Grant Permissions", "Required for contacts & logs.", "Grant", onRequestPermissions)
+            } else if (!hasAllPermissions) {
+                val description = if (missingPermissions.isNotEmpty()) {
+                    "Missing: ${missingPermissions.joinToString(", ")}"
+                } else {
+                    "Required for contacts & logs."
+                }
+                SetupCard("Grant Permissions", description, "Grant", onRequestPermissions)
             }
         }
     }
@@ -369,12 +429,18 @@ private fun SetupCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ComposeColor(0xFF1E293B).copy(alpha = 0.6f), RoundedCornerShape(24.dp))
+            .background(ComposeColor(0xFF12223E).copy(alpha = 0.6f), RoundedCornerShape(24.dp))
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White, modifier = Modifier.padding(bottom = 12.dp))
-        Text(description, fontSize = 14.sp, color = ComposeColor.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, modifier = Modifier.padding(bottom = 24.dp))
+        Text(
+            text = description,
+            fontSize = 14.sp,
+            color = ComposeColor.White.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(bottom = 24.dp)
+        )
         Button(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))) {
             Text(buttonText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }

@@ -11,5 +11,6 @@ data class WorkCallLog(
     val number: String,
     val duration: Long,
     val timestamp: Long,
-    val type: String = "work"
+    val type: String = "work",
+    val recordingPath: String? = null // Added field for the recording file path
 )

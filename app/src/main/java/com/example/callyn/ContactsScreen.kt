@@ -3,6 +3,7 @@ package com.example.callyn
 import android.Manifest
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -86,7 +88,8 @@ private fun getInitials(name: String): String {
 @Composable
 fun ContactsScreen(
     userName: String,
-    onContactClick: (String) -> Unit
+    onContactClick: (String) -> Unit,
+    onLogout: () -> Unit
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as? CallynApplication
@@ -266,24 +269,42 @@ fun ContactsScreen(
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                token?.let {
-                                    viewModel.onRefresh(it, userName)
-                                }
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Row {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .clickable {
+                                    token?.let {
+                                        viewModel.onRefresh(it, userName)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEF4444).copy(alpha = 0.2f)) // Red tint
+                                .clickable { onLogout() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Logout,
+                                contentDescription = "Logout",
+                                tint = Color(0xFFEF4444), // Red icon
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -468,6 +489,10 @@ fun ContactsScreen(
             },
             onCall = {
                 coroutineScope.launch { sheetState.hide() }.invokeOnCompletion {
+                    Log.d(
+                        "ContactsScreenLog",
+                        "Calling Work Contact: ${selectedWorkContact!!.number}"
+                    )
                     onContactClick(selectedWorkContact!!.number)
                     selectedWorkContact = null
                 }

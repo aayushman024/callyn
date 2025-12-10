@@ -5,7 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [AppContact::class, WorkCallLog::class], version = 2, exportSchema = false)
+// UPDATE: Version bumped to 3 to handle the new 'recordingPath' column
+@Database(entities = [AppContact::class, WorkCallLog::class], version = 3, exportSchema = false)
 abstract class ContactDatabase : RoomDatabase() {
 
     abstract fun contactDao(): ContactDao
@@ -22,7 +23,7 @@ abstract class ContactDatabase : RoomDatabase() {
                     ContactDatabase::class.java,
                     "contact_database"
                 )
-                    .fallbackToDestructiveMigration() // Handles version upgrade by recreating DB
+                    .fallbackToDestructiveMigration() // This will recreate tables (wiping data) for version 3
                     .build()
                 INSTANCE = instance
                 instance

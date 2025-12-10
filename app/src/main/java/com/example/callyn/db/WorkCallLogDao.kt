@@ -12,4 +12,8 @@ interface WorkCallLogDao {
 
     @Query("SELECT * FROM work_call_logs ORDER BY timestamp DESC")
     fun getAllWorkLogs(): Flow<List<WorkCallLog>>
+
+    // --- NEW: Delete all logs ---
+    @Query("DELETE FROM work_call_logs")
+    suspend fun deleteAll()
 }
