@@ -31,7 +31,10 @@ class ContactRepository(
                     AppContact(
                         name = it.name,
                         number = it.number,
-                        type = it.type
+                        type = it.type,
+                        pan = it.pan,           // MODIFIED
+                        familyHead = it.familyHead, // MODIFIED
+                        rshipManager = it.rshipManager // MODIFIED
                     )
                 }
 
@@ -62,4 +65,13 @@ class ContactRepository(
         contactDao.deleteAll()
         workCallLogDao.deleteAll()
     }
+
+    suspend fun getUnsyncedLogs(): List<WorkCallLog> {
+        return contactDao.getUnsyncedWorkLogs()
+    }
+
+    suspend fun markLogSynced(id: Int) {
+        contactDao.markLogAsSynced(id)
+    }
+
 }

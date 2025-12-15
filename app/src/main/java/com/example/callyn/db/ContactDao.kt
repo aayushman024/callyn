@@ -33,4 +33,11 @@ interface ContactDao {
      */
     @Query("DELETE FROM contacts")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM work_call_logs WHERE isSynced = 0")
+    suspend fun getUnsyncedWorkLogs(): List<WorkCallLog>
+
+    @Query("UPDATE work_call_logs SET isSynced = 1 WHERE id = :logId")
+    suspend fun markLogAsSynced(logId: Int)
+
 }

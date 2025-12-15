@@ -1,8 +1,11 @@
 package com.example.callyn.api
 
+import okhttp3.ResponseBody
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
+import retrofit2.http.POST
 import retrofit2.http.Query
 
 // --- DATA MODELS FOR API ---
@@ -12,6 +15,15 @@ import retrofit2.http.Query
  */
 data class AuthResponse(
     val authUrl: String
+)
+
+/**
+ * Model for the response from `GET /auth/callback`
+ * Includes token and user name.
+ */
+data class LoginResponse(
+    val token: String,
+    val userName: String
 )
 
 /**
@@ -28,7 +40,21 @@ data class UserResponse(
 data class ContactResponse(
     val name: String,
     val number: String,
-    val type: String
+    val type: String,
+    val pan: String,
+    val familyHead: String,
+    val rshipManager: String
+)
+
+/**
+ * Model for the request body of `POST /uploadCallLog`
+ */
+data class CallLogRequest(
+    val callerName: String,
+    val rshipManagerName: String?,
+    val type: String,
+    val timestamp: Long,
+    val duration: Long
 )
 
 // --- API SERVICE INTERFACE ---
@@ -39,6 +65,12 @@ interface ApiService {
      */
     @GET("auth/zoho")
     suspend fun getZohoAuthUrl(): Response<AuthResponse>
+
+    /**
+     * Handles the callback from Zoho, exchanging the code for a token.
+     */
+    @GET("auth/callback")
+    suspend fun handleCallback(@Query("code") code: String): Response<LoginResponse>
 
     /**
      * Calls your backend to get the logged-in user's name.
@@ -54,4 +86,13 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Query("manager") managerName: String
     ): Response<List<ContactResponse>>
+
+    /**
+     * Uploads a call log to the backend.
+     */
+    @POST("uploadCallLog")
+    suspend fun uploadCallLog(
+        @Header("Authorization") token: String,
+        @Body log: CallLogRequest
+    ): Response<ResponseBody>
 }

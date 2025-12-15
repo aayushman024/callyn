@@ -62,13 +62,14 @@ class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private var uiState by mutableStateOf<MainActivityUiState>(MainActivityUiState.Loading)
 
+    // Critical permissions for a Dialer App
     private val permissionsToRequest = mutableListOf(
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CONTACTS,
         Manifest.permission.READ_PHONE_STATE,
         Manifest.permission.READ_CALL_LOG,
         Manifest.permission.WRITE_CALL_LOG,
-        Manifest.permission.RECORD_AUDIO // <--- CRITICAL
+        Manifest.permission.RECORD_AUDIO
     ).apply {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
@@ -92,6 +93,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
 
+        // 1. Check if opened via Deep Link (Login redirect), otherwise check session
         if (!handleIntent(intent)) {
             checkLoginState()
         }
@@ -112,11 +114,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         is MainActivityUiState.LoggedOut -> {
-                            //ZohoLoginScreen()
-                            MainScreenWithDialerLogic(
-                                userName = "Ishu Mavar",
-                                onLogout = { performLogout()}
-                            )
+                            ZohoLoginScreen()
                         }
                     }
                 }
@@ -134,9 +132,12 @@ class MainActivity : ComponentActivity() {
             uiState = MainActivityUiState.Loading
             val app = application as CallynApplication
             app.repository.clearAllData()
-            authManager.logout()
+            authManager.logout() // Use clearSession from AuthManager
+
+            // Clear Cookies (for Zoho WebView if applicable)
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
+
             uiState = MainActivityUiState.LoggedOut
         }
     }
@@ -150,6 +151,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Handles callyn://auth?token=...
     private fun handleIntent(intent: Intent?): Boolean {
         val data: Uri? = intent?.data
         if (data != null && "callyn" == data.scheme && "auth" == data.host) {
@@ -170,6 +172,11 @@ class MainActivity : ComponentActivity() {
                 val response = RetrofitInstance.api.getMe(token)
                 if (response.isSuccessful && response.body() != null) {
                     val name = response.body()!!.name
+
+                    // --- IMPORTANT FIX: Save User Name ---
+                    // This allows ContactsScreen to read it from AuthManager
+                    authManager.saveUserName(name)
+
                     uiState = MainActivityUiState.LoggedIn(name)
                 } else {
                     authManager.logout()
@@ -181,6 +188,8 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // --- Permissions & Dialer Logic ---
 
     fun checkAllPermissions(): Boolean {
         return permissionsToRequest.all {
@@ -232,12 +241,20 @@ class MainActivity : ComponentActivity() {
         if (!isDefaultDialer()) { offerDefaultDialer(); return }
         if (!checkAllPermissions()) { requestPermissions(); return }
         try {
-            val uri = Uri.fromParts("tel", number, null)
+            val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
+                "+${number.filter { it.isDigit() }}"
+            } else {
+                number
+            }
+
+            val uri = Uri.fromParts("tel", numberToDial, null)
             val intent = Intent(Intent.ACTION_CALL, uri)
             startActivity(intent)
         } catch (e: Exception) { Log.e(TAG, "Failed to call", e) }
     }
 }
+
+// --- Composable Helpers ---
 
 @Composable
 fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
@@ -328,8 +345,9 @@ fun MainScreenContent(
                 RecentCallsScreen(onCallClick = onContactClick)
             }
             composable(Screen.Contacts.route) {
+                // --- FIXED: Do not pass userName here ---
+                // ContactsScreen now fetches it internally via AuthManager
                 ContactsScreen(
-                    userName = userName,
                     onContactClick = onContactClick,
                     onLogout = onLogout
                 )

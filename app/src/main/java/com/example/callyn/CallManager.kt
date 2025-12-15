@@ -8,7 +8,11 @@ import android.provider.ContactsContract
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.util.Log
-import android.widget.Toast // Imported for Toast
+import android.widget.Toast
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.callyn.data.ContactRepository
 import com.example.callyn.db.WorkCallLog
 import kotlinx.coroutines.CoroutineScope
@@ -18,12 +22,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext // Imported for UI switching
-import java.text.SimpleDateFormat // Imported for Date formatting
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// ... CallState data class (Remains unchanged) ...
+// CallState (Kept same)
 data class CallState(
     val name: String,
     val number: String,
@@ -39,6 +43,8 @@ data class CallState(
     val canMerge: Boolean = false,
     val canSwap: Boolean = false,
     val participants: List<String> = emptyList(),
+    val familyHead: String? = null,
+    val rshipManager: String? = null,
     internal val call: Call? = null
 )
 
@@ -49,17 +55,16 @@ object CallManager {
 
     private var repository: ContactRepository? = null
     private var appContext: Context? = null
-    private var callRecorder: CallRecorder? = null
+    // private var callRecorder: CallRecorder? = null // COMMENTED
 
-    // Flag to prevent multiple start recording attempts
-    private var isRecording = false
+    // private var isRecording = false // COMMENTED
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     fun initialize(repository: ContactRepository, context: Context) {
         this.repository = repository
         this.appContext = context.applicationContext
-        this.callRecorder = CallRecorder(context.applicationContext)
+        // this.callRecorder = CallRecorder(context.applicationContext) // COMMENTED
     }
 
     private fun normalizeNumber(number: String): String {
@@ -69,7 +74,7 @@ object CallManager {
 
     @SuppressLint("MissingPermission")
     fun onCallAdded(call: Call) {
-        isRecording = false // Reset flag on new call
+        // isRecording = false // COMMENTED
         registerCallCallback(call)
         updateCallState(call)
     }
@@ -77,15 +82,13 @@ object CallManager {
     fun onCallRemoved(call: Call) {
         val lastState = _callState.value
 
-        // --- STOP RECORDING & SAVE ---
-        // We perform this in a single coroutine to ensure we get the path before saving the log
         coroutineScope.launch {
-            var recordingFilePath: String? = null
+            // var recordingFilePath: String? = null // COMMENTED
 
-            if (isRecording) {
-                recordingFilePath = callRecorder?.stopRecording()
-                isRecording = false
-            }
+            // if (isRecording) {
+            //     recordingFilePath = callRecorder?.stopRecording()
+            //     isRecording = false
+            // } // COMMENTED
 
             val remainingCall = MyInCallService.instance?.calls?.firstOrNull {
                 it != call && it.state != Call.STATE_DISCONNECTED
@@ -97,7 +100,6 @@ object CallManager {
                 onCallAdded(remainingCall)
             }
 
-            // --- WORK CALL LOGIC ---
             if (lastState != null && lastState.type == "work") {
                 val now = System.currentTimeMillis()
 
@@ -107,7 +109,9 @@ object CallManager {
                     0
                 }
 
-                // Insert log with the recording path
+                // Determine direction based on state
+                val direction = if (lastState.isIncoming) "incoming" else "outgoing"
+
                 repository?.insertWorkLog(
                     WorkCallLog(
                         name = lastState.name,
@@ -115,13 +119,31 @@ object CallManager {
                         duration = durationSeconds,
                         timestamp = now,
                         type = "work",
-                        recordingPath = recordingFilePath // Save the path here
+                      //  recordingPath = null, // recordingFilePath // COMMENTED
+                        direction = direction, // Save Direction
+                        isSynced = false       // Mark as pending upload
                     )
                 )
                 deleteLastCallLogEntry(lastState.number)
+
+                // --- TRIGGER WORK MANAGER HERE ---
+                if (appContext != null) {
+                    val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadWorker>()
+                        .setConstraints(
+                            Constraints.Builder()
+                                .setRequiredNetworkType(NetworkType.CONNECTED) // Only run if internet is available
+                                .build()
+                        )
+                        .build()
+
+                    WorkManager.getInstance(appContext!!).enqueue(uploadWorkRequest)
+                    Log.d("CallManager", "Upload Worker Enqueued")
+                }
             }
         }
     }
+
+    // ... (Rest of CallManager methods remain exactly the same) ...
 
     private fun updateCallState(call: Call) {
         val details = call.details
@@ -174,55 +196,19 @@ object CallManager {
             isMuted = currentState?.isMuted ?: false,
             isSpeakerOn = currentState?.isSpeakerOn ?: false,
             isBluetoothOn = currentState?.isBluetoothOn ?: false,
-            availableRoutes = currentState?.availableRoutes ?: 0
+            availableRoutes = currentState?.availableRoutes ?: 0,
+            // --- PRESERVE NEW FIELDS ---
+            familyHead = currentState?.familyHead,
+            rshipManager = currentState?.rshipManager
         )
 
         _callState.value = newState
 
-        // Check if we need to resolve contact info (which might trigger recording)
         if (!isConference && displayNumber.isNotEmpty() && finalName == displayNumber) {
             resolveContactInfo(displayNumber)
         }
 
-        // Attempt to start recording if call is ACTIVE
-        if (call.state == Call.STATE_ACTIVE) {
-            attemptAutoRecord(newState)
-        }
-    }
-
-    /**
-     * Helper function to attempt auto-recording based on constraints.
-     */
-    private fun attemptAutoRecord(state: CallState) {
-        // CONSTRAINT: Only record WORK calls, and only if not already recording
-        if (state.type == "work" && !isRecording) {
-            isRecording = true
-
-            coroutineScope.launch {
-                // 1. Generate Filename: CallRecording_{username}_{callerName}_{DateTime}
-                val username = AuthManager(appContext!!).getUserName() ?: "UnknownUser"
-                val callerName = state.name.ifBlank { state.number }
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-
-                // Sanitize strings to prevent filesystem errors
-                val safeUser = username.replace(Regex("[^a-zA-Z0-9]"), "")
-                val safeCaller = callerName.replace(Regex("[^a-zA-Z0-9]"), "")
-
-                val fileName = "CallRecording_${safeUser}_${safeCaller}_$timestamp"
-
-                // 2. Start Recording
-                val success = callRecorder?.startRecording(fileName) == true
-
-                if (success) {
-                    // 3. UI Feedback (Toast) on Main Thread
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(appContext, "Work Call Recording Started", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    isRecording = false // Reset flag on failure
-                }
-            }
-        }
+        // Recording attempt commented out
     }
 
     private fun resolveContactInfo(number: String) {
@@ -233,18 +219,13 @@ object CallManager {
             val workContact = repository?.findWorkContactByNumber(normalized)
             if (workContact != null) {
                 if (_callState.value?.number == number) {
-                    // Update state to WORK
                     val updatedState = _callState.value?.copy(
                         name = workContact.name,
-                        type = "work"
+                        type = "work",
+                        familyHead = workContact.familyHead,
+                        rshipManager = workContact.rshipManager
                     )
                     _callState.value = updatedState
-
-                    // Try to record now that we know it is a work call
-                    val currentCall = updatedState?.call
-                    if (currentCall?.state == Call.STATE_ACTIVE) {
-                        attemptAutoRecord(updatedState)
-                    }
                 }
             } else {
                 val personalName = findPersonalContactName(normalized)
@@ -259,9 +240,6 @@ object CallManager {
             }
         }
     }
-
-    // ... (Keep registerCallCallback, Actions, Audio Logic, Bluetooth Logic, DTMF, Helpers, deleteLastCallLogEntry) ...
-    // These functions remain exactly as they were in the previous version.
 
     private fun registerCallCallback(call: Call) {
         call.registerCallback(object : Call.Callback() {

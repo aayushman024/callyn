@@ -13,5 +13,8 @@ data class AppContact(
     val id: Int = 0,
     val name: String,
     val number: String,
-    val type: String = "work"
+    val type: String = "work",
+    val pan: String,         // ADDED FIELD
+    val rshipManager: String, // ADDED FIELD
+    val familyHead: String   // ADDED FIELD
 )
