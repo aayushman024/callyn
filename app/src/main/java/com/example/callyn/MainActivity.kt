@@ -6,12 +6,16 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
+import android.telephony.SubscriptionManager // Added Import
 import android.util.Log
 import android.webkit.CookieManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,9 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,11 +47,22 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.callyn.api.VersionResponse
+import com.example.callyn.api.version
+import com.example.callyn.ui.UpdateDialog
 import com.example.callyn.ui.ZohoLoginScreen
 import com.example.callyn.ui.theme.CallynTheme
+import com.example.callyn.utils.VersionManager
 import kotlinx.coroutines.launch
 
 private const val TAG = "MainActivity"
+
+// --- STATE CLASSES ---
+data class UpdateState(
+    val isUpdateAvailable: Boolean = false,
+    val isHardUpdate: Boolean = false,
+    val versionInfo: VersionResponse? = null
+)
 
 sealed class MainActivityUiState {
     object Loading : MainActivityUiState()
@@ -62,7 +75,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var authManager: AuthManager
     private var uiState by mutableStateOf<MainActivityUiState>(MainActivityUiState.Loading)
 
-    // Critical permissions for a Dialer App
+    // Version Check States
+    private var updateState by mutableStateOf(UpdateState())
+    private var showUpdateDialog by mutableStateOf(false)
+
+    // Permissions
     private val permissionsToRequest = mutableListOf(
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CONTACTS,
@@ -91,15 +108,30 @@ class MainActivity : ComponentActivity() {
         authManager = AuthManager(this)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.statusBarColor = Color.TRANSPARENT
 
-        // 1. Check if opened via Deep Link (Login redirect), otherwise check session
         if (!handleIntent(intent)) {
             checkLoginState()
         }
 
         setContent {
             CallynTheme {
+                if (showUpdateDialog && updateState.versionInfo != null) {
+                    UpdateDialog(
+                        versionInfo = updateState.versionInfo!!,
+                        isHardUpdate = updateState.isHardUpdate,
+                        onDismiss = { showUpdateDialog = false },
+                        onUpdate = { url ->
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to open update link", e)
+                            }
+                        }
+                    )
+                }
+
                 Surface(modifier = Modifier.fillMaxSize()) {
                     when (val state = uiState) {
                         is MainActivityUiState.Loading -> {
@@ -108,6 +140,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         is MainActivityUiState.LoggedIn -> {
+                            // Using Extension function defined below
                             MainScreenWithDialerLogic(
                                 userName = state.userName,
                                 onLogout = { performLogout() }
@@ -122,22 +155,69 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkForUpdates()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
     }
+
+    // --- LOGIC: Updates ---
+
+    private fun checkForUpdates(isManualCheck: Boolean = false) {
+        if (isManualCheck) {
+            Toast.makeText(this, "Checking for updates...", Toast.LENGTH_SHORT).show()
+        }
+
+        lifecycleScope.launch {
+            try {
+                val currentVersion = version
+                val token = authManager.getToken()
+
+                val response = RetrofitInstance.api.getLatestVersion("Bearer $token")
+
+                if (response.isSuccessful && response.body() != null) {
+                    val remote = response.body()!!
+
+                    if (VersionManager.isUpdateNeeded(currentVersion, remote.latestVersion)) {
+                        updateState = UpdateState(
+                            isUpdateAvailable = true,
+                            isHardUpdate = remote.updateType == "hard",
+                            versionInfo = remote
+                        )
+                        showUpdateDialog = true
+                    } else if (isManualCheck) {
+                        Toast.makeText(this@MainActivity, "You are already on the latest version", Toast.LENGTH_SHORT).show()
+                    }
+                } else if (isManualCheck) {
+                    Toast.makeText(this@MainActivity, "Failed to check for updates", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                if (isManualCheck) {
+                    Toast.makeText(this@MainActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+                Log.e(TAG, "Update check failed", e)
+            }
+        }
+    }
+
+    fun manualUpdateCheck() {
+        checkForUpdates(isManualCheck = true)
+    }
+
+    // --- LOGIC: Auth ---
 
     private fun performLogout() {
         lifecycleScope.launch {
             uiState = MainActivityUiState.Loading
             val app = application as CallynApplication
             app.repository.clearAllData()
-            authManager.logout() // Use clearSession from AuthManager
-
-            // Clear Cookies (for Zoho WebView if applicable)
+            authManager.logout()
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
-
             uiState = MainActivityUiState.LoggedOut
         }
     }
@@ -151,7 +231,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // Handles callyn://auth?token=...
     private fun handleIntent(intent: Intent?): Boolean {
         val data: Uri? = intent?.data
         if (data != null && "callyn" == data.scheme && "auth" == data.host) {
@@ -172,11 +251,7 @@ class MainActivity : ComponentActivity() {
                 val response = RetrofitInstance.api.getMe(token)
                 if (response.isSuccessful && response.body() != null) {
                     val name = response.body()!!.name
-
-                    // --- IMPORTANT FIX: Save User Name ---
-                    // This allows ContactsScreen to read it from AuthManager
                     authManager.saveUserName(name)
-
                     uiState = MainActivityUiState.LoggedIn(name)
                 } else {
                     authManager.logout()
@@ -189,7 +264,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- Permissions & Dialer Logic ---
+    // --- LOGIC: Permissions & Default Dialer ---
 
     fun checkAllPermissions(): Boolean {
         return permissionsToRequest.all {
@@ -204,7 +279,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun isDefaultDialer(): Boolean {
-        val telecomManager = getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+        val telecomManager = getSystemService(TELECOM_SERVICE) as? TelecomManager
         return telecomManager?.defaultDialerPackage == packageName
     }
 
@@ -236,25 +311,70 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // --- LOGIC: Smart Dialing (Sim 1 vs Sim 2) ---
+
+    /**
+     * Robust function to dial a number using specific SIM logic.
+     * @param number The phone number to call.
+     * @param isWorkCall If true, prefers SIM 2. If false, prefers SIM 1.
+     */
     @SuppressLint("MissingPermission")
-    fun dialNumber(number: String) {
+    fun dialSmart(number: String, isWorkCall: Boolean) {
         if (!isDefaultDialer()) { offerDefaultDialer(); return }
         if (!checkAllPermissions()) { requestPermissions(); return }
+
+        val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
+            "+${number.filter { it.isDigit() }}"
+        } else {
+            number
+        }
+
         try {
-            val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
-                "+${number.filter { it.isDigit() }}"
-            } else {
-                number
+            val telecomManager = getSystemService(TelecomManager::class.java)
+            val subscriptionManager = getSystemService(SubscriptionManager::class.java)
+            val activeSims = subscriptionManager.activeSubscriptionInfoList
+
+            if (activeSims.isNullOrEmpty()) {
+                Toast.makeText(this, "No SIM card found", Toast.LENGTH_SHORT).show()
+                return
             }
+
+            // Logic: Personal = Slot 0, Work = Slot 1
+            val targetSlotIndex = if (isWorkCall) 1 else 0
+
+            // Fallback: Use target if exists, otherwise first available
+            val selectedSim = activeSims.find { it.simSlotIndex == targetSlotIndex }
+                ?: activeSims.first()
+
+            val simName = selectedSim.displayName ?: "SIM ${selectedSim.simSlotIndex + 1}"
+            val type = if (isWorkCall) "Work" else "Personal"
+            Toast.makeText(this, "Dialing $type call via $simName", Toast.LENGTH_SHORT).show()
 
             val uri = Uri.fromParts("tel", numberToDial, null)
             val intent = Intent(Intent.ACTION_CALL, uri)
+
+            val targetHandle = findHandleForSubId(telecomManager, selectedSim.subscriptionId)
+            if (targetHandle != null) {
+                intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, targetHandle)
+            }
+
             startActivity(intent)
-        } catch (e: Exception) { Log.e(TAG, "Failed to call", e) }
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Smart dial failed", e)
+            Toast.makeText(this, "Call failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun findHandleForSubId(telecomManager: TelecomManager, subId: Int): PhoneAccountHandle? {
+        return telecomManager.callCapablePhoneAccounts.firstOrNull { handle ->
+            handle.id.contains(subId.toString())
+        }
     }
 }
 
-// --- Composable Helpers ---
+// --- COMPOSABLE HELPERS ---
 
 @Composable
 fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
@@ -282,7 +402,11 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
         missingPermissions = missingPermissions,
         onRequestPermissions = { requestPermissions() },
         onRequestDefaultDialer = { offerDefaultDialer() },
-        onContactClick = { number -> dialNumber(number) },
+
+        // This receives (Number, isWork) and calls the function inside MainActivity
+        onSmartDial = { number, isWork ->
+            this.dialSmart(number, isWork)
+        },
         onLogout = onLogout
     )
 }
@@ -301,7 +425,7 @@ fun MainScreen(
     missingPermissions: List<String>,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
-    onContactClick: (String) -> Unit,
+    onSmartDial: (String, Boolean) -> Unit, // Updated Signature
     onLogout: () -> Unit
 ) {
     if (!isDefaultDialer) {
@@ -321,7 +445,7 @@ fun MainScreen(
             onRequestDefaultDialer = onRequestDefaultDialer
         )
     } else {
-        MainScreenContent(userName, onContactClick, onLogout)
+        MainScreenContent(userName, onSmartDial, onLogout)
     }
 }
 
@@ -329,7 +453,7 @@ fun MainScreen(
 @Composable
 fun MainScreenContent(
     userName: String,
-    onContactClick: (String) -> Unit,
+    onSmartDial: (String, Boolean) -> Unit,
     onLogout: () -> Unit
 ) {
     val navController = rememberNavController()
@@ -342,23 +466,30 @@ fun MainScreenContent(
             modifier = Modifier.padding(padding)
         ) {
             composable(Screen.Recents.route) {
-                RecentCallsScreen(onCallClick = onContactClick)
+                // Recents defaults to Personal (false) for now
+                RecentCallsScreen(onCallClick = { num -> onSmartDial(num, false) })
             }
             composable(Screen.Contacts.route) {
-                // --- FIXED: Do not pass userName here ---
-                // ContactsScreen now fetches it internally via AuthManager
+                // IMPORTANT: Your ContactsScreen must return the full Contact object
+                // or you must adapt this based on your actual ContactsScreen implementation.
+                // Assuming ContactsScreen provides the full object:
                 ContactsScreen(
-                    onContactClick = onContactClick,
+                    onContactClick = { number, isWorkCall ->
+                        // Pass both directly to your smart dialer
+                        onSmartDial(number, isWorkCall)
+                    },
                     onLogout = onLogout
                 )
             }
             composable(Screen.Dialer.route) {
-                DialerScreen()
+                // Dialer defaults to Personal (false)
+                DialerScreen(onCallClick = { num, _ -> onSmartDial(num, false) })
             }
         }
     }
 }
 
+// ... (Rest of your UI code: BottomNavigationBar, SetupScreen, SetupCard remains the same) ...
 @Composable
 fun BottomNavigationBar(navController: NavController) {
     val items = listOf(Screen.Recents, Screen.Contacts, Screen.Dialer)

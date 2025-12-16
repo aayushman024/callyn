@@ -264,22 +264,22 @@ fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
 
             // Label (Tag)
             Text(
-                text = label,
-                fontSize = 11.sp,
+                text = "$label : ",
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
                 color = color.copy(alpha = 0.9f)
             )
 
-            Text(
-                text = ": ",
-                fontSize = 12.sp,
-                color = color.copy(alpha = 0.9f)
-            )
+//            Text(
+//                text = ": ",
+//                fontSize = 12.sp,
+//                color = color.copy(alpha = 0.9f)
+//            )
 
             // Value (Name)
             Text(
                 text = value,
-                fontSize = 12.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = color
             )

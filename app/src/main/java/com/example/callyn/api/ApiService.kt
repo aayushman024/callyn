@@ -57,6 +57,14 @@ data class CallLogRequest(
     val duration: Long
 )
 
+//Version Check Data Class
+data class VersionResponse(
+    val latestVersion: String,
+    val updateType: String, // "hard" or "soft"
+    val changelog: String,
+    val downloadUrl: String
+)
+
 // --- API SERVICE INTERFACE ---
 
 interface ApiService {
@@ -95,4 +103,9 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body log: CallLogRequest
     ): Response<ResponseBody>
+
+    @GET("version/latest")
+    suspend fun getLatestVersion(
+        @Header("Authorization") token: String
+    ): Response<VersionResponse>
 }

@@ -24,7 +24,7 @@ interface ContactDao {
 
     /**
      */
-    @Query("SELECT * FROM contacts WHERE number LIKE '%' || :normalizedNumber LIMIT 1")
+    @Query("SELECT * FROM contacts WHERE number = :normalizedNumber LIMIT 1")
     suspend fun getContactByNumber(normalizedNumber: String): AppContact?
 
     /**

@@ -20,7 +20,7 @@ class UploadWorker(
 
         val token = authManager.getToken()
         if (token.isNullOrBlank()) {
-            return Result.failure() // Cannot upload without token
+            return Result.failure()
         }
 
         // 1. Fetch unsynced logs

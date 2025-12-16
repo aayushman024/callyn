@@ -1,53 +1,109 @@
 package com.example.callyn
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
-import android.net.Uri
+import android.content.pm.PackageManager
 import android.provider.ContactsContract
+import android.telephony.SubscriptionManager
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.SimCard
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
 
-// Map for dialer button letters
-private val dialerLetters = mapOf(
-    "1" to "", "2" to "ABC", "3" to "DEF",
-    "4" to "GHI", "5" to "JKL", "6" to "MNO",
-    "7" to "PQRS", "8" to "TUV", "9" to "WXYZ",
-    "*" to "", "0" to "+", "#" to "" // "0" now has "+" subtext
+// --- Data Class to hold SIM info safely ---
+data class SimSlot(
+    val subId: Int,          // Subscription ID (Needed for calling)
+    val slotIndex: Int,      // 0 or 1
+    val carrierName: String, // "Jio", "Airtel"
+    val number: String       // Optional: Display number
 )
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun DialerScreen() {
+fun DialerScreen(
+    // Updated callback: Returns Number + Optional SimSlot (null = default)
+    onCallClick: (String, SimSlot?) -> Unit
+) {
     val context = LocalContext.current
     val hapticFeedback = LocalHapticFeedback.current
-    var phoneNumber by remember { mutableStateOf("") }
-
-    // State for Modal Bottom Sheet
-    val sheetState = rememberModalBottomSheetState()
-    var showBottomSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    var contactName by remember { mutableStateOf("") }
 
+    // State
+    var phoneNumber by remember { mutableStateOf("") }
+    var availableSims by remember { mutableStateOf<List<SimSlot>>(emptyList()) }
+
+    // Sheets
+    var showContactSheet by remember { mutableStateOf(false) }
+    var showSimSheet by remember { mutableStateOf(false) }
+    val simSheetState = rememberModalBottomSheetState()
+    val contactSheetState = rememberModalBottomSheetState()
+
+    // --- 1. Load SIMs Helper ---
+    fun refreshSims() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                val activeSims = subManager.activeSubscriptionInfoList
+                if (activeSims != null) {
+                    availableSims = activeSims.map {
+                        SimSlot(it.subscriptionId, it.simSlotIndex, it.displayName.toString(), it.number ?: "")
+                    }
+                }
+            } catch (e: Exception) {
+                availableSims = emptyList()
+            }
+        }
+    }
+
+    // Load SIMs on Start and Resume
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshSims()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        refreshSims() // Initial load
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // --- 2. Handle Call Logic ---
+    fun initiateCall() {
+        if (phoneNumber.isBlank()) return
+
+        if (availableSims.size > 1) {
+            // If Dual SIM -> Show Popup
+            showSimSheet = true
+        } else {
+            // If Single SIM or No SIM detected -> Call directly (Default)
+            onCallClick(phoneNumber, availableSims.firstOrNull())
+        }
+    }
 
     val buttons = listOf(
         listOf("1", "2", "3"),
@@ -60,12 +116,12 @@ fun DialerScreen() {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF121212))
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 100.dp) // prevents overlap with bottom nav
-            .navigationBarsPadding(),// This is the robust layout
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 80.dp) // Space for nav bar
+            .navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Display entered number (uses weight to fill available space)
+        // --- Display Area ---
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -82,13 +138,11 @@ fun DialerScreen() {
             )
         }
 
-        // Dialer Buttons
+        // --- Keypad ---
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .padding(bottom = 16.dp)
-                .navigationBarsPadding() // <-- ***** THIS IS THE FIX *****
+            modifier = Modifier.padding(bottom = 24.dp)
         ) {
             buttons.forEach { row ->
                 Row(
@@ -98,59 +152,48 @@ fun DialerScreen() {
                     row.forEach { label ->
                         DialerButton(
                             label = label,
-                            subtext = dialerLetters[label] ?: "",
                             onClick = { phoneNumber += label },
-                            // Add long-click for "0" to add "+"
-                            onLongClick = if (label == "0") {
-                                { phoneNumber += "+" }
-                            } else {
-                                null
-                            }
+                            onLongClick = if (label == "0") { { phoneNumber += "+" } } else null
                         )
                     }
                 }
             }
 
-            // Last row: Add Contact, Call, Backspace
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- Bottom Control Row ---
             Row(
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Add Contact Button
+                // Left: Add Contact
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
-                        .background(Color(0xFF1E1E1E), CircleShape)
+                        .size(64.dp)
+                        .clip(CircleShape)
                         .clickable(enabled = phoneNumber.isNotEmpty()) {
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            contactName = "" // Clear name field
-                            showBottomSheet = true // Show the sheet
+                            showContactSheet = true
                         },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.PersonAdd,
-                        contentDescription = "Add to Contacts",
-                        // Grey out icon when disabled
-                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.Gray,
-                        modifier = Modifier.size(32.dp)
+                        contentDescription = "Add Contact",
+                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.White.copy(alpha = 0.3f),
+                        modifier = Modifier.size(28.dp)
                     )
                 }
 
-                // Call Button
+                // Center: Call Button (One Button Only)
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(72.dp)
                         .background(Color(0xFF00C853), CircleShape)
                         .clickable(enabled = phoneNumber.isNotEmpty()) {
                             hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            val intent = Intent(Intent.ACTION_CALL)
-                            intent.data = Uri.parse("tel:$phoneNumber")
-                            try {
-                                context.startActivity(intent)
-                            } catch (e: SecurityException) {
-                                // Handle missing CALL_PHONE permission
-                            }
+                            initiateCall()
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -158,22 +201,20 @@ fun DialerScreen() {
                         imageVector = Icons.Filled.Call,
                         contentDescription = "Call",
                         tint = Color.White,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
-                // Backspace/Close Button
+                // Right: Backspace
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
-                        .background(Color(0xFF1E1E1E), CircleShape)
+                        .size(64.dp)
+                        .clip(CircleShape)
                         .combinedClickable(
                             enabled = phoneNumber.isNotEmpty(),
                             onClick = {
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (phoneNumber.isNotEmpty()) {
-                                    phoneNumber = phoneNumber.dropLast(1)
-                                }
+                                if (phoneNumber.isNotEmpty()) phoneNumber = phoneNumber.dropLast(1)
                             },
                             onLongClick = {
                                 hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -184,143 +225,125 @@ fun DialerScreen() {
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = "Backspace (Tap) / Clear (Long Press)",
-                        tint = Color.White,
-                        modifier = Modifier.size(32.dp)
+                        contentDescription = "Backspace",
+                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.White.copy(alpha = 0.3f),
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
         }
     }
 
-    // --- Modal Bottom Sheet ---
-    if (showBottomSheet) {
+    // --- SIM SELECTION SHEET ---
+    if (showSimSheet) {
         ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            sheetState = sheetState,
-            containerColor = Color(0xFF242424) // Dark background for the sheet
+            onDismissRequest = { showSimSheet = false },
+            sheetState = simSheetState,
+            containerColor = Color(0xFF242424)
         ) {
-            // Sheet content
+            Column(modifier = Modifier.padding(bottom = 32.dp)) {
+                Text(
+                    text = "Call using",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp)
+                )
+
+                availableSims.forEach { sim ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                // User Selected a SIM -> Call
+                                scope.launch { simSheetState.hide() }.invokeOnCompletion {
+                                    showSimSheet = false
+                                    onCallClick(phoneNumber, sim)
+                                }
+                            }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.SimCard, null, tint = Color(0xFF00C853))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(sim.carrierName, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Sim ${sim.slotIndex + 1}", color = Color.Gray, fontSize = 12.sp)
+                        }
+                    }
+                    Divider(color = Color.Gray.copy(alpha = 0.2f))
+                }
+            }
+        }
+    }
+
+    // --- ADD CONTACT SHEET ---
+    if (showContactSheet) {
+        var contactName by remember { mutableStateOf("") }
+        ModalBottomSheet(
+            onDismissRequest = { showContactSheet = false },
+            sheetState = contactSheetState,
+            containerColor = Color(0xFF242424)
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
-                    .navigationBarsPadding(), // <-- Also add padding here for the sheet content
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(24.dp)
+                    .padding(bottom = 24.dp)
             ) {
-                Text(
-                    "Add to Contacts",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                // Show the number being added
-                Text(
-                    phoneNumber,
-                    fontSize = 18.sp,
-                    color = Color.LightGray
-                )
+                Text("Save Contact", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedTextField(
                     value = contactName,
                     onValueChange = { contactName = it },
-                    label = { Text("Contact Name") },
+                    label = { Text("Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors( // Theming
+                    colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF00C853),
                         unfocusedBorderColor = Color.Gray,
-                        focusedLabelColor = Color.White,
-                        unfocusedLabelColor = Color.Gray,
-                        cursorColor = Color(0xFF00C853),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
+                        focusedTextColor = Color.White
                     )
                 )
 
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Button(
                     onClick = {
-                        // --- Start Contact Saving Logic ---
-                        val intent = Intent(ContactsContract.Intents.Insert.ACTION)
-                        intent.type = ContactsContract.RawContacts.CONTENT_TYPE
-
-                        intent.putExtra(ContactsContract.Intents.Insert.NAME, contactName)
-                        intent.putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
-
-                        try {
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            // Handle exception (e.g., no contacts app)
+                        val intent = Intent(ContactsContract.Intents.Insert.ACTION).apply {
+                            type = ContactsContract.RawContacts.CONTENT_TYPE
+                            putExtra(ContactsContract.Intents.Insert.NAME, contactName)
+                            putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
                         }
-                        // --- End Contact Saving Logic ---
-
-                        // Hide the sheet
-                        scope.launch { sheetState.hide() }.invokeOnCompletion {
-                            if (!sheetState.isVisible) {
-                                showBottomSheet = false
-                            }
-                        }
+                        try { context.startActivity(intent) } catch (e: Exception) {}
+                        scope.launch { contactSheetState.hide() }.invokeOnCompletion { showContactSheet = false }
                     },
-                    enabled = contactName.isNotBlank(), // Enable button only if name is not empty
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF00C853),
-                        disabledContainerColor = Color.Gray
-                    ),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00C853)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save Contact")
+                    Text("Save")
                 }
             }
         }
     }
 }
 
+// Helper Composable for Buttons
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DialerButton(
-    label: String,
-    subtext: String,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null // Make long click optional
-) {
+fun DialerButton(label: String, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     val hapticFeedback = LocalHapticFeedback.current
-
     Box(
         modifier = Modifier
-            .size(80.dp)
+            .size(72.dp)
             .background(Color(0xFF1E1E1E), CircleShape)
             .combinedClickable(
-                onClick = {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onClick()
-                },
-                // Only assign long click if it's not null
-                onLongClick = onLongClick?.let { longClick ->
-                    {
-                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                        longClick()
-                    }
-                }
+                onClick = { hapticFeedback.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
+                onLongClick = onLongClick?.let { longClick -> { hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress); longClick() } }
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = label,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            if (subtext.isNotEmpty()) {
-                Text(
-                    text = subtext,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.LightGray,
-                    letterSpacing = 1.sp
-                )
-            }
-        }
+        Text(text = label, fontSize = 32.sp, fontWeight = FontWeight.Medium, color = Color.White)
     }
 }

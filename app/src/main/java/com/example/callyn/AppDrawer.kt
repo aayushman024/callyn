@@ -1,19 +1,23 @@
 package com.example.callyn
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdate // Added
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext // Added
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.callyn.api.version
 
 @Composable
 fun AppDrawer(
@@ -55,7 +59,7 @@ fun AppDrawer(
         Spacer(modifier = Modifier.height(16.dp))
 
         NavigationDrawerItem(
-            label = { Text("Sync Contacts", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
+            label = { Text("Sync Work Contacts", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
             icon = {
                 Icon(
                     Icons.Default.Refresh,
@@ -102,15 +106,43 @@ fun AppDrawer(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // --- Minimal Footer ---
-        Text(
-            text = "Callyn v1.0",
-            fontSize = 12.sp,
-            color = Color.White.copy(alpha = 0.2f),
-            letterSpacing = 1.sp,
+        // --- New: Update Pill Button ---
+        val context = LocalContext.current
+
+        Surface(
+            onClick = {
+                // Safely cast context to MainActivity to call the manual check
+                (context as? MainActivity)?.manualUpdateCheck()
+            },
+            shape = RoundedCornerShape(50), // Pill Shape
+            color = Color.White.copy(alpha = 0.1f), // Glassmorphic Background
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)), // Subtle Border
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(bottom = 32.dp)
-        )
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SystemUpdate,
+                    contentDescription = "Check for updates",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.size(14.dp)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Text(
+                    text = "Callyn v$version",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.9f),
+                    letterSpacing = 1.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
     }
 }

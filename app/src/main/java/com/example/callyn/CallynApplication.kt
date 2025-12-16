@@ -6,7 +6,14 @@ import com.example.callyn.db.ContactDatabase
 
 class CallynApplication : Application() {
 
-    private val database by lazy { ContactDatabase.getDatabase(this) }
+    // Easiest Approach: Hardcoded secure key
+    private val passphrase = "8KqF*Z9!b@E#H&MbQeThWmadag4eadc!zC&F)J@NcRfUjXn2r5u8x/A?D*G-KaPdSs".toByteArray()
+
+    private val database by lazy {
+        // Load native libraries required by SQLCipher
+        System.loadLibrary("sqlcipher")
+        ContactDatabase.getDatabase(this, passphrase)
+    }
 
     val repository by lazy {
         ContactRepository(
