@@ -109,8 +109,14 @@ object CallManager {
                     0
                 }
 
-                // Determine direction based on state
-                val direction = if (lastState.isIncoming) "incoming" else "outgoing"
+                // --- CHANGED LOGIC START ---
+                // Determine direction (Incoming, Outgoing, or Missed)
+                var direction = "outgoing"
+                if (lastState.isIncoming) {
+                    // If it was incoming, check if it was actually connected
+                    direction = if (call.details.connectTimeMillis > 0) "incoming" else "missed"
+                }
+                // --- CHANGED LOGIC END ---
 
                 repository?.insertWorkLog(
                     WorkCallLog(
@@ -119,8 +125,8 @@ object CallManager {
                         duration = durationSeconds,
                         timestamp = now,
                         type = "work",
-                      //  recordingPath = null, // recordingFilePath // COMMENTED
-                        direction = direction, // Save Direction
+                        //  recordingPath = null, // recordingFilePath // COMMENTED
+                        direction = direction, // Save Direction (incoming/outgoing/missed)
                         isSynced = false       // Mark as pending upload
                     )
                 )
@@ -178,7 +184,12 @@ object CallManager {
         }
 
         val status = call.getStateString()
-        val isIncoming = call.state == Call.STATE_RINGING
+
+        // --- CHANGED LOGIC START ---
+        // Check if it is currently ringing, OR if we already identified it as incoming previously.
+        // This ensures 'isIncoming' stays true even when the state changes to Active or Disconnected.
+        val isIncoming = (currentState?.isIncoming == true) || (call.state == Call.STATE_RINGING)
+        // --- CHANGED LOGIC END ---
 
         // Construct new state
         val newState = CallState(
@@ -216,25 +227,32 @@ object CallManager {
 
         val normalized = normalizeNumber(number)
         coroutineScope.launch {
-            val workContact = repository?.findWorkContactByNumber(normalized)
-            if (workContact != null) {
+            // 1. Search Device Contacts (Personal) FIRST
+            val personalName = findPersonalContactName(normalized)
+
+            if (personalName != null) {
+                // Found in device contacts -> Use it
                 if (_callState.value?.number == number) {
-                    val updatedState = _callState.value?.copy(
-                        name = workContact.name,
-                        type = "work",
-                        familyHead = workContact.familyHead,
-                        rshipManager = workContact.rshipManager
+                    _callState.value = _callState.value?.copy(
+                        name = personalName,
+                        type = "personal"
                     )
-                    _callState.value = updatedState
                 }
             } else {
-                val personalName = findPersonalContactName(normalized)
-                if (personalName != null) {
-                    if (_callState.value?.number == number) {
-                        _callState.value = _callState.value?.copy(
-                            name = personalName,
-                            type = "personal"
-                        )
+                // 2. Not found in Personal -> Search Work DB
+                // Constraint: Only if normalized length > 9
+                if (normalized.length > 9) {
+                    val workContact = repository?.findWorkContactByNumber(normalized)
+                    if (workContact != null) {
+                        if (_callState.value?.number == number) {
+                            val updatedState = _callState.value?.copy(
+                                name = workContact.name,
+                                type = "work",
+                                familyHead = workContact.familyHead,
+                                rshipManager = workContact.rshipManager
+                            )
+                            _callState.value = updatedState
+                        }
                     }
                 }
             }

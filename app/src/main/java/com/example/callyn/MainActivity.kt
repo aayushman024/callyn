@@ -483,7 +483,12 @@ fun MainScreenContent(
             }
             composable(Screen.Dialer.route) {
                 // Dialer defaults to Personal (false)
-                DialerScreen(onCallClick = { num, _ -> onSmartDial(num, false) })
+                DialerScreen(
+                    onCallClick = { num, isWork ->
+                        // FIX: Pass the 'isWork' boolean received from DialerScreen
+                        onSmartDial(num, isWork)
+                    }
+                )
             }
         }
     }

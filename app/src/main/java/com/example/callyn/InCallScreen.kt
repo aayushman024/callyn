@@ -302,7 +302,7 @@ private fun CallerInfo(currentState: CallState) {
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if(currentState.isConference) Icons.Default.Groups else Icons.Default.Work,
+                imageVector = if(currentState.isConference) Icons.Default.Groups else Icons.Default.Person,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.8f),
                 modifier = Modifier.size(48.dp)

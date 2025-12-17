@@ -14,6 +14,6 @@ data class WorkCallLog(
     //val recordingPath: String? = null,
 
     // --- NEW FIELDS ---
-    val direction: String = "outgoing", // "incoming" or "outgoing"
+    val direction: String = "", // "incoming" or "outgoing"
     val isSynced: Boolean = false       // true = uploaded
 )

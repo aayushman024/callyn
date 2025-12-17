@@ -1,8 +1,11 @@
 package com.example.callyn
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.pm.PackageManager
 import android.provider.CallLog
+import android.telephony.SubscriptionManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -26,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.callyn.db.AppContact
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -35,11 +39,10 @@ import java.util.*
 
 // --- Filter Enum ---
 enum class CallFilter {
-    ALL, PERSONAL, WORK
+    ALL, PERSONAL, WORK, MISSED
 }
 
-// Ensure DeviceContact is available (Duplicate if needed or import)
-
+// Ensure DeviceContact is available
 data class RecentCallUiItem(
     val id: String,
     val name: String,
@@ -48,7 +51,8 @@ data class RecentCallUiItem(
     val date: Long,
     val duration: String,
     val isIncoming: Boolean,
-    val isMissed: Boolean = false
+    val isMissed: Boolean = false,
+    val simSlot: String? = null // Added SIM Info (e.g., "SIM 1")
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,6 +82,10 @@ fun RecentCallsScreen(
             val systemLogs = fetchSystemCallLogs(context)
 
             val workUiLogs = dbLogs.map {
+
+                val isIncomingCall = it.direction.equals("incoming", ignoreCase = true) ||
+                        it.direction.equals("missed", ignoreCase = true)
+
                 RecentCallUiItem(
                     id = "w_${it.id}",
                     name = it.name,
@@ -85,7 +93,9 @@ fun RecentCallsScreen(
                     type = "Work",
                     date = it.timestamp,
                     duration = formatDuration(it.duration),
-                    isIncoming = false
+                    isIncoming = isIncomingCall,
+                    isMissed = it.direction.equals("missed", ignoreCase = true),
+                    simSlot = null // Work calls don't show SIM
                 )
             }
             allCalls = (systemLogs + workUiLogs).sortedByDescending { it.date }
@@ -103,6 +113,7 @@ fun RecentCallsScreen(
                 CallFilter.ALL -> true
                 CallFilter.PERSONAL -> call.type == "Personal"
                 CallFilter.WORK -> call.type == "Work"
+                CallFilter.MISSED -> call.isMissed // Covers both Personal and Work (if applicable)
             }
             matchesSearch && matchesFilter
         }
@@ -112,20 +123,23 @@ fun RecentCallsScreen(
     fun onItemClicked(item: RecentCallUiItem) {
         scope.launch {
             if (item.type == "Work") {
-                // Fetch full work contact details from DB
+                // 1. Try to fetch full work details
                 val workContact = withContext(Dispatchers.IO) {
-                    // Try to find by number (normalized)
                     application.repository.findWorkContactByNumber(item.number.takeLast(10))
                 }
+
+                // 2. If found, show Work Sheet.
                 if (workContact != null) {
                     selectedWorkContact = workContact
                     sheetState.show()
                 } else {
-                    // Fallback if not found in DB (shouldn't happen for logged work calls)
-                    onCallClick(item.number)
+                    // 3. FIX: If NOT found, fallback to showing the Device/Generic Sheet
+                    // instead of calling directly.
+                    selectedDeviceContact = DeviceContact(item.id, item.name, item.number)
+                    sheetState.show()
                 }
             } else {
-                // Personal Contact
+                // Personal Contact -> Always show sheet
                 selectedDeviceContact = DeviceContact(item.id, item.name, item.number)
                 sheetState.show()
             }
@@ -189,8 +203,21 @@ fun RecentCallsScreen(
                     .padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // All
                 FilterChipItem("All", activeFilter == CallFilter.ALL) { activeFilter = CallFilter.ALL }
+
+                // Missed (With Icon)
+                FilterChipItem(
+                    label = "Missed",
+                    isSelected = activeFilter == CallFilter.MISSED,
+                    icon = Icons.Default.CallMissed,
+                    onClick = { activeFilter = CallFilter.MISSED }
+                )
+
+                // Personal
                 FilterChipItem("Personal", activeFilter == CallFilter.PERSONAL) { activeFilter = CallFilter.PERSONAL }
+
+                // Work
                 FilterChipItem("Work", activeFilter == CallFilter.WORK) { activeFilter = CallFilter.WORK }
             }
 
@@ -211,8 +238,8 @@ fun RecentCallsScreen(
                     items(filteredCalls) { log ->
                         RecentCallItem(
                             log = log,
-                            onBodyClick = { onItemClicked(log) }, // Opens Sheet
-                            onCallClick = { onCallClick(log.number) } // Calls Directly
+                            onBodyClick = { onItemClicked(log) },
+                            onCallClick = { onCallClick(log.number) }
                         )
                     }
                 }
@@ -264,6 +291,7 @@ fun RecentCallsScreen(
 fun FilterChipItem(
     label: String,
     isSelected: Boolean,
+    icon: ImageVector? = null,
     onClick: () -> Unit
 ) {
     val backgroundColor = if (isSelected) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.1f)
@@ -274,13 +302,26 @@ fun FilterChipItem(
         shape = RoundedCornerShape(50),
         modifier = Modifier.clickable { onClick() }
     ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isSelected) Color.White else Color(0xFFEF4444), // Red for missed icon
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+            }
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
     }
 }
 
@@ -304,7 +345,7 @@ fun RecentCallItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onBodyClick() }, // Body click opens sheet
+            .clickable { onBodyClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
     ) {
@@ -334,18 +375,32 @@ fun RecentCallItem(
                     fontSize = 16.sp
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Type Tag
                     Text(
                         text = log.type,
                         color = tagColor,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
+
+                    // SIM INFO (Only for Personal calls that have it)
+                    if (log.simSlot != null) {
+                        Text(
+                            text = " • ${log.simSlot}",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    // Time
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = formatTime(log.date),
                         color = Color.Gray,
                         fontSize = 12.sp
                     )
+
+                    // Duration
                     if (log.duration.isNotEmpty() && log.duration != "0s") {
                         Text(
                             text = " • ${log.duration}",
@@ -356,7 +411,6 @@ fun RecentCallItem(
                 }
             }
 
-            // Call Button (Calls directly)
             IconButton(onClick = onCallClick) {
                 Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White)
             }
@@ -370,6 +424,22 @@ fun RecentCallItem(
 suspend fun fetchSystemCallLogs(context: Context): List<RecentCallUiItem> {
     return withContext(Dispatchers.IO) {
         val logs = mutableListOf<RecentCallUiItem>()
+
+        // 1. Pre-fetch SIM Mapping (Subscription ID -> "SIM 1", "SIM 2")
+        val simMap = mutableMapOf<String, String>()
+        try {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                val subManager = context.getSystemService(SubscriptionManager::class.java)
+                val activeSims = subManager.activeSubscriptionInfoList
+                activeSims?.forEach { info ->
+                    // Map subId (e.g., "1") to "SIM 1" (slotIndex + 1)
+                    simMap[info.subscriptionId.toString()] = "SIM ${info.simSlotIndex + 1}"
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         try {
             val cursor = context.contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
@@ -383,12 +453,19 @@ suspend fun fetchSystemCallLogs(context: Context): List<RecentCallUiItem> {
                 val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
                 val durationIdx = it.getColumnIndex(CallLog.Calls.DURATION)
 
+                // Get Phone Account ID (corresponds to Subscription ID)
+                val accountIdIdx = it.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
+
                 while (it.moveToNext()) {
                     val number = it.getString(numberIdx) ?: "Unknown"
                     val name = it.getString(nameIdx) ?: "Unknown"
                     val type = it.getInt(typeIdx)
                     val date = it.getLong(dateIdx)
                     val durationSec = it.getLong(durationIdx)
+
+                    // Extract SIM Info
+                    val accountId = if (accountIdIdx != -1) it.getString(accountIdIdx) else null
+                    val simLabel = if (accountId != null) simMap[accountId] else null
 
                     logs.add(
                         RecentCallUiItem(
@@ -399,7 +476,8 @@ suspend fun fetchSystemCallLogs(context: Context): List<RecentCallUiItem> {
                             date = date,
                             duration = formatDuration(durationSec),
                             isIncoming = type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.MISSED_TYPE,
-                            isMissed = type == CallLog.Calls.MISSED_TYPE
+                            isMissed = type == CallLog.Calls.MISSED_TYPE,
+                            simSlot = simLabel // Pass the SIM info here
                         )
                     )
                 }
@@ -422,8 +500,7 @@ fun formatDuration(seconds: Long): String {
     return if (m > 0) "${m}m ${s}s" else "${s}s"
 }
 
-// --- DUPLICATED BOTTOM SHEET HELPERS (To ensure they work here) ---
-
+// --- Bottom Sheet Helpers (Unchanged) ---
 private fun getColorForName(name: String): Color {
     val palette = listOf(
         Color(0xFF6366F1), Color(0xFFEC4899), Color(0xFF8B5CF6),
