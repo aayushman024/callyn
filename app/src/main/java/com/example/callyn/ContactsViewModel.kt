@@ -25,9 +25,7 @@ class ContactsViewModel(private val repository: ContactRepository) : ViewModel()
     private val _uiState = MutableStateFlow(ContactsUiState(isLoading = true))
     val uiState: StateFlow<ContactsUiState> = _uiState.asStateFlow()
 
-    // This flow observes the database.
-    // When the database changes, this flow will automatically update
-    // and trigger a UI recomposition.
+    // Observes the database for real-time updates
     val localContacts: StateFlow<List<AppContact>> = repository.allContacts
         .stateIn(
             scope = viewModelScope,
@@ -36,7 +34,25 @@ class ContactsViewModel(private val repository: ContactRepository) : ViewModel()
         )
 
     /**
-     * Called by the UI to trigger a manual refresh from the API.
+     * Submit a request to mark a contact as personal.
+     */
+    fun submitPersonalRequest(token: String, contactName: String, userName: String, reason: String) {
+        viewModelScope.launch {
+            // We call the repository function which handles the API interaction
+            val success = repository.submitPersonalRequest(token, contactName, userName, reason)
+
+            if (success) {
+                Log.d("ContactsViewModel", "Request successfully sent to server.")
+                // Optional: You could update _uiState here to show a success message in the UI
+            } else {
+                Log.e("ContactsViewModel", "Failed to send request.")
+                // Optional: You could update _uiState here to show an error
+            }
+        }
+    }
+
+    /**
+     * Trigger a manual refresh from the API.
      */
     fun onRefresh(token: String, managerName: String) {
         Log.d("ContactsViewModel", "Refresh triggered for manager: $managerName")
@@ -53,7 +69,7 @@ class ContactsViewModel(private val repository: ContactRepository) : ViewModel()
 }
 
 /**
- * Factory class to allow us to pass the Repository into the ViewModel's constructor.
+ * Factory class to pass the Repository into the ViewModel.
  */
 class ContactsViewModelFactory(private val repository: ContactRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

@@ -2,6 +2,7 @@ package com.example.callyn.data
 
 import android.util.Log
 import com.example.callyn.api.ApiService
+import com.example.callyn.api.PersonalRequestData // <--- NEW IMPORT
 import com.example.callyn.db.AppContact
 import com.example.callyn.db.ContactDao
 import com.example.callyn.db.WorkCallLog
@@ -12,7 +13,7 @@ import java.net.UnknownHostException
 class ContactRepository(
     private val contactDao: ContactDao,
     private val workCallLogDao: WorkCallLogDao,
-    private val apiService: ApiService
+    val apiService: ApiService // Changed to 'val' so it's accessible if needed, or keep 'private' if only used internally
 ) {
     private val TAG = "ContactRepository"
 
@@ -32,9 +33,9 @@ class ContactRepository(
                         name = it.name,
                         number = it.number,
                         type = it.type,
-                        pan = it.pan,           // MODIFIED
-                        familyHead = it.familyHead, // MODIFIED
-                        rshipManager = it.rshipManager // MODIFIED
+                        pan = it.pan,
+                        familyHead = it.familyHead,
+                        rshipManager = it.rshipManager
                     )
                 }
 
@@ -60,7 +61,6 @@ class ContactRepository(
         workCallLogDao.insert(log)
     }
 
-    // --- NEW: Wipes everything ---
     suspend fun clearAllData() {
         contactDao.deleteAll()
         workCallLogDao.deleteAll()
@@ -74,4 +74,27 @@ class ContactRepository(
         contactDao.markLogAsSynced(id)
     }
 
+    // --- NEW FUNCTION: Request Personal Contact ---
+    suspend fun submitPersonalRequest(token: String, contactName: String, userName: String, reason: String): Boolean {
+        return try {
+            val requestBody = PersonalRequestData(
+                requestedContact = contactName,
+                requestedBy = userName,
+                reason = reason
+            )
+            // Call the API endpoint
+            val response = apiService.requestAsPersonal("Bearer $token", requestBody)
+
+            if (response.isSuccessful) {
+                Log.d(TAG, "Personal request submitted successfully.")
+                true
+            } else {
+                Log.e(TAG, "Personal request failed: ${response.code()}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception submitting personal request", e)
+            false
+        }
+    }
 }

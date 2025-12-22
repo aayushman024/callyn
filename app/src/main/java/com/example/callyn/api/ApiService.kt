@@ -57,6 +57,13 @@ data class CallLogRequest(
     val duration: Long
 )
 
+//request as personal contact
+data class PersonalRequestData(
+    val requestedContact: String,
+    val requestedBy: String, // The logged-in user's name
+    val reason: String
+)
+
 //Version Check Data Class
 data class VersionResponse(
     val latestVersion: String,
@@ -108,4 +115,10 @@ interface ApiService {
     suspend fun getLatestVersion(
         @Header("Authorization") token: String
     ): Response<VersionResponse>
+
+    @POST("requestAsPersonal")
+    suspend fun requestAsPersonal(
+        @Header("Authorization") token: String,
+        @Body request: PersonalRequestData
+    ): Response<ResponseBody>
 }

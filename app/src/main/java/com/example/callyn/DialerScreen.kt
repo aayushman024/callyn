@@ -2,6 +2,7 @@ package com.example.callyn
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import android.telephony.SubscriptionManager
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -260,17 +262,33 @@ fun DialerScreen(
             // -------- ACTION ROW --------
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
 
-                IconButton(enabled = phoneNumber.isNotEmpty(), onClick = {}) {
-                    Icon(Icons.Filled.PersonAdd, null)
+                IconButton(
+                    enabled = phoneNumber.isNotEmpty(),
+                    onClick = {
+                        try {
+                            // Create an Intent to insert a new contact
+                            val intent = Intent(Intent.ACTION_INSERT).apply {
+                                type = ContactsContract.Contacts.CONTENT_TYPE
+                                putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            e.printStackTrace() // Handle case where no contact app is found
+                        }
+                    }
+                ) {
+                    Icon(Icons.Filled.PersonAdd, null,
+                        modifier = Modifier.size(35.dp),
+                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.Gray)
                 }
 
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(85.dp)
                         .background(Color(0xFF00C853), CircleShape)
                         .clickable(enabled = phoneNumber.isNotEmpty()) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -278,7 +296,7 @@ fun DialerScreen(
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Call, null, tint = Color.White)
+                    Icon(Icons.Filled.Call, null, tint = Color.White, modifier = Modifier.size(45.dp))
                 }
 
                 Box(
@@ -298,7 +316,7 @@ fun DialerScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Backspace, null)
+                    Icon(Icons.Filled.Backspace, null,    modifier = Modifier.size(35.dp),)
                 }
             }
         }

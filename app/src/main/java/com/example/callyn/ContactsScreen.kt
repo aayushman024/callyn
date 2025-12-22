@@ -30,7 +30,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,8 +37,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.callyn.db.AppContact
@@ -54,7 +55,7 @@ data class DeviceContact(
     val id: String,
     val name: String,
     val number: String,
-    val isStarred: Boolean = false // Added field
+    val isStarred: Boolean = false
 )
 
 // --- Helper functions ---
@@ -142,7 +143,7 @@ fun ContactsScreen(
                         ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
                         ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                         ContactsContract.CommonDataKinds.Phone.NUMBER,
-                        ContactsContract.CommonDataKinds.Phone.STARRED // Added STARRED
+                        ContactsContract.CommonDataKinds.Phone.STARRED
                     ),
                     null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
                 )
@@ -151,13 +152,13 @@ fun ContactsScreen(
                     val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
                     val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                     val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED) // Index
+                    val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED)
 
                     while (it.moveToNext()) {
                         val id = it.getString(idIndex)
                         val name = it.getString(nameIndex) ?: "Unknown"
                         val number = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
-                        val isStarred = it.getInt(starredIndex) == 1 // Check
+                        val isStarred = it.getInt(starredIndex) == 1
 
                         if (number.isNotEmpty()) contactsList.add(DeviceContact(id, name, number, isStarred))
                     }
@@ -334,11 +335,7 @@ fun ContactsScreen(
                                         // --- FAVORITES CAROUSEL ---
                                         if (favoriteContacts.isNotEmpty()) {
                                             item {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(bottom = 12.dp)
-                                                ) {
+                                                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                                                     Text(
                                                         text = "Favourites",
                                                         color = Color(0xFFF59E0B),
@@ -425,7 +422,21 @@ fun ContactsScreen(
                             selectedWorkContact = null
                         }
                     },
-                    isWorkContact = true
+                    isWorkContact = true,
+                    // --- INTEGRATING API CALL HERE ---
+                    onRequestSubmit = { reason ->
+                        if (token != null) {
+                            viewModel.submitPersonalRequest(
+                                token = token!!,
+                                contactName = selectedWorkContact!!.name,
+                                userName = userName,
+                                reason = reason
+                            )
+                            Toast.makeText(context, "Request Submitted", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Authentication Error", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 )
             }
 
@@ -455,33 +466,16 @@ fun FavoriteContactItem(contact: DeviceContact, onClick: () -> Unit) {
     val avatarColor = getColorForName(contact.name)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(80.dp)
-            .clickable(onClick = onClick)
+        modifier = Modifier.width(80.dp).clickable(onClick = onClick)
     ) {
         Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+            modifier = Modifier.size(64.dp).clip(CircleShape).background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = getInitials(contact.name),
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Text(getInitials(contact.name), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = contact.name.split(" ").first(),
-            color = Color.White.copy(alpha = 0.9f),
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
+        Text(contact.name.split(" ").first(), color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
     }
 }
 
@@ -492,12 +486,7 @@ fun CustomTabContent(text: String, icon: ImageVector, count: Int, isSelected: Bo
         Spacer(modifier = Modifier.width(8.dp))
         Text(text, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, fontSize = 15.sp)
         Spacer(modifier = Modifier.width(8.dp))
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f))
-                .padding(6.dp, 2.dp)
-        ) {
+        Box(modifier = Modifier.clip(CircleShape).background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f)).padding(6.dp, 2.dp)) {
             Text(count.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f))
         }
     }
@@ -507,21 +496,14 @@ fun CustomTabContent(text: String, icon: ImageVector, count: Int, isSelected: Bo
 private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
     val avatarColor = getColorForName(contact.name)
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 2.dp)
-            .clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp), verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))), contentAlignment = Alignment.Center
+                modifier = Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                contentAlignment = Alignment.Center
             ) {
                 Text(getInitials(contact.name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
@@ -535,11 +517,8 @@ private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
                 }
             }
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669))))
-                    .clickable(onClick = onClick), contentAlignment = Alignment.Center
+                modifier = Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669)))).clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Call, "Call", tint = Color.White, modifier = Modifier.size(22.dp))
             }
@@ -551,21 +530,14 @@ private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
 private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit) {
     val avatarColor = getColorForName(contact.name)
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 2.dp)
-            .clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp), verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))), contentAlignment = Alignment.Center
+                modifier = Modifier.size(56.dp).clip(CircleShape).background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                contentAlignment = Alignment.Center
             ) {
                 Text(getInitials(contact.name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
@@ -575,11 +547,8 @@ private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit)
                 Text(contact.number, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp))
             }
             Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669))))
-                    .clickable(onClick = onClick), contentAlignment = Alignment.Center
+                modifier = Modifier.size(48.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669)))).clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Call, "Call", tint = Color.White, modifier = Modifier.size(22.dp))
             }
@@ -589,29 +558,16 @@ private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit)
 
 @Composable
 private fun PermissionRequiredCard(onGrantPermission: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))) {
         Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.size(80.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)))), contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.ContactPage, null, tint = Color.White, modifier = Modifier.size(40.dp))
             }
             Spacer(modifier = Modifier.height(24.dp))
             Text("Contact Permission Required", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White, textAlign = TextAlign.Center)
             Text("Allow access to view your personal contacts", fontSize = 14.sp, color = Color.White.copy(alpha = 0.7f), textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
             Spacer(modifier = Modifier.height(24.dp))
-            Button(
-                onClick = onGrantPermission, modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
-            ) {
+            Button(onClick = onGrantPermission, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))) {
                 Text("Grant Permission", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
         }
@@ -621,12 +577,7 @@ private fun PermissionRequiredCard(onGrantPermission: () -> Unit) {
 @Composable
 private fun EmptyStateCard(message: String, icon: ImageVector) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.size(100.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
         }
         Spacer(modifier = Modifier.height(24.dp))
@@ -639,34 +590,13 @@ private fun LoadingCard(shimmerOffset: Float) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         repeat(5) {
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp), verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.1f))
-                    )
+                Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)))
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.6f)
-                                .height(16.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White.copy(alpha = 0.1f))
-                        )
+                        Box(modifier = Modifier.fillMaxWidth(0.6f).height(16.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.1f)))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.4f)
-                                .height(12.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.08f))
-                        )
+                        Box(modifier = Modifier.fillMaxWidth(0.4f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.08f)))
                     }
                 }
             }
@@ -676,11 +606,7 @@ private fun LoadingCard(shimmerOffset: Float) {
 
 @Composable
 private fun ErrorCard(message: String) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEF4444).copy(alpha = 0.15f))
-    ) {
+    Card(modifier = Modifier.fillMaxWidth().padding(16.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEF4444).copy(alpha = 0.15f))) {
         Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Error, null, tint = Color(0xFFEF4444), modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(12.dp))
@@ -691,13 +617,7 @@ private fun ErrorCard(message: String) {
 
 @Composable
 private fun ContactDetailRow(icon: ImageVector, label: String, value: String, labelColor: Color) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.White.copy(alpha = 0.05f))
-            .padding(12.dp), verticalAlignment = Alignment.CenterVertically
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.05f)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, tint = labelColor, modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(12.dp))
         Column {
@@ -709,61 +629,141 @@ private fun ContactDetailRow(icon: ImageVector, label: String, value: String, la
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ModernBottomSheet(contact: AppContact, sheetState: SheetState, onDismiss: () -> Unit, onCall: () -> Unit, isWorkContact: Boolean) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF1E293B), contentColor = Color.White, dragHandle = {
-        Box(
-            modifier = Modifier
-                .padding(vertical = 12.dp)
-                .width(40.dp)
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color.White.copy(alpha = 0.3f))
-        )
-    }) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+private fun ModernBottomSheet(
+    contact: AppContact,
+    sheetState: SheetState,
+    onDismiss: () -> Unit,
+    onCall: () -> Unit,
+    isWorkContact: Boolean,
+    onRequestSubmit: (String) -> Unit // <--- NEW CALLBACK
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    var showRequestDialog by remember { mutableStateOf(false) }
+    var requestReason by remember { mutableStateOf("") }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF1E293B),
+        contentColor = Color.White,
+        dragHandle = {
             Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f))))
-                    .shadow(8.dp, CircleShape), contentAlignment = Alignment.Center
-            ) {
-                Text(getInitials(contact.name), color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-            Text(contact.name, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Icon(if (isWorkContact) Icons.Default.BusinessCenter else Icons.Default.Person, null, tint = if (isWorkContact) Color(0xFF60A5FA) else Color(0xFF10B981), modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(if (isWorkContact) "Work Contact" else "Personal Contact", fontSize = 15.sp, color = if (isWorkContact) Color(0xFF60A5FA) else Color(0xFF10B981), fontWeight = FontWeight.Medium)
-            }
-            if (isWorkContact) {
-                Spacer(modifier = Modifier.height(16.dp))
-                ContactDetailRow(Icons.Default.CreditCard, "PAN", contact.pan, Color(0xFFFFB74D))
-                Spacer(modifier = Modifier.height(8.dp))
-                ContactDetailRow(Icons.Default.FamilyRestroom, "Family Head", contact.familyHead, Color(0xFF81C784))
-                Spacer(modifier = Modifier.height(8.dp))
-                ContactDetailRow(Icons.Default.AccountBox, "Relationship Manager", contact.rshipManager ?: "N/A", Color(0xFFC084FC))
-                Spacer(modifier = Modifier.height(8.dp))
-            } else {
-                Text(contact.number, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(top = 8.dp))
-            }
-            Spacer(modifier = Modifier.height(32.dp))
-            Button(
-                onClick = onCall, modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), elevation = ButtonDefaults.buttonElevation(4.dp, 8.dp)
-            ) {
-                Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(if (isWorkContact) "Call via Work SIM" else "Call via Personal SIM", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-            Spacer(modifier = Modifier.height(24.dp))
+                modifier = Modifier.padding(vertical = 12.dp).width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.3f))
+            )
         }
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.padding(start = 16.dp).align(Alignment.TopStart).zIndex(1f)) {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Options", tint = Color.White)
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                    modifier = Modifier.background(Color(0xFF2C2C2E), RoundedCornerShape(12.dp)),
+                    offset = DpOffset(0.dp, 8.dp)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Raise request to mark this contact as personal", color = Color.White, fontSize = 14.sp) },
+                        onClick = { showMenu = false; showRequestDialog = true },
+                        leadingIcon = { Icon(Icons.Default.Edit, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(20.dp)) }
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    modifier = Modifier.size(100.dp).clip(CircleShape).background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f)))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(getInitials(contact.name), color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(contact.name, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    Icon(if (isWorkContact) Icons.Default.BusinessCenter else Icons.Default.Person, null, tint = if (isWorkContact) Color(0xFF60A5FA) else Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isWorkContact) "Work Contact" else "Personal Contact", fontSize = 15.sp, color = if (isWorkContact) Color(0xFF60A5FA) else Color(0xFF10B981), fontWeight = FontWeight.Medium)
+                }
+
+                if (isWorkContact) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ContactDetailRow(Icons.Default.CreditCard, "PAN", contact.pan, Color(0xFFFFB74D))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ContactDetailRow(Icons.Default.FamilyRestroom, "Family Head", contact.familyHead, Color(0xFF81C784))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ContactDetailRow(Icons.Default.AccountBox, "Relationship Manager", contact.rshipManager ?: "N/A", Color(0xFFC084FC))
+                    Spacer(modifier = Modifier.height(8.dp))
+                } else {
+                    Text(contact.number, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f), modifier = Modifier.padding(top = 8.dp))
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+                Button(
+                    onClick = onCall,
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    elevation = ButtonDefaults.buttonElevation(4.dp, 8.dp)
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(if (isWorkContact) "Call via SIM 2 (Work)" else "Call via SIM 1 (Personal)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+
+    if (showRequestDialog) {
+        AlertDialog(
+            onDismissRequest = { showRequestDialog = false },
+            containerColor = Color(0xFF1E293B),
+            title = { Text("Request Change", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+            text = {
+                Column {
+                    Text("Why do you want to mark this contact as Personal?", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp, modifier = Modifier.padding(bottom = 16.dp))
+                    OutlinedTextField(
+                        value = requestReason,
+                        onValueChange = { requestReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Enter reason...", color = Color.Gray) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = Color(0xFF3B82F6),
+                            focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                            unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        minLines = 3,
+                        maxLines = 5
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (requestReason.isNotBlank()) {
+                            onRequestSubmit(requestReason) // <--- USE CALLBACK
+                            showRequestDialog = false
+                            requestReason = ""
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Submit", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRequestDialog = false }) {
+                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                }
+            }
+        )
     }
 }
 
@@ -772,68 +772,29 @@ private fun ModernBottomSheet(contact: AppContact, sheetState: SheetState, onDis
 private fun ModernDeviceBottomSheet(contact: DeviceContact, sheetState: SheetState, onDismiss: () -> Unit, onCall: () -> Unit) {
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF1E293B), contentColor = Color.White, dragHandle = {
-        Box(
-            modifier = Modifier
-                .padding(vertical = 12.dp)
-                .width(40.dp)
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(Color.White.copy(alpha = 0.3f))
-        )
+        Box(modifier = Modifier.padding(vertical = 12.dp).width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.3f)))
     }) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(modifier = Modifier.fillMaxWidth()) {
-                // Centered Avatar
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .align(Alignment.Center)
-                        .clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f))))
-                        .shadow(8.dp, CircleShape), contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.size(100.dp).align(Alignment.Center).clip(CircleShape).background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f)))), contentAlignment = Alignment.Center) {
                     Text(getInitials(contact.name), color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
                 }
-
-                // Top Right Action Buttons (Edit & View)
                 Row(modifier = Modifier.align(Alignment.TopEnd)) {
-                    // Edit Button
-                    IconButton(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_EDIT)
-                                val uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contact.id)
-                                intent.data = uri
-                                // This flag ensures it returns to your app after editing
-                                intent.putExtra("finishActivityOnSaveCompleted", true)
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Could not edit contact", Toast.LENGTH_SHORT).show()
+                    IconButton(onClick = {
+                        try {
+                            val intent = Intent(Intent.ACTION_EDIT).apply {
+                                data = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contact.id)
+                                putExtra("finishActivityOnSaveCompleted", true)
                             }
-                        }
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Contact", tint = Color.White.copy(alpha = 0.7f))
-                    }
-
-                    // View Button
-                    IconButton(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW)
-                                val uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contact.id)
-                                intent.data = uri
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Could not open contact", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Default.OpenInNew, contentDescription = "View Contact", tint = Color.White.copy(alpha = 0.7f))
-                    }
+                            context.startActivity(intent)
+                        } catch (e: Exception) { Toast.makeText(context, "Could not edit contact", Toast.LENGTH_SHORT).show() }
+                    }) { Icon(Icons.Default.Edit, "Edit Contact", tint = Color.White.copy(alpha = 0.7f)) }
+                    IconButton(onClick = {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW).apply { data = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contact.id) }
+                            context.startActivity(intent)
+                        } catch (e: Exception) { Toast.makeText(context, "Could not open contact", Toast.LENGTH_SHORT).show() }
+                    }) { Icon(Icons.Default.OpenInNew, "View Contact", tint = Color.White.copy(alpha = 0.7f)) }
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
@@ -843,33 +804,22 @@ private fun ModernDeviceBottomSheet(contact: DeviceContact, sheetState: SheetSta
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Personal Contact", fontSize = 15.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Medium)
             }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Text(contact.number, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f))
                 Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val clip = android.content.ClipData.newPlainText("Phone Number", contact.number)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                IconButton(onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Phone Number", contact.number))
+                    Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
+                }, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.ContentCopy, "Copy", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
                 }
             }
             Spacer(modifier = Modifier.height(32.dp))
-            Button(
-                onClick = onCall, modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), elevation = ButtonDefaults.buttonElevation(4.dp, 8.dp)
-            ) {
+            Button(onClick = onCall, modifier = Modifier.fillMaxWidth().height(58.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), elevation = ButtonDefaults.buttonElevation(4.dp, 8.dp)) {
                 Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("Call via Personal SIM", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("Call via SIM 1 (Personal)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(24.dp))
         }

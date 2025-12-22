@@ -54,6 +54,7 @@ class MyInCallService : InCallService() {
         startActivity(intent)
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     override fun onCallRemoved(call: Call) {
         super.onCallRemoved(call)
         CallManager.onCallRemoved(call)

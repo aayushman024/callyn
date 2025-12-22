@@ -2,8 +2,11 @@ package com.example.callyn
 
 import android.app.Activity
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,6 +35,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // --- Theme Constants ---
@@ -84,7 +88,10 @@ fun InCallScreen() {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
-        }
+        },
+        // Call Waiting
+        onAnswerWaiting = { CallManager.acceptCallWaiting() },
+        onRejectWaiting = { CallManager.rejectCallWaiting() }
     )
 }
 
@@ -103,7 +110,9 @@ fun InCallContent(
     onSwap: () -> Unit,
     onBluetooth: () -> Unit,
     onSplitConference: (Int) -> Unit,
-    onAddCall: () -> Unit
+    onAddCall: () -> Unit,
+    onAnswerWaiting: () -> Unit,
+    onRejectWaiting: () -> Unit
 ) {
     var showDialpad by remember { mutableStateOf(false) }
     var showConferenceSheet by remember { mutableStateOf(false) }
@@ -165,6 +174,21 @@ fun InCallContent(
                 }
             }
         }
+
+        // --- Call Waiting Popup ---
+        AnimatedVisibility(
+            visible = currentState.secondIncomingCall != null,
+            enter = slideInVertically { -it },
+            exit = slideOutVertically { -it },
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp, start = 16.dp, end = 16.dp)
+        ) {
+            CallWaitingPopup(
+                name = currentState.secondCallerName ?: "Unknown",
+                number = currentState.secondCallerNumber ?: "",
+                onAccept = onAnswerWaiting,
+                onDecline = onRejectWaiting
+            )
+        }
     }
 
     if (showConferenceSheet && currentState.isConference) {
@@ -210,43 +234,73 @@ fun InCallContent(
     }
 }
 
-// 3. PREVIEW FUNCTION
-@Preview(showBackground = true, widthDp = 360, heightDp = 800)
-@Composable
-fun PreviewInCallScreen() {
-    val dummyState = CallState(
-        name = "John Doe",
-        number = "+1 234 567 8900",
-        status = "Ringing",
-        type = "work",
-        isIncoming = true,
-        familyHead = "Jane Doe",
-        rshipManager = "Alex Smith"
-    )
+// --- Helper Components ---
 
-    InCallContent(
-        currentState = dummyState,
-        onDigitClick = {},
-        onAnswer = {},
-        onReject = {},
-        onMute = {},
-        onSpeaker = {},
-        onHold = {},
-        onMerge = {},
-        onSwap = {},
-        onBluetooth = {},
-        onSplitConference = {},
-        onAddCall = {}
+@Composable
+fun CallWaitingPopup(name: String, number: String, onAccept: () -> Unit, onDecline: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Incoming Call", color = Color(0xFF30D158), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (number.isNotEmpty() && name != number) {
+                    Text(number, color = Color.Gray, fontSize = 14.sp)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Reject
+                IconButton(onClick = onDecline, modifier = Modifier.size(44.dp).background(HangupRed, CircleShape)) {
+                    Icon(Icons.Default.CallEnd, null, tint = Color.White)
+                }
+                // Accept
+                IconButton(onClick = onAccept, modifier = Modifier.size(44.dp).background(AnswerGreen, CircleShape)) {
+                    Icon(Icons.Default.Call, null, tint = Color.White)
+                }
+            }
+        }
+    }
+}
+
+// ... (Rest of existing components: CallDurationTimer, InfoPill, CallerInfo, Controls etc. remain identical) ...
+
+@Composable
+fun CallDurationTimer(connectTimeMillis: Long, color: Color) {
+    var timeText by remember { mutableStateOf("00:00") }
+    LaunchedEffect(connectTimeMillis) {
+        if (connectTimeMillis > 0) {
+            while (true) {
+                val durationMs = System.currentTimeMillis() - connectTimeMillis
+                val seconds = durationMs / 1000
+                val m = seconds / 60
+                val s = seconds % 60
+                timeText = "%02d:%02d".format(m, s)
+                delay(1000L)
+            }
+        }
+    }
+    Text(
+        text = timeText,
+        fontSize = 18.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = color,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        letterSpacing = 1.sp
     )
 }
 
-// --- Helper Components ---
-
-// *** UPDATED INFO PILL ***
 @Composable
 fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
     Surface(
-        color = color.copy(alpha = 0.15f), // Slightly more visible bg
+        color = color.copy(alpha = 0.15f),
         shape = RoundedCornerShape(50),
         border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
     ) {
@@ -260,23 +314,13 @@ fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
                 tint = color,
                 modifier = Modifier.size(14.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp)) // Increased spacing
-
-            // Label (Tag)
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "$label : ",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
                 color = color.copy(alpha = 0.9f)
             )
-
-//            Text(
-//                text = ": ",
-//                fontSize = 12.sp,
-//                color = color.copy(alpha = 0.9f)
-//            )
-
-            // Value (Name)
             Text(
                 text = value,
                 fontSize = 14.sp,
@@ -324,32 +368,18 @@ private fun CallerInfo(currentState: CallState) {
         Spacer(modifier = Modifier.height(16.dp))
 
         // 3. Info Pills (Family Head & RM)
-        // *** LOGIC UPDATE: Only show if type is "work" ***
         if (currentState.type == "work" && !currentState.isConference) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (currentState.familyHead?.isNotEmpty() == true) {
-                    InfoPill(
-                        icon = Icons.Default.FamilyRestroom,
-                        label = "Family Head",
-                        value = currentState.familyHead,
-                        color = Color(0xFF60A5FA) // Blue
-                    )
+                    InfoPill(Icons.Default.FamilyRestroom, "Family Head", currentState.familyHead, Color(0xFF60A5FA))
                 }
-
                 if (currentState.rshipManager?.isNotEmpty() == true) {
-                    InfoPill(
-                        icon = Icons.Default.AccountBox,
-                        label = "RM",
-                        value = currentState.rshipManager,
-                        color = Color(0xFFC084FC) // Purple
-                    )
+                    InfoPill(Icons.Default.AccountBox, "RM", currentState.rshipManager, Color(0xFFC084FC))
                 }
             }
-
-            // 4. Work Tag (Moved here since it's only for work)
             Spacer(modifier = Modifier.height(45.dp))
             Surface(
                 color = Color(0xFF3B82F6).copy(alpha = 0.2f),
@@ -366,7 +396,7 @@ private fun CallerInfo(currentState: CallState) {
             }
         }
 
-        // 5. Number (Only show if NOT work and NOT conference)
+        // 4. Number
         if (currentState.number.isNotEmpty() && !currentState.isConference && currentState.type != "work") {
             Text(
                 text = currentState.number,
@@ -378,25 +408,30 @@ private fun CallerInfo(currentState: CallState) {
             )
         }
 
-        // 6. Status
+        // 5. Status / Timer
         Spacer(modifier = Modifier.height(26.dp))
         Surface(
             color = Color.White.copy(alpha = 0.1f),
             shape = RoundedCornerShape(50),
         ) {
-            Text(
-                text = currentState.status.uppercase(),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                letterSpacing = 1.5.sp
-            )
+            if (currentState.status.equals("Active", ignoreCase = true) && currentState.connectTimeMillis > 0) {
+                CallDurationTimer(
+                    connectTimeMillis = currentState.connectTimeMillis,
+                    color = TextSecondary
+                )
+            } else {
+                Text(
+                    text = currentState.status.uppercase(),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    letterSpacing = 1.5.sp
+                )
+            }
         }
     }
 }
-
-// ... (RingingControls, ActiveCallControls, CallToggleButton, CallActionButton, ConferenceParticipantRow remain unchanged) ...
 
 @Composable
 private fun RingingControls(onAnswer: () -> Unit, onReject: () -> Unit) {

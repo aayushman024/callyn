@@ -3,16 +3,17 @@ package com.example.callyn
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.role.RoleManager
-import android.content.Context
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.CallLog
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
-import android.telephony.SubscriptionManager // Added Import
+import android.telephony.SubscriptionManager
 import android.util.Log
 import android.webkit.CookieManager
 import android.widget.Toast
@@ -20,16 +21,42 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Contacts
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,7 +80,9 @@ import com.example.callyn.ui.UpdateDialog
 import com.example.callyn.ui.ZohoLoginScreen
 import com.example.callyn.ui.theme.CallynTheme
 import com.example.callyn.utils.VersionManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.ui.graphics.Color as ComposeColor
 
 private const val TAG = "MainActivity"
 
@@ -139,15 +168,20 @@ class MainActivity : ComponentActivity() {
                                 CircularProgressIndicator()
                             }
                         }
+
                         is MainActivityUiState.LoggedIn -> {
-                            // Using Extension function defined below
                             MainScreenWithDialerLogic(
                                 userName = state.userName,
                                 onLogout = { performLogout() }
                             )
                         }
+
                         is MainActivityUiState.LoggedOut -> {
                             ZohoLoginScreen()
+//                            MainScreenWithDialerLogic(
+//                                userName = "Ishu Mavar",
+//                                onLogout = { performLogout() }
+//                            )
                         }
                     }
                 }
@@ -208,7 +242,7 @@ class MainActivity : ComponentActivity() {
         checkForUpdates(isManualCheck = true)
     }
 
-    // --- LOGIC: Auth ---
+    // --- LOGIC: Auth (Offline First) ---
 
     private fun performLogout() {
         lifecycleScope.launch {
@@ -222,10 +256,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun verifyTokenInBackground(token: String) {
+        lifecycleScope.launch {
+            try {
+                val response = RetrofitInstance.api.getMe(token)
+                if (response.isSuccessful && response.body() != null) {
+                    authManager.saveUserName(response.body()!!.name)
+                } else {
+                    Log.e(TAG, "Token invalid. Logging out.")
+                    performLogout()
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Offline mode active: ${e.message}")
+            }
+        }
+    }
+
     private fun checkLoginState() {
         val token = authManager.getToken()
+        val savedName = authManager.getUserName()
+
         if (token != null) {
-            fetchUserName("Bearer $token")
+            if (savedName != null) {
+                uiState = MainActivityUiState.LoggedIn(savedName)
+                verifyTokenInBackground("Bearer $token")
+            } else {
+                fetchUserName("Bearer $token")
+            }
         } else {
             uiState = MainActivityUiState.LoggedOut
         }
@@ -292,36 +349,89 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // --- UPDATED: Offer Call Screening Role + Dialer Role ---
     fun offerDefaultDialer() {
-        if (isDefaultDialer()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                val roleManager = getSystemService(RoleManager::class.java)
-                if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
-                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
-                    defaultDialerLauncher.launch(intent)
-                }
-            } catch (e: Exception) {}
-        } else {
-            try {
-                val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
-                    .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
+            val roleManager = getSystemService(RoleManager::class.java)
+
+            // 1. Default Dialer
+            if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER) && !isDefaultDialer()) {
+                val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
                 defaultDialerLauncher.launch(intent)
-            } catch (e: Exception) {}
+            }
+
+            // 2. Call Screening (Required for blocking system logs effectively)
+            val roleScreening = RoleManager.ROLE_CALL_SCREENING
+            if (roleManager.isRoleAvailable(roleScreening) && !roleManager.isRoleHeld(roleScreening)) {
+                val intent = roleManager.createRequestRoleIntent(roleScreening)
+                // Using the same launcher or a separate one is fine
+                defaultDialerLauncher.launch(intent)
+            }
+        } else {
+            // Pre-Android 10
+            if (!isDefaultDialer()) {
+                try {
+                    val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
+                        .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
+                    defaultDialerLauncher.launch(intent)
+                } catch (e: Exception) {
+                }
+            }
+        }
+    }
+
+    // --- LOGIC: Missed Calls ---
+
+    @SuppressLint("MissingPermission")
+    fun getUnreadMissedCallsCount(): Int {
+        if (!checkAllPermissions()) return 0
+        var count = 0
+        try {
+            val cursor = contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                null,
+                "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.IS_READ} = ?",
+                arrayOf(CallLog.Calls.MISSED_TYPE.toString(), "0"),
+                null
+            )
+            count = cursor?.count ?: 0
+            cursor?.close()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error counting missed calls", e)
+        }
+        return count
+    }
+
+    @SuppressLint("MissingPermission")
+    fun markMissedCallsAsRead() {
+        if (!checkAllPermissions()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val values = ContentValues().apply {
+                    put(CallLog.Calls.IS_READ, 1)
+                }
+                contentResolver.update(
+                    CallLog.Calls.CONTENT_URI,
+                    values,
+                    "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.IS_READ} = ?",
+                    arrayOf(CallLog.Calls.MISSED_TYPE.toString(), "0")
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error marking calls as read", e)
+            }
         }
     }
 
     // --- LOGIC: Smart Dialing (Sim 1 vs Sim 2) ---
 
-    /**
-     * Robust function to dial a number using specific SIM logic.
-     * @param number The phone number to call.
-     * @param isWorkCall If true, prefers SIM 2. If false, prefers SIM 1.
-     */
     @SuppressLint("MissingPermission")
     fun dialSmart(number: String, isWorkCall: Boolean) {
-        if (!isDefaultDialer()) { offerDefaultDialer(); return }
-        if (!checkAllPermissions()) { requestPermissions(); return }
+        if (!isDefaultDialer()) {
+            offerDefaultDialer(); return
+        }
+        if (!checkAllPermissions()) {
+            requestPermissions(); return
+        }
 
         val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
             "+${number.filter { it.isDigit() }}"
@@ -339,10 +449,7 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            // Logic: Personal = Slot 0, Work = Slot 1
             val targetSlotIndex = if (isWorkCall) 1 else 0
-
-            // Fallback: Use target if exists, otherwise first available
             val selectedSim = activeSims.find { it.simSlotIndex == targetSlotIndex }
                 ?: activeSims.first()
 
@@ -381,6 +488,7 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
     var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
     var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
     var missingPermissions by remember { mutableStateOf(getMissingPermissions()) }
+    var missedCallCount by remember { mutableIntStateOf(0) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -389,6 +497,9 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
                 hasAllPermissions = checkAllPermissions()
                 isDefaultDialer = isDefaultDialer()
                 missingPermissions = getMissingPermissions()
+                if (hasAllPermissions) {
+                    missedCallCount = getUnreadMissedCallsCount()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -400,12 +511,15 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
         hasAllPermissions = hasAllPermissions,
         isDefaultDialer = isDefaultDialer,
         missingPermissions = missingPermissions,
+        missedCallCount = missedCallCount,
         onRequestPermissions = { requestPermissions() },
         onRequestDefaultDialer = { offerDefaultDialer() },
-
-        // This receives (Number, isWork) and calls the function inside MainActivity
         onSmartDial = { number, isWork ->
             this.dialSmart(number, isWork)
+        },
+        onResetMissedCount = {
+            missedCallCount = 0
+            markMissedCallsAsRead()
         },
         onLogout = onLogout
     )
@@ -423,9 +537,11 @@ fun MainScreen(
     hasAllPermissions: Boolean,
     isDefaultDialer: Boolean,
     missingPermissions: List<String>,
+    missedCallCount: Int,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
-    onSmartDial: (String, Boolean) -> Unit, // Updated Signature
+    onSmartDial: (String, Boolean) -> Unit,
+    onResetMissedCount: () -> Unit,
     onLogout: () -> Unit
 ) {
     if (!isDefaultDialer) {
@@ -445,7 +561,7 @@ fun MainScreen(
             onRequestDefaultDialer = onRequestDefaultDialer
         )
     } else {
-        MainScreenContent(userName, onSmartDial, onLogout)
+        MainScreenContent(userName, onSmartDial, onLogout, missedCallCount, onResetMissedCount)
     }
 }
 
@@ -454,11 +570,13 @@ fun MainScreen(
 fun MainScreenContent(
     userName: String,
     onSmartDial: (String, Boolean) -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    missedCallCount: Int,
+    onResetMissedCount: () -> Unit
 ) {
     val navController = rememberNavController()
     Scaffold(
-        bottomBar = { BottomNavigationBar(navController) }
+        bottomBar = { BottomNavigationBar(navController, missedCallCount) }
     ) { padding ->
         NavHost(
             navController,
@@ -466,26 +584,22 @@ fun MainScreenContent(
             modifier = Modifier.padding(padding)
         ) {
             composable(Screen.Recents.route) {
-                // Recents defaults to Personal (false) for now
-                RecentCallsScreen(onCallClick = { num -> onSmartDial(num, false) })
+                RecentCallsScreen(
+                    onCallClick = { num -> onSmartDial(num, false) },
+                    onScreenEntry = onResetMissedCount
+                )
             }
             composable(Screen.Contacts.route) {
-                // IMPORTANT: Your ContactsScreen must return the full Contact object
-                // or you must adapt this based on your actual ContactsScreen implementation.
-                // Assuming ContactsScreen provides the full object:
                 ContactsScreen(
                     onContactClick = { number, isWorkCall ->
-                        // Pass both directly to your smart dialer
                         onSmartDial(number, isWorkCall)
                     },
                     onLogout = onLogout
                 )
             }
             composable(Screen.Dialer.route) {
-                // Dialer defaults to Personal (false)
                 DialerScreen(
                     onCallClick = { num, isWork ->
-                        // FIX: Pass the 'isWork' boolean received from DialerScreen
                         onSmartDial(num, isWork)
                     }
                 )
@@ -494,9 +608,9 @@ fun MainScreenContent(
     }
 }
 
-// ... (Rest of your UI code: BottomNavigationBar, SetupScreen, SetupCard remains the same) ...
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BottomNavigationBar(navController: NavController) {
+fun BottomNavigationBar(navController: NavController, missedCallCount: Int) {
     val items = listOf(Screen.Recents, Screen.Contacts, Screen.Dialer)
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
@@ -511,10 +625,26 @@ fun BottomNavigationBar(navController: NavController) {
 
             NavigationBarItem(
                 icon = {
-                    when (screen) {
-                        Screen.Recents -> Icon(Icons.Filled.History, "Recents")
-                        Screen.Contacts -> Icon(Icons.Filled.Contacts, "Contacts")
-                        Screen.Dialer -> Icon(Icons.Filled.Dialpad, "Dialer")
+                    if (screen == Screen.Recents && missedCallCount > 0) {
+                        BadgedBox(
+                            badge = {
+                                Badge(
+                                    containerColor = ComposeColor(0xFFEF4444),
+                                    contentColor = ComposeColor.White
+                                ) {
+                                    Text(text = missedCallCount.toString())
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Filled.History, "Recents")
+                        }
+                    } else {
+                        when (screen) {
+                            Screen.Recents -> Icon(Icons.Filled.History, "Recents")
+                            Screen.Contacts -> Icon(Icons.Filled.Contacts, "Contacts")
+                            Screen.Dialer -> Icon(Icons.Filled.Dialpad, "Dialer")
+                            else -> {}
+                        }
                     }
                 },
                 label = { Text(screen.route.replaceFirstChar { it.uppercase() }) },
@@ -538,6 +668,7 @@ fun BottomNavigationBar(navController: NavController) {
     }
 }
 
+// ... (SetupScreen and SetupCard remain unchanged) ...
 @Composable
 private fun SetupScreen(
     isDefaultDialer: Boolean,
@@ -553,7 +684,9 @@ private fun SetupScreen(
         contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.padding(32.dp).systemBarsPadding(),
+            modifier = Modifier
+                .padding(32.dp)
+                .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Callyn", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
