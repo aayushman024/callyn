@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="com.example.callyn">
+    package="com.mnivesh.callyn">
 
-    <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.MANAGE_ONGOING_CALLS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
@@ -16,12 +16,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Hardware features -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+
     <uses-feature android:name="android.hardware.telecom" android:required="true" />
     <uses-feature android:name="android.hardware.telephony" android:required="true" />
 
     <application
-        android:name=".CallynApplication"
+        android:name="com.mnivesh.callyn.CallynApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -32,20 +36,23 @@
         tools:targetApi="31"
         tools:ignore="MissingClass">
 
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
         <activity
-            android:name=".MainActivity"
+            android:name="com.mnivesh.callyn.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.Callyn"
             android:launchMode="singleTask">
 
-            <!-- Main launcher -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- OAuth callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -53,20 +60,17 @@
                 <data android:scheme="callyn" android:host="auth" android:path="/callback" />
             </intent-filter>
 
-            <!-- Basic DIAL action -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
-            <!-- DIAL with tel: scheme -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="tel" />
             </intent-filter>
 
-            <!-- VIEW with tel: scheme -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -74,7 +78,6 @@
                 <data android:scheme="tel" />
             </intent-filter>
 
-            <!-- DIAL/CALL PRIVILEGED -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <action android:name="android.intent.action.CALL_PRIVILEGED" />
@@ -82,7 +85,6 @@
                 <data android:scheme="tel" />
             </intent-filter>
 
-            <!-- Voicemail DIAL -->
             <intent-filter>
                 <action android:name="android.intent.action.DIAL" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -90,14 +92,12 @@
                 <data android:scheme="voicemail" />
             </intent-filter>
 
-            <!-- Voicemail SENDTO -->
             <intent-filter>
                 <action android:name="android.intent.action.SENDTO" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="voicemail" />
             </intent-filter>
 
-            <!-- VIEW with callto: scheme (alternative) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -107,14 +107,14 @@
         </activity>
 
         <activity
-            android:name=".InCallActivity"
+            android:name="com.mnivesh.callyn.InCallActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Callyn.InCall"
             tools:ignore="LockedOrientationActivity" />
 
         <service
-            android:name=".MyInCallService"
+            android:name="com.mnivesh.callyn.MyInCallService"
             android:exported="true"
             android:permission="android.permission.BIND_INCALL_SERVICE"
             tools:targetApi="n">

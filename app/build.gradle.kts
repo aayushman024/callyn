@@ -1,5 +1,5 @@
 // Make sure to set the package name in your Android Studio project
-// This file assumes you've already set namespace to "com.example.callyn"
+// This file assumes you've already set namespace to "com.mnivesh.callyn"
 
 plugins {
     alias(libs.plugins.android.application)
@@ -9,11 +9,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.callyn" // <-- Your package name
+    namespace = "com.mnivesh.callyn" // <-- Your package name
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.callyn"
+        applicationId = "com.mnivesh.callyn"
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
         versionCode = 1
