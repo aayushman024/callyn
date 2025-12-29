@@ -24,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mnivesh.callyn.api.version
+import android.widget.Toast
+import com.mnivesh.callyn.ui.theme.sdp
 
 @Composable
 fun AppDrawer(
@@ -31,7 +33,7 @@ fun AppDrawer(
     onSync: () -> Unit,
     onLogout: () -> Unit,
     onClose: () -> Unit,
-    onShowRequests: () -> Unit // [!code ++] New Callback
+    onShowRequests: () -> Unit
 ) {
     val context = LocalContext.current
     val department = remember { AuthManager(context).getDepartment() }
@@ -154,6 +156,7 @@ fun AppDrawer(
                 selected = false,
                 onClick = {
                     onClose()
+                    Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
                     onSync()
                 },
                 shape = RoundedCornerShape(12.dp),
@@ -201,7 +204,7 @@ fun AppDrawer(
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
-                .padding(bottom = 32.dp)
+                .padding(bottom = 80.sdp())
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

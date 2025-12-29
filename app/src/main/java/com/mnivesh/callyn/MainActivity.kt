@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.CallLog
+import android.provider.Settings // [!code ++] Added missing import
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
@@ -20,30 +21,38 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Warning // [!code ++] Added missing import
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card // [!code ++] Fixed import (was Wear Card)
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -57,6 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -139,6 +149,7 @@ class MainActivity : ComponentActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
 
         if (!handleIntent(intent)) {
             checkLoginState()
@@ -179,10 +190,6 @@ class MainActivity : ComponentActivity() {
 
                         is MainActivityUiState.LoggedOut -> {
                             ZohoLoginScreen()
-//                            MainScreenWithDialerLogic(
-//                                userName = "Ishu Mavar",
-//                                onLogout = { performLogout() }
-//                            )
                         }
                     }
                 }
@@ -374,7 +381,6 @@ class MainActivity : ComponentActivity() {
             val roleScreening = RoleManager.ROLE_CALL_SCREENING
             if (roleManager.isRoleAvailable(roleScreening) && !roleManager.isRoleHeld(roleScreening)) {
                 val intent = roleManager.createRequestRoleIntent(roleScreening)
-                // Using the same launcher or a separate one is fine
                 defaultDialerLauncher.launch(intent)
             }
         } else {
@@ -587,12 +593,17 @@ fun MainScreenContent(
 ) {
     val navController = rememberNavController()
     Scaffold(
+        containerColor = ComposeColor(0xFF0F172A),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = { BottomNavigationBar(navController, missedCallCount) }
     ) { padding ->
         NavHost(
             navController,
             startDestination = Screen.Contacts.route,
-            modifier = Modifier.padding(padding)
+            enterTransition = { EnterTransition.None },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable(Screen.Recents.route) {
                 RecentCallsScreen(
@@ -685,7 +696,6 @@ fun BottomNavigationBar(navController: NavController, missedCallCount: Int) {
     }
 }
 
-// ... (SetupScreen and SetupCard remain unchanged) ...
 @Composable
 private fun SetupScreen(
     isDefaultDialer: Boolean,
@@ -694,6 +704,18 @@ private fun SetupScreen(
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit
 ) {
+    val context = LocalContext.current
+    val openAppSettings = {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", context.packageName, null)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not open settings", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -702,15 +724,79 @@ private fun SetupScreen(
     ) {
         Column(
             modifier = Modifier
-                .padding(32.dp)
+                .padding(24.dp)
                 .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Callyn", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             if (!isDefaultDialer) {
-                SetupCard("Set as Default", "Required to make and receive calls.", "Set Default", onRequestDefaultDialer)
+                // 1. Main Action Card
+                SetupCard(
+                    "Set as Default",
+                    "Required to make and receive calls.",
+                    "Set Default",
+                    onRequestDefaultDialer
+                )
+
+                // 2. Android 13+ Restricted Settings Warning Box
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFFF59E0B).copy(alpha = 0.15f)), // Orange/Warning Tint
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFFF59E0B).copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = "Warning",
+                                tint = ComposeColor(0xFFF59E0B),
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Blocked by Android?",
+                                fontWeight = FontWeight.Bold,
+                                color = ComposeColor(0xFFF59E0B),
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "If you are unable to set this app as default, you likely need to allow 'Restricted Settings'.",
+                                color = ComposeColor.White.copy(alpha = 0.8f),
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            OutlinedButton(
+                                onClick = openAppSettings,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFFF59E0B)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ComposeColor(0xFFF59E0B)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("1. Open Settings")
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Go to 'App Info' > Tap 3 dots (top right) > 'Allow restricted settings', then come back here.",
+                                color = ComposeColor.White.copy(alpha = 0.6f),
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
             } else if (!hasAllPermissions) {
                 val description = if (missingPermissions.isNotEmpty()) {
                     "Missing: ${missingPermissions.joinToString(", ")}"

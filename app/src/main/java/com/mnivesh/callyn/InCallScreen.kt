@@ -14,8 +14,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,9 +33,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -129,26 +133,31 @@ fun InCallContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(horizontal = 24.sdp(), vertical = 20.sdp()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // --- Top Section ---
+            // --- Top Section (Flexible Weight) ---
             Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
                 contentAlignment = Alignment.TopCenter
             ) {
                 if (showDialpad) {
                     DialpadComponent(
                         onDigitClick = onDigitClick,
-                        modifier = Modifier.padding(top = 40.dp)
+                        modifier = Modifier
+                            .padding(top = 20.sdp())
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
                     )
                 } else {
                     CallerInfo(currentState)
                 }
             }
 
-            // --- Bottom Section ---
+            // --- Bottom Section (Fixed Controls) ---
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -179,7 +188,9 @@ fun InCallContent(
             visible = currentState.secondIncomingCall != null,
             enter = slideInVertically { -it },
             exit = slideOutVertically { -it },
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp, start = 16.dp, end = 16.dp)
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 40.sdp(), start = 16.sdp(), end = 16.sdp())
         ) {
             CallWaitingPopup(
                 name = currentState.secondCallerName ?: "Unknown",
@@ -197,21 +208,21 @@ fun InCallContent(
             containerColor = Color(0xFF1C1C1E),
             contentColor = Color.White,
             dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) },
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+            shape = RoundedCornerShape(topStart = 24.sdp(), topEnd = 24.sdp())
         ) {
-            Column(modifier = Modifier.padding(bottom = 48.dp)) {
+            Column(modifier = Modifier.padding(bottom = 48.sdp())) {
                 Text(
                     text = "Conference Participants",
-                    fontSize = 20.sp,
+                    fontSize = 20.ssp(),
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                    modifier = Modifier.padding(horizontal = 24.sdp(), vertical = 16.sdp())
                 )
 
                 if (currentState.participants.isEmpty()) {
                     Text(
                         "No participant info available",
                         color = TextSecondary,
-                        modifier = Modifier.padding(horizontal = 24.dp)
+                        modifier = Modifier.padding(horizontal = 24.sdp())
                     )
                 } else {
                     LazyColumn {
@@ -240,36 +251,40 @@ fun CallWaitingPopup(name: String, number: String, onAccept: () -> Unit, onDecli
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2C2C2E)),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(8.dp)
+        shape = RoundedCornerShape(16.sdp()),
+        elevation = CardDefaults.cardElevation(8.sdp())
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(16.sdp())
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Incoming Call", color = Color(0xFF30D158), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text(name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Incoming Call", color = Color(0xFF30D158), fontSize = 12.ssp(), fontWeight = FontWeight.Bold)
+                Text(name, color = Color.White, fontSize = 16.ssp(), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (number.isNotEmpty() && name != number) {
-                    Text(number, color = Color.Gray, fontSize = 14.sp)
+                    Text(number, color = Color.Gray, fontSize = 14.ssp())
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.sdp())) {
                 // Reject
-                IconButton(onClick = onDecline, modifier = Modifier.size(44.dp).background(HangupRed, CircleShape)) {
+                IconButton(onClick = onDecline, modifier = Modifier
+                    .size(44.sdp())
+                    .background(HangupRed, CircleShape)) {
                     Icon(Icons.Default.CallEnd, null, tint = Color.White)
                 }
                 // Accept
-                IconButton(onClick = onAccept, modifier = Modifier.size(44.dp).background(AnswerGreen, CircleShape)) {
+                IconButton(onClick = onAccept, modifier = Modifier
+                    .size(44.sdp())
+                    .background(AnswerGreen, CircleShape)) {
                     Icon(Icons.Default.Call, null, tint = Color.White)
                 }
             }
         }
     }
 }
-
-// ... (Rest of existing components: CallDurationTimer, InfoPill, CallerInfo, Controls etc. remain identical) ...
 
 @Composable
 fun CallDurationTimer(connectTimeMillis: Long, color: Color) {
@@ -288,11 +303,11 @@ fun CallDurationTimer(connectTimeMillis: Long, color: Color) {
     }
     Text(
         text = timeText,
-        fontSize = 18.sp,
+        fontSize = 18.ssp(),
         fontWeight = FontWeight.SemiBold,
         color = color,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-        letterSpacing = 1.sp
+        modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
+        letterSpacing = 1.ssp()
     )
 }
 
@@ -301,28 +316,28 @@ fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
     Surface(
         color = color.copy(alpha = 0.15f),
         shape = RoundedCornerShape(50),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+        border = BorderStroke(1.sdp(), color.copy(alpha = 0.3f))
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 6.sdp())
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(14.sdp())
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(8.sdp()))
             Text(
                 text = "$label : ",
-                fontSize = 14.sp,
+                fontSize = 14.ssp(),
                 fontWeight = FontWeight.Normal,
                 color = color.copy(alpha = 0.9f)
             )
             Text(
                 text = value,
-                fontSize = 14.sp,
+                fontSize = 14.ssp(),
                 fontWeight = FontWeight.Bold,
                 color = color
             )
@@ -334,12 +349,14 @@ fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
 private fun CallerInfo(currentState: CallState) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(top = 60.dp)
+        modifier = Modifier
+            .padding(top = 20.sdp())
+            .verticalScroll(rememberScrollState())
     ) {
         // 1. Avatar
         Box(
             modifier = Modifier
-                .size(100.dp)
+                .size(100.sdp())
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
@@ -348,29 +365,29 @@ private fun CallerInfo(currentState: CallState) {
                 imageVector = if(currentState.isConference) Icons.Default.Groups else Icons.Default.Person,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.sdp())
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(20.sdp()))
 
         // 2. Name
         Text(
             text = currentState.name,
-            fontSize = 32.sp,
+            fontSize = 32.ssp(),
             fontWeight = FontWeight.Bold,
             color = TextPrimary,
             textAlign = TextAlign.Center,
-            lineHeight = 38.sp
+            lineHeight = 38.ssp()
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.sdp()))
 
         // 3. Info Pills (Family Head & RM)
         if (currentState.type == "work" && !currentState.isConference) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(8.sdp())
             ) {
                 if (currentState.familyHead?.isNotEmpty() == true) {
                     InfoPill(Icons.Default.FamilyRestroom, "Family Head", currentState.familyHead, Color(0xFF60A5FA))
@@ -379,18 +396,18 @@ private fun CallerInfo(currentState: CallState) {
                     InfoPill(Icons.Default.AccountBox, "RM", currentState.rshipManager, Color(0xFFC084FC))
                 }
             }
-            Spacer(modifier = Modifier.height(45.dp))
+            Spacer(modifier = Modifier.height(24.sdp()))
             Surface(
                 color = Color(0xFF3B82F6).copy(alpha = 0.2f),
                 shape = RoundedCornerShape(50),
             ) {
                 Text(
                     text = "WORK CALL",
-                    fontSize = 11.sp,
+                    fontSize = 11.ssp(),
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF60A5FA),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    letterSpacing = 1.sp
+                    modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 4.sdp()),
+                    letterSpacing = 1.ssp()
                 )
             }
         }
@@ -399,16 +416,16 @@ private fun CallerInfo(currentState: CallState) {
         if (currentState.number.isNotEmpty() && !currentState.isConference && currentState.type != "work") {
             Text(
                 text = currentState.number,
-                fontSize = 18.sp,
+                fontSize = 18.ssp(),
                 color = TextSecondary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 12.dp),
-                letterSpacing = 1.sp
+                modifier = Modifier.padding(top = 12.sdp()),
+                letterSpacing = 1.ssp()
             )
         }
 
         // 5. Status / Timer
-        Spacer(modifier = Modifier.height(26.dp))
+        Spacer(modifier = Modifier.height(26.sdp()))
         Surface(
             color = Color.White.copy(alpha = 0.1f),
             shape = RoundedCornerShape(50),
@@ -421,14 +438,15 @@ private fun CallerInfo(currentState: CallState) {
             } else {
                 Text(
                     text = currentState.status.uppercase(),
-                    fontSize = 12.sp,
+                    fontSize = 12.ssp(),
                     fontWeight = FontWeight.Bold,
                     color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    letterSpacing = 1.5.sp
+                    modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
+                  //  letterSpacing = 1.5.ssp()
                 )
             }
         }
+        Spacer(modifier = Modifier.height(16.sdp()))
     }
 }
 
@@ -437,12 +455,12 @@ private fun RingingControls(onAnswer: () -> Unit, onReject: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 48.dp),
+            .padding(bottom = 48.sdp()),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        CallActionButton(Icons.Default.CallEnd, HangupRed, 72.dp, onReject)
-        CallActionButton(Icons.Default.Call, AnswerGreen, 72.dp, onAnswer)
+        CallActionButton(Icons.Default.CallEnd, HangupRed, 72.sdp(), onReject)
+        CallActionButton(Icons.Default.Call, AnswerGreen, 72.sdp(), onAnswer)
     }
 }
 
@@ -463,7 +481,7 @@ private fun ActiveCallControls(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(24.sdp())
     ) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
             CallToggleButton(if (state.isMuted) Icons.Default.MicOff else Icons.Default.Mic, "Mute", state.isMuted, onMute)
@@ -487,16 +505,16 @@ private fun ActiveCallControls(
             if (CallManager.isBluetoothAvailable()) {
                 CallToggleButton(Icons.Default.Bluetooth, "Audio", state.isBluetoothOn, onBluetooth)
             } else {
-                Spacer(modifier = Modifier.size(72.dp))
+                Spacer(modifier = Modifier.size(72.sdp()))
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(24.sdp()))
 
         Box(Modifier.fillMaxWidth(), Alignment.Center) {
-            CallActionButton(Icons.Default.CallEnd, HangupRed, 72.dp, onReject)
+            CallActionButton(Icons.Default.CallEnd, HangupRed, 72.sdp(), onReject)
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.sdp()))
     }
 }
 
@@ -508,7 +526,7 @@ private fun CallToggleButton(icon: ImageVector, text: String, isActive: Boolean,
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .size(72.sdp())
                 .clip(CircleShape)
                 .background(backgroundColor)
                 .clickable(
@@ -518,15 +536,15 @@ private fun CallToggleButton(icon: ImageVector, text: String, isActive: Boolean,
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, text, tint = contentColor, modifier = Modifier.size(32.dp))
+            Icon(icon, text, tint = contentColor, modifier = Modifier.size(32.sdp()))
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(text, color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.height(8.sdp()))
+        Text(text, color = TextSecondary, fontSize = 13.ssp(), fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
-private fun CallActionButton(icon: ImageVector, backgroundColor: Color, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+private fun CallActionButton(icon: ImageVector, backgroundColor: Color, size: Dp, onClick: () -> Unit) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isPressed) 0.9f else 1f, label = "scale")
 
@@ -543,32 +561,34 @@ private fun CallActionButton(icon: ImageVector, backgroundColor: Color, size: an
             ),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(36.dp))
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(36.sdp()))
     }
 }
 
 @Composable
 fun ConferenceParticipantRow(name: String, onSplit: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.sdp(), vertical = 12.sdp()),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0xFF3A3A3C)), Alignment.Center) {
-                Text(name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Box(Modifier.size(44.sdp()).clip(CircleShape).background(Color(0xFF3A3A3C)), Alignment.Center) {
+                Text(name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.ssp())
             }
-            Spacer(Modifier.width(16.dp))
-            Text(name, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.width(16.sdp()))
+            Text(name, color = Color.White, fontSize = 17.ssp(), fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Button(
             onClick = onSplit,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A3A3C), contentColor = Color(0xFF0A84FF)),
             shape = RoundedCornerShape(50),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            modifier = Modifier.height(36.dp)
+            contentPadding = PaddingValues(horizontal = 16.sdp(), vertical = 8.sdp()),
+            modifier = Modifier.height(36.sdp())
         ) {
-            Text("Private", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text("Private", fontSize = 13.ssp(), fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -587,11 +607,11 @@ private fun DialpadComponent(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(20.sdp())
     ) {
         buttons.forEach { row ->
             Row(
-                horizontalArrangement = Arrangement.spacedBy(32.dp),
+                horizontalArrangement = Arrangement.spacedBy(32.sdp()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 row.forEach { digit ->
@@ -606,7 +626,7 @@ private fun DialpadComponent(
 private fun DialerKey(digit: Char, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(72.dp)
+            .size(72.sdp())
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.1f))
             .clickable(
@@ -618,7 +638,7 @@ private fun DialerKey(digit: Char, onClick: () -> Unit) {
     ) {
         Text(
             text = digit.toString(),
-            fontSize = 32.sp,
+            fontSize = 32.ssp(),
             fontWeight = FontWeight.Normal,
             color = Color.White
         )

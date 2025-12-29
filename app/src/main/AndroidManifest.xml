@@ -117,6 +117,7 @@
             android:name="com.mnivesh.callyn.MyInCallService"
             android:exported="true"
             android:permission="android.permission.BIND_INCALL_SERVICE"
+            android:foregroundServiceType="phoneCall"
             tools:targetApi="n">
             <meta-data
                 android:name="android.telecom.IN_CALL_SERVICE_UI"

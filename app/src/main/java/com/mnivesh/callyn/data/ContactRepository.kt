@@ -23,14 +23,14 @@ class ContactRepository(
     val allContacts: Flow<List<AppContact>> = contactDao.getAllContacts()
     val allWorkLogs: Flow<List<WorkCallLog>> = workCallLogDao.getAllWorkLogs()
 
-    suspend fun refreshContacts(token: String, managerName: String) {
+    // [!code change] Return Boolean instead of Unit
+    suspend fun refreshContacts(token: String, managerName: String): Boolean {
         try {
             val response = apiService.getContacts("Bearer $token", managerName)
 
             if (response.isSuccessful && response.body() != null) {
+                // ... (your existing database logic) ...
                 val networkContacts = response.body()!!
-                Log.d(TAG, "Fetched ${networkContacts.size} contacts from API")
-
                 val dbContacts = networkContacts.map {
                     AppContact(
                         name = it.name,
@@ -41,18 +41,18 @@ class ContactRepository(
                         rshipManager = it.rshipManager
                     )
                 }
-
                 contactDao.deleteAll()
                 contactDao.insertAll(dbContacts)
                 Log.d(TAG, "Successfully refreshed local database.")
 
+                return true // [!code ++] Return Success
             } else {
                 Log.e(TAG, "API Error: ${response.message()}")
+                return false // [!code ++] Return Failure
             }
-        } catch (e: UnknownHostException) {
-            Log.e(TAG, "Network Error: Cannot connect to host.", e)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to refresh contacts", e)
+            return false // [!code ++] Return Failure
         }
     }
 

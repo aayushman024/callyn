@@ -163,7 +163,7 @@ fun DialerScreen(
             .fillMaxSize()
             .background(Color(0xFF121212))
             .padding(horizontal = 24.dp)
-            .padding(bottom = 60.dp),
+            .padding(bottom = 140.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -223,6 +223,7 @@ fun DialerScreen(
                             Text(
                                 text = highlightMatch(contact.name, phoneNumber),
                                 fontSize = 15.sp,
+                                color = Color.White,
                                 fontWeight = FontWeight.Medium
                             )
 
@@ -352,7 +353,9 @@ fun DialerScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Backspace, null,    modifier = Modifier.size(35.dp),)
+                    Icon(Icons.Filled.Backspace, null,    modifier = Modifier.size(35.dp),
+                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.Gray)
+
                 }
             }
         }

@@ -33,27 +33,17 @@ class ContactsViewModel(private val repository: ContactRepository) : ViewModel()
             initialValue = emptyList()
         )
 
-    /**
-     * Submit a request to mark a contact as personal.
-     */
     fun submitPersonalRequest(token: String, contactName: String, userName: String, reason: String) {
         viewModelScope.launch {
-            // We call the repository function which handles the API interaction
             val success = repository.submitPersonalRequest(token, contactName, userName, reason)
-
             if (success) {
                 Log.d("ContactsViewModel", "Request successfully sent to server.")
-                // Optional: You could update _uiState here to show a success message in the UI
             } else {
                 Log.e("ContactsViewModel", "Failed to send request.")
-                // Optional: You could update _uiState here to show an error
             }
         }
     }
 
-    /**
-     * Trigger a manual refresh from the API.
-     */
     fun onRefresh(token: String, managerName: String) {
         Log.d("ContactsViewModel", "Refresh triggered for manager: $managerName")
         viewModelScope.launch {
@@ -66,11 +56,17 @@ class ContactsViewModel(private val repository: ContactRepository) : ViewModel()
             }
         }
     }
+
+    // [!code ++] NEW FUNCTION: Returns true/false for the Toast
+    suspend fun refreshContactsAwait(token: String, managerName: String): Boolean {
+        _uiState.value = _uiState.value.copy(isLoading = true)
+        // This calls the repository (which returns Boolean)
+        val isSuccess = repository.refreshContacts(token, managerName)
+        _uiState.value = _uiState.value.copy(isLoading = false)
+        return isSuccess
+    }
 }
 
-/**
- * Factory class to pass the Repository into the ViewModel.
- */
 class ContactsViewModelFactory(private val repository: ContactRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ContactsViewModel::class.java)) {

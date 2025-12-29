@@ -14,6 +14,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -50,11 +51,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// --- Data class for device contacts ---
+// --- Data Classes ---
+
+data class DeviceNumber(
+    val number: String,
+    val isDefault: Boolean
+)
+
 data class DeviceContact(
     val id: String,
     val name: String,
-    val number: String,
+    val numbers: List<DeviceNumber>,
     val isStarred: Boolean = false
 )
 
@@ -76,7 +83,6 @@ private fun getInitials(name: String): String {
         .ifEmpty { name.take(1).uppercase() }
 }
 
-// Helper to sanitize phone numbers for comparison (last 10 digits)
 private fun sanitizePhoneNumber(number: String): String {
     val digits = number.filter { it.isDigit() }
     return if (digits.length > 10) digits.takeLast(10) else digits
@@ -108,8 +114,6 @@ fun ContactsScreen(
     val authManager = remember { AuthManager(context) }
     val token by remember(authManager) { mutableStateOf(authManager.getToken()) }
     val userName by remember(authManager) { mutableStateOf(authManager.getUserName() ?: "") }
-
-    // [!code ++] Retrieve department
     val department by remember(authManager) { mutableStateOf(authManager.getDepartment()) }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -126,14 +130,13 @@ fun ContactsScreen(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
-    // --- PERMISSIONS (UPDATED to include WRITE_CONTACTS) ---
+    // --- PERMISSIONS ---
     var hasContactsPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         )
     }
 
-    // We need WRITE_CONTACTS to delete duplicates
     var hasWritePermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
@@ -153,18 +156,19 @@ fun ContactsScreen(
     var deviceContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
     val contentResolver = LocalContext.current.contentResolver
 
-    // [!code ++] Reusable refresh function
+    // --- FETCH LOGIC: Grouping & Default Detection ---
     val refreshDeviceContacts = {
         if (hasContactsPermission) {
             scope.launch(Dispatchers.IO) {
-                val contactsList = mutableListOf<DeviceContact>()
+                val contactsMap = mutableMapOf<String, DeviceContact>()
                 val cursor = contentResolver.query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                     arrayOf(
                         ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
                         ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                         ContactsContract.CommonDataKinds.Phone.NUMBER,
-                        ContactsContract.CommonDataKinds.Phone.STARRED
+                        ContactsContract.CommonDataKinds.Phone.STARRED,
+                        ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY // Checks for Default Number
                     ),
                     null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
                 )
@@ -174,18 +178,35 @@ fun ContactsScreen(
                     val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                     val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
                     val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED)
+                    val defaultIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
 
                     while (it.moveToNext()) {
                         val id = it.getString(idIndex)
                         val name = it.getString(nameIndex) ?: "Unknown"
-                        val number = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
+                        val rawNumber = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
                         val isStarred = it.getInt(starredIndex) == 1
+                        val isDefault = it.getInt(defaultIndex) > 0
 
-                        if (number.isNotEmpty()) contactsList.add(DeviceContact(id, name, number, isStarred))
+                        if (rawNumber.isNotEmpty()) {
+                            val numberObj = DeviceNumber(rawNumber, isDefault)
+
+                            if (contactsMap.containsKey(id)) {
+                                val existing = contactsMap[id]!!
+                                // Avoid duplicate numbers for same contact
+                                if (existing.numbers.none { n -> n.number == rawNumber }) {
+                                    contactsMap[id] = existing.copy(numbers = existing.numbers + numberObj)
+                                }
+                            } else {
+                                contactsMap[id] = DeviceContact(id, name, listOf(numberObj), isStarred)
+                            }
+                        }
                     }
                 }
                 withContext(Dispatchers.Main) {
-                    deviceContacts = contactsList.distinctBy { it.number }
+                    // Sort map to list: Name ASC, Numbers: Default first
+                    deviceContacts = contactsMap.values.map { contact ->
+                        contact.copy(numbers = contact.numbers.sortedByDescending { it.isDefault })
+                    }.sortedBy { it.name }
                 }
             }
         } else {
@@ -193,7 +214,6 @@ fun ContactsScreen(
         }
     }
 
-    // Fetch Device Contacts
     LaunchedEffect(hasContactsPermission) {
         refreshDeviceContacts()
     }
@@ -203,27 +223,27 @@ fun ContactsScreen(
     }
 
     // --- FILTER LOGIC ---
-    val myContacts = remember(workContacts, userName) {
-        workContacts.filter { (it.rshipManager ?: "").equals(userName, ignoreCase = true) }
+    val myContacts = remember(workContacts, userName, department) {
+        if (department == "IT Desk") {
+            workContacts
+        } else {
+            workContacts.filter { (it.rshipManager ?: "").equals(userName, ignoreCase = true) }
+        }
     }
 
-    // --- CONFLICT DETECTION LOGIC (UPDATED) ---
+    // --- CONFLICT LOGIC (Iterates list) ---
     var conflictingContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
     var showConflictSheet by remember { mutableStateOf(false) }
     var hasCheckedConflicts by remember { mutableStateOf(false) }
 
     LaunchedEffect(workContacts, deviceContacts) {
-        // [!code ++] Check department condition
         if (department != "Management" && !hasCheckedConflicts && workContacts.isNotEmpty() && deviceContacts.isNotEmpty()) {
             withContext(Dispatchers.IO) {
-                // Brute force comparison using sanitized numbers (last 10 digits)
                 val conflicts = deviceContacts.filter { device ->
-                    val deviceNum = sanitizePhoneNumber(device.number)
-                    if (deviceNum.length < 5) return@filter false // skip short numbers
-
-                    workContacts.any { work ->
-                        val workNum = sanitizePhoneNumber(work.number)
-                        workNum == deviceNum
+                    device.numbers.any { numObj ->
+                        val deviceNum = sanitizePhoneNumber(numObj.number)
+                        if (deviceNum.length < 5) false
+                        else workContacts.any { work -> sanitizePhoneNumber(work.number) == deviceNum }
                     }
                 }
 
@@ -238,28 +258,26 @@ fun ContactsScreen(
         }
     }
 
-    // [!code ++] Updated Filter Logic for Management Search
     val filteredWorkContacts = remember(searchQuery, workContacts, myContacts, department) {
         if (searchQuery.isBlank()) myContacts else {
             workContacts.filter {
                 it.name.contains(searchQuery, true) ||
                         it.familyHead.contains(searchQuery, true) ||
                         it.pan.contains(searchQuery, true) ||
-                        // [!code ++] Allow searching by number for Management
                         (department == "Management" && it.number.contains(searchQuery))
             }.sortedBy { !it.name.startsWith(searchQuery, true) }
         }
     }
 
-    // Filter Favorites
     val favoriteContacts = remember(deviceContacts, searchQuery) {
         if (searchQuery.isBlank()) deviceContacts.filter { it.isStarred } else emptyList()
     }
 
     val filteredDeviceContacts = remember(searchQuery, deviceContacts) {
         if (searchQuery.isBlank()) deviceContacts else {
-            deviceContacts.filter {
-                it.name.contains(searchQuery, true) || it.number.contains(searchQuery)
+            deviceContacts.filter { contact ->
+                contact.name.contains(searchQuery, true) ||
+                        contact.numbers.any { it.number.contains(searchQuery) }
             }.sortedBy { !it.name.startsWith(searchQuery, true) }
         }
     }
@@ -268,10 +286,9 @@ fun ContactsScreen(
     var selectedWorkContact by remember { mutableStateOf<AppContact?>(null) }
     var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
 
-    // --- GLOBAL DIALOG STATE (So it can be called from Conflict Sheet too) ---
     var showGlobalRequestDialog by remember { mutableStateOf(false) }
     var globalRequestReason by remember { mutableStateOf("") }
-    var contactForRequest by remember { mutableStateOf<String?>(null) } // Name of contact to request
+    var contactForRequest by remember { mutableStateOf<String?>(null) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
     val shimmerOffset by infiniteTransition.animateFloat(
@@ -280,13 +297,21 @@ fun ContactsScreen(
         label = "shimmer"
     )
 
-    // --- MAIN UI STRUCTURE ---
+    // --- MAIN UI ---
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             AppDrawer(
                 userName = userName,
-                onSync = { token?.let { viewModel.onRefresh(it, userName) } },
+                onSync = {
+                    token?.let { t ->
+                        scope.launch {
+                            val isSuccess = viewModel.refreshContactsAwait(t, userName)
+                            if (isSuccess) Toast.makeText(context, "Sync Successful!", Toast.LENGTH_SHORT).show()
+                            else Toast.makeText(context, "Sync Failed. Check Internet.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
                 onLogout = { authManager.logout(); onLogout() },
                 onShowRequests = onShowRequests,
                 onClose = { scope.launch { drawerState.close() } }
@@ -308,7 +333,7 @@ fun ContactsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 12.dp)
+                            .padding(top = 35.dp)
                     ) {
                         Box(
                             modifier = Modifier
@@ -326,14 +351,13 @@ fun ContactsScreen(
                                 if (department == "Management") {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Surface(
-
-                                        color = Color(0xFF3B82F6).copy(alpha = 0.15f), // Light Blue Background
+                                        color = Color(0xFF3B82F6).copy(alpha = 0.15f),
                                         shape = RoundedCornerShape(50),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.5f)) // Blue Border
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.5f))
                                     ) {
                                         Text(
                                             text = " Admin ",
-                                            color = Color(0xFF3B82F6), // Blue Text
+                                            color = Color(0xFF3B82F6),
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
@@ -377,7 +401,6 @@ fun ContactsScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    // Search Bar
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -421,16 +444,17 @@ fun ContactsScreen(
                                         )
                                     }
                                 } else if (filteredDeviceContacts.isEmpty() && favoriteContacts.isEmpty()) {
-                                    EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
+                                    Box (
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ){
+                                        EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
+                                    }
                                 } else {
-                                    LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                                        // --- FAVORITES CAROUSEL ---
+                                    LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         if (favoriteContacts.isNotEmpty()) {
                                             item {
-                                                Column(modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 12.dp)) {
+                                                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
                                                     Text(
                                                         text = "Favourites",
                                                         color = Color(0xFFF59E0B),
@@ -458,7 +482,6 @@ fun ContactsScreen(
                                             }
                                         }
 
-                                        // --- ALL CONTACTS LIST ---
                                         if (favoriteContacts.isNotEmpty() && searchQuery.isBlank()) {
                                             item {
                                                 Text(
@@ -494,7 +517,7 @@ fun ContactsScreen(
                                         EmptyStateCard(if (searchQuery.isNotEmpty()) "No matches found" else "No assigned contacts", Icons.Default.BusinessCenter)
                                     }
                                 } else {
-                                    LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(filteredWorkContacts, key = { it.id }) { contact ->
                                             ModernWorkContactCard(contact, onClick = {
                                                 selectedWorkContact = contact
@@ -509,13 +532,11 @@ fun ContactsScreen(
                 }
             }
 
-            // --- BOTTOM SHEETS ---
-
             if (selectedWorkContact != null) {
                 ModernBottomSheet(
                     contact = selectedWorkContact!!,
                     sheetState = sheetState,
-                    department = department, // [!code ++] Pass department here
+                    department = department,
                     onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null } },
                     onCall = {
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -524,7 +545,6 @@ fun ContactsScreen(
                         }
                     },
                     isWorkContact = true,
-                    // --- INTEGRATING API CALL HERE ---
                     onRequestSubmit = { reason ->
                         if (token != null) {
                             viewModel.submitPersonalRequest(
@@ -546,30 +566,24 @@ fun ContactsScreen(
                     contact = selectedDeviceContact!!,
                     sheetState = sheetState,
                     onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
-                    onCall = {
+                    onCall = { number ->
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onContactClick(selectedDeviceContact!!.number, false)
+                            onContactClick(number, false)
                             selectedDeviceContact = null
                         }
                     }
                 )
             }
 
-            // --- CONFLICT BOTTOM SHEET (NEW) ---
             if (showConflictSheet) {
                 ModalBottomSheet(
-                    onDismissRequest = {
-                    },
+                    onDismissRequest = {},
                     sheetState = rememberModalBottomSheetState(
                         skipPartiallyExpanded = true,
-                        // [!code ++] This is the key part:
-                        confirmValueChange = { newState ->
-                            newState != SheetValue.Hidden
-                        }
+                        confirmValueChange = { newState -> newState != SheetValue.Hidden }
                     ),
                     containerColor = Color(0xFF1E293B),
                     contentColor = Color.White,
-                    // [!code ++] Optional: Remove the drag handle to visually indicate it can't be swiped
                     dragHandle = null
                 ) {
                     Column(
@@ -577,7 +591,6 @@ fun ContactsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        // Header with Continue Button
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -585,15 +598,9 @@ fun ContactsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                "Duplicate Contacts Found",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 18.sp,
-                                color = Color.White
-                            )
+                            Text("Duplicate Contacts Found", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
                             Button(
                                 onClick = {
-                                    // Deletion Logic
                                     if (hasWritePermission) {
                                         scope.launch(Dispatchers.IO) {
                                             try {
@@ -604,7 +611,6 @@ fun ContactsScreen(
                                                 withContext(Dispatchers.Main) {
                                                     Toast.makeText(context, "Cleaned up ${conflictingContacts.size} contacts", Toast.LENGTH_SHORT).show()
                                                     showConflictSheet = false
-                                                    // Refresh device contacts list
                                                     refreshDeviceContacts()
                                                 }
                                             } catch (e: Exception) {
@@ -625,7 +631,6 @@ fun ContactsScreen(
                             }
                         }
 
-                        // List of Conflicts
                         LazyColumn(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             contentPadding = PaddingValues(bottom = 30.dp)
@@ -639,24 +644,13 @@ fun ContactsScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = contact.name, // Personal Contact Name
-                                            color = Color.White,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 16.sp
-                                        )
-//                                        Text(
-//                                            text = contact.number,
-//                                            color = Color.White.copy(alpha = 0.6f),
-//                                            fontSize = 14.sp
-//                                        )
+                                        Text(text = contact.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                                     }
 
                                     Button(
                                         onClick = {
-                                            // Find corresponding work contact for the request logic
-                                            val workMatch = workContacts.firstOrNull {
-                                                sanitizePhoneNumber(it.number) == sanitizePhoneNumber(contact.number)
+                                            val workMatch = workContacts.firstOrNull { work ->
+                                                contact.numbers.any { numObj -> sanitizePhoneNumber(work.number) == sanitizePhoneNumber(numObj.number) }
                                             }
                                             contactForRequest = workMatch?.name ?: contact.name
                                             showGlobalRequestDialog = true
@@ -674,7 +668,6 @@ fun ContactsScreen(
                 }
             }
 
-            // --- GLOBAL REQUEST DIALOG ---
             if (showGlobalRequestDialog) {
                 AlertDialog(
                     onDismissRequest = { showGlobalRequestDialog = false },
@@ -829,6 +822,9 @@ private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
 @Composable
 private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit) {
     val avatarColor = getColorForName(contact.name)
+    val displayNumber = contact.numbers.firstOrNull()?.number ?: "No Number"
+    val count = contact.numbers.size
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -852,7 +848,20 @@ private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit)
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(contact.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(contact.number, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Text(displayNumber, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
+                    if (count > 1) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color.White.copy(alpha = 0.1f))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("+$count", fontSize = 10.sp, color = Color.White.copy(alpha = 0.8f))
+                        }
+                    }
+                }
             }
             Box(
                 modifier = Modifier
@@ -976,13 +985,13 @@ private fun ModernBottomSheet(
     onDismiss: () -> Unit,
     onCall: () -> Unit,
     isWorkContact: Boolean,
-    department: String?, // [!code ++] New Parameter
+    department: String?,
     onRequestSubmit: (String) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showRequestDialog by remember { mutableStateOf(false) }
     var requestReason by remember { mutableStateOf("") }
-    val context = LocalContext.current // [!code ++]
+    val context = LocalContext.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1037,7 +1046,6 @@ private fun ModernBottomSheet(
                 Spacer(modifier = Modifier.height(20.dp))
                 Text(contact.name, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
 
-                // [!code ++] NEW: Show Number & Copy for Management in Bottom Sheet
                 if (department == "Management") {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1135,7 +1143,7 @@ private fun ModernBottomSheet(
                 Button(
                     onClick = {
                         if (requestReason.isNotBlank()) {
-                            onRequestSubmit(requestReason) // <--- USE CALLBACK
+                            onRequestSubmit(requestReason)
                             showRequestDialog = false
                             requestReason = ""
                         }
@@ -1157,7 +1165,12 @@ private fun ModernBottomSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ModernDeviceBottomSheet(contact: DeviceContact, sheetState: SheetState, onDismiss: () -> Unit, onCall: () -> Unit) {
+private fun ModernDeviceBottomSheet(
+    contact: DeviceContact,
+    sheetState: SheetState,
+    onDismiss: () -> Unit,
+    onCall: (String) -> Unit
+) {
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF1E293B), contentColor = Color.White, dragHandle = {
         Box(modifier = Modifier
@@ -1203,25 +1216,95 @@ private fun ModernDeviceBottomSheet(contact: DeviceContact, sheetState: SheetSta
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Personal Contact", fontSize = 15.sp, color = Color(0xFF10B981), fontWeight = FontWeight.Medium)
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Text(contact.number, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f))
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Phone Number", contact.number))
-                    Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
-                }, modifier = Modifier.size(24.dp)) {
-                    Icon(Icons.Default.ContentCopy, "Copy", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+
+            val defaultNumberObj = contact.numbers.find { it.isDefault }
+            // If only 1 number exists, treat it as effective default for button
+            val effectiveDefault = if (contact.numbers.size == 1) contact.numbers.first() else defaultNumberObj
+
+            if (contact.numbers.size > 1) {
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Phone Numbers", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.Start))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                LazyColumn(modifier = Modifier.heightIn(max = 250.dp)) {
+                    items(contact.numbers) { numObj ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(numObj.number, fontSize = 16.sp, color = Color.White.copy(alpha = 0.9f))
+                                if (numObj.isDefault) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0xFF3B82F6).copy(alpha = 0.2f)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                                        Text("Default", fontSize = 10.sp, color = Color(0xFF60A5FA), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Row {
+                                IconButton(onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Phone Number", numObj.number))
+                                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Default.ContentCopy, null, tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                                }
+
+                                Button(
+                                    onClick = { onCall(numObj.number) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                                    shape = CircleShape,
+                                    contentPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(Icons.Default.Call, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+                    }
+                }
+            } else {
+                // Single Number Display
+                val number = contact.numbers.firstOrNull()?.number ?: ""
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                    Text(number, fontSize = 16.sp, color = Color.White.copy(alpha = 0.7f))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("Phone Number", number)
+                        clipboard.setPrimaryClip(clip)
+                        Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
+                    }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.ContentCopy, "Copy", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(32.dp))
-            Button(onClick = onCall, modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), elevation = ButtonDefaults.buttonElevation(4.dp, 8.dp)) {
-                Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text("Call via SIM 1 (Personal)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
+            // Big Call Button Logic
+            if (effectiveDefault != null) {
+                Spacer(modifier = Modifier.height(if (contact.numbers.size > 1) 16.dp else 32.dp))
+                Button(
+                    onClick = { onCall(effectiveDefault.number) },
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                    elevation = ButtonDefaults.buttonElevation(4.dp, 8.dp)
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                        Text(if (contact.numbers.size > 1) "Call Default" else "Call via SIM 1 (Personal)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            } else if (contact.numbers.size > 1) {
+                Spacer(modifier = Modifier.height(24.dp))
             }
+
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
