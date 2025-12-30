@@ -14,7 +14,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -26,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox // [!code ++] Correct Import
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -107,7 +107,7 @@ fun ContactsScreen(
     }
 
     val viewModel: ContactsViewModel = viewModel(
-        factory = ContactsViewModelFactory(application.repository)
+        factory = ContactsViewModelFactory(application, application.repository)
     )
 
     // --- AUTH & USER RETRIEVAL ---
@@ -119,6 +119,9 @@ fun ContactsScreen(
     var searchQuery by remember { mutableStateOf("") }
     val workListState = rememberLazyListState()
     val personalListState = rememberLazyListState()
+
+    // [!code ++] Refresh State
+    var isRefreshing by remember { mutableStateOf(false) }
 
     LaunchedEffect(searchQuery) {
         workListState.scrollToItem(0)
@@ -146,92 +149,28 @@ fun ContactsScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        hasContactsPermission = permissions[Manifest.permission.READ_CONTACTS] == true
+        val isGranted = permissions[Manifest.permission.READ_CONTACTS] == true
+        hasContactsPermission = isGranted
         hasWritePermission = permissions[Manifest.permission.WRITE_CONTACTS] == true
+        if (isGranted) viewModel.loadDeviceContacts()
     }
 
     val uiState by viewModel.uiState.collectAsState()
     val workContacts by viewModel.localContacts.collectAsState()
+    val deviceContacts by viewModel.deviceContacts.collectAsState()
 
-    var deviceContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
     val contentResolver = LocalContext.current.contentResolver
-
-    // --- FETCH LOGIC: Grouping & Default Detection ---
-    val refreshDeviceContacts = {
-        if (hasContactsPermission) {
-            scope.launch(Dispatchers.IO) {
-                val contactsMap = mutableMapOf<String, DeviceContact>()
-                val cursor = contentResolver.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(
-                        ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                        ContactsContract.CommonDataKinds.Phone.NUMBER,
-                        ContactsContract.CommonDataKinds.Phone.STARRED,
-                        ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY // Checks for Default Number
-                    ),
-                    null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-                )
-
-                cursor?.use {
-                    val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
-                    val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                    val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED)
-                    val defaultIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
-
-                    while (it.moveToNext()) {
-                        val id = it.getString(idIndex)
-                        val name = it.getString(nameIndex) ?: "Unknown"
-                        val rawNumber = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
-                        val isStarred = it.getInt(starredIndex) == 1
-                        val isDefault = it.getInt(defaultIndex) > 0
-
-                        if (rawNumber.isNotEmpty()) {
-                            val numberObj = DeviceNumber(rawNumber, isDefault)
-
-                            if (contactsMap.containsKey(id)) {
-                                val existing = contactsMap[id]!!
-                                // Avoid duplicate numbers for same contact
-                                if (existing.numbers.none { n -> n.number == rawNumber }) {
-                                    contactsMap[id] = existing.copy(numbers = existing.numbers + numberObj)
-                                }
-                            } else {
-                                contactsMap[id] = DeviceContact(id, name, listOf(numberObj), isStarred)
-                            }
-                        }
-                    }
-                }
-                withContext(Dispatchers.Main) {
-                    // Sort map to list: Name ASC, Numbers: Default first
-                    deviceContacts = contactsMap.values.map { contact ->
-                        contact.copy(numbers = contact.numbers.sortedByDescending { it.isDefault })
-                    }.sortedBy { it.name }
-                }
-            }
-        } else {
-            deviceContacts = emptyList()
-        }
-    }
-
-    LaunchedEffect(hasContactsPermission) {
-        refreshDeviceContacts()
-    }
-
-    LaunchedEffect(key1 = userName, key2 = token) {
-        token?.let { viewModel.onRefresh(it, userName) }
-    }
 
     // --- FILTER LOGIC ---
     val myContacts = remember(workContacts, userName, department) {
-        if (department == "Management") {
+        if (department == "Management" || department == "IT Desk") {
             workContacts
         } else {
             workContacts.filter { (it.rshipManager ?: "").equals(userName, ignoreCase = true) }
         }
     }
 
-    // --- CONFLICT LOGIC (Iterates list) ---
+    // --- CONFLICT LOGIC ---
     var conflictingContacts by remember { mutableStateOf<List<DeviceContact>>(emptyList()) }
     var showConflictSheet by remember { mutableStateOf(false) }
     var hasCheckedConflicts by remember { mutableStateOf(false) }
@@ -347,8 +286,7 @@ fun ContactsScreen(
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Callyn", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-
-                                if (department == "Management") {
+                                if (department == "Management" || department == "IT Desk") {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Surface(
                                         color = Color(0xFF3B82F6).copy(alpha = 0.15f),
@@ -396,133 +334,145 @@ fun ContactsScreen(
                     }
                 }
             ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
+
+                // [!code ++] PullToRefreshBox handles the refresh logic and indicator
+                PullToRefreshBox(
+                    isRefreshing = isRefreshing,
+                    onRefresh = {
+                        scope.launch {
+                            isRefreshing = true
+                            if (token != null) {
+                                viewModel.refreshAllAwait(token!!, userName)
+                            }
+                            isRefreshing = false
+                        }
+                    },
+                    modifier = Modifier.padding(innerPadding).fillMaxSize()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp, 15.dp, 16.dp, 10.dp)
-                    ) {
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp)),
-                            placeholder = { Text("Search contacts...", color = Color.White.copy(alpha = 0.5f)) },
-                            leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.White.copy(alpha = 0.6f)) },
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f)) }
-                                }
-                            },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                                focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
-                                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                                cursorColor = Color.White
+                                .padding(16.dp, 15.dp, 16.dp, 10.dp)
+                        ) {
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp)),
+                                placeholder = { Text("Search contacts...", color = Color.White.copy(alpha = 0.5f)) },
+                                leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.White.copy(alpha = 0.6f)) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f)) }
+                                    }
+                                },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                    focusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                    unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
+                                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                                    cursorColor = Color.White
+                                )
                             )
-                        )
-                    }
+                        }
 
-                    HorizontalPager(
-                        state = pagerState, modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp), verticalAlignment = Alignment.Top
-                    ) { page ->
-                        when (page) {
-                            0 -> { // Personal Tab
-                                if (!hasContactsPermission) {
-                                    PermissionRequiredCard {
-                                        permissionLauncher.launch(
-                                            arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
-                                        )
-                                    }
-                                } else if (filteredDeviceContacts.isEmpty() && favoriteContacts.isEmpty()) {
-                                    Box (
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentAlignment = Alignment.Center
-                                    ){
-                                        EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
-                                    }
-                                } else {
-                                    LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        if (favoriteContacts.isNotEmpty()) {
-                                            item {
-                                                Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                                                    Text(
-                                                        text = "Favourites",
-                                                        color = Color(0xFFF59E0B),
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 14.sp,
-                                                        modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
-                                                    )
-                                                    LazyRow(
-                                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                                        contentPadding = PaddingValues(horizontal = 4.dp)
-                                                    ) {
-                                                        items(favoriteContacts) { contact ->
-                                                            FavoriteContactItem(
-                                                                contact = contact,
-                                                                onClick = {
-                                                                    selectedDeviceContact = contact
-                                                                    scope.launch { sheetState.show() }
-                                                                }
-                                                            )
+                        HorizontalPager(
+                            state = pagerState, modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 16.dp), verticalAlignment = Alignment.Top
+                        ) { page ->
+                            when (page) {
+                                0 -> { // Personal Tab
+                                    if (!hasContactsPermission) {
+                                        PermissionRequiredCard {
+                                            permissionLauncher.launch(
+                                                arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
+                                            )
+                                        }
+                                    } else if (filteredDeviceContacts.isEmpty() && favoriteContacts.isEmpty()) {
+                                        Box (
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentAlignment = Alignment.Center
+                                        ){
+                                            EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
+                                        }
+                                    } else {
+                                        LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            if (favoriteContacts.isNotEmpty()) {
+                                                item {
+                                                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                                                        Text(
+                                                            text = "Favourites",
+                                                            color = Color(0xFFF59E0B),
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 14.sp,
+                                                            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
+                                                        )
+                                                        LazyRow(
+                                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                                            contentPadding = PaddingValues(horizontal = 4.dp)
+                                                        ) {
+                                                            items(favoriteContacts) { contact ->
+                                                                FavoriteContactItem(
+                                                                    contact = contact,
+                                                                    onClick = {
+                                                                        selectedDeviceContact = contact
+                                                                        scope.launch { sheetState.show() }
+                                                                    }
+                                                                )
+                                                            }
                                                         }
+                                                        Spacer(modifier = Modifier.height(16.dp))
+                                                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                                                     }
-                                                    Spacer(modifier = Modifier.height(16.dp))
-                                                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                                                 }
                                             }
-                                        }
 
-                                        if (favoriteContacts.isNotEmpty() && searchQuery.isBlank()) {
-                                            item {
-                                                Text(
-                                                    text = "All Contacts",
-                                                    color = Color.White.copy(alpha = 0.5f),
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 14.sp,
-                                                    modifier = Modifier.padding(top = 8.dp, start = 4.dp)
-                                                )
+                                            if (favoriteContacts.isNotEmpty() && searchQuery.isBlank()) {
+                                                item {
+                                                    Text(
+                                                        text = "All Contacts",
+                                                        color = Color.White.copy(alpha = 0.5f),
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 14.sp,
+                                                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                                                    )
+                                                }
                                             }
-                                        }
 
-                                        items(filteredDeviceContacts, key = { it.id }) { contact ->
-                                            ModernDeviceContactCard(contact, onClick = {
-                                                selectedDeviceContact = contact
-                                                scope.launch { sheetState.show() }
-                                            })
+                                            items(filteredDeviceContacts, key = { it.id }) { contact ->
+                                                ModernDeviceContactCard(contact, onClick = {
+                                                    selectedDeviceContact = contact
+                                                    scope.launch { sheetState.show() }
+                                                })
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            1 -> { // Work Tab
-                                if (uiState.isLoading && workContacts.isEmpty()) {
-                                    LoadingCard(shimmerOffset)
-                                } else if (uiState.errorMessage != null) {
-                                    ErrorCard(uiState.errorMessage!!)
-                                } else if (filteredWorkContacts.isEmpty()) {
-                                    Box(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        EmptyStateCard(if (searchQuery.isNotEmpty()) "No matches found" else "No assigned contacts", Icons.Default.BusinessCenter)
-                                    }
-                                } else {
-                                    LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        items(filteredWorkContacts, key = { it.id }) { contact ->
-                                            ModernWorkContactCard(contact, onClick = {
-                                                selectedWorkContact = contact
-                                                scope.launch { sheetState.show() }
-                                            })
+                                1 -> { // Work Tab
+                                    if (uiState.isLoading && workContacts.isEmpty()) {
+                                        LoadingCard(shimmerOffset)
+                                    } else if (uiState.errorMessage != null) {
+                                        ErrorCard(uiState.errorMessage!!)
+                                    } else if (filteredWorkContacts.isEmpty()) {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            EmptyStateCard(if (searchQuery.isNotEmpty()) "No matches found" else "No assigned contacts", Icons.Default.BusinessCenter)
+                                        }
+                                    } else {
+                                        LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            items(filteredWorkContacts, key = { it.id }) { contact ->
+                                                ModernWorkContactCard(contact, onClick = {
+                                                    selectedWorkContact = contact
+                                                    scope.launch { sheetState.show() }
+                                                })
+                                            }
                                         }
                                     }
                                 }
@@ -532,6 +482,7 @@ fun ContactsScreen(
                 }
             }
 
+            // ... (Rest of the Bottom Sheets and Dialogs logic remains the same)
             if (selectedWorkContact != null) {
                 ModernBottomSheet(
                     contact = selectedWorkContact!!,
@@ -611,7 +562,7 @@ fun ContactsScreen(
                                                 withContext(Dispatchers.Main) {
                                                     Toast.makeText(context, "Cleaned up ${conflictingContacts.size} contacts", Toast.LENGTH_SHORT).show()
                                                     showConflictSheet = false
-                                                    refreshDeviceContacts()
+                                                    viewModel.loadDeviceContacts()
                                                 }
                                             } catch (e: Exception) {
                                                 withContext(Dispatchers.Main) {
@@ -729,7 +680,6 @@ fun ContactsScreen(
         }
     }
 }
-
 // ---------------------------------------------
 // HELPER COMPOSABLES
 // ---------------------------------------------

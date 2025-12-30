@@ -2,14 +2,19 @@ package com.mnivesh.callyn
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.ContentObserver
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telephony.SubscriptionManager
 import android.widget.Toast
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,11 +27,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -34,11 +39,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -61,6 +74,139 @@ data class RecentCallUiItem(
     val simSlot: String? = null
 )
 
+// --- ViewModel ---
+class RecentCallsViewModel(
+    application: Application,
+    private val repository: ContactRepository
+) : AndroidViewModel(application) {
+
+    // Main List State
+    private val _systemLogs = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
+    val systemLogs = _systemLogs.asStateFlow()
+
+    private val _workLogs = MutableStateFlow<List<WorkCallLog>>(emptyList())
+    val workLogs = _workLogs.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
+
+    // History Sheet State
+    private val _selectedContactHistory = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
+    val selectedContactHistory = _selectedContactHistory.asStateFlow()
+
+    private val _isHistoryLoading = MutableStateFlow(false)
+    val isHistoryLoading = _isHistoryLoading.asStateFlow()
+
+    // Pagination Flags
+    private var endReached = false
+    private var loadJob: Job? = null
+
+    // Content Observer for auto-updates
+    private val callLogObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            super.onChange(selfChange)
+            silentRefresh()
+        }
+    }
+
+    init {
+        // Observe Work Logs from DB
+        viewModelScope.launch {
+            repository.allWorkLogs.collect { _workLogs.value = it }
+        }
+
+        // Register Observer for System Call Log
+        try {
+            getApplication<Application>().contentResolver.registerContentObserver(
+                CallLog.Calls.CONTENT_URI, true, callLogObserver
+            )
+        } catch (e: Exception) { e.printStackTrace() }
+
+        // Initial Load
+        loadNextPage()
+    }
+
+    /**
+     * Silent Refresh: Called when DB changes (e.g. marked as read).
+     */
+    fun silentRefresh() {
+        if (_isLoading.value) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentSize = _systemLogs.value.size
+            val limitToFetch = if (currentSize < 50) 50 else currentSize
+
+            val updatedLogs = fetchSystemCallLogs(getApplication(), limit = limitToFetch)
+
+            withContext(Dispatchers.Main) {
+                if (_systemLogs.value != updatedLogs) {
+                    _systemLogs.value = updatedLogs
+                }
+            }
+        }
+    }
+
+    /**
+     * Pull-to-Refresh: Explicitly resets the list to the top 50.
+     */
+    fun refreshAllSuspend() {
+        endReached = false
+        viewModelScope.launch(Dispatchers.IO) {
+            val newLogs = fetchSystemCallLogs(getApplication(), limit = 50)
+            withContext(Dispatchers.Main) {
+                _systemLogs.value = newLogs
+            }
+        }
+    }
+
+    fun loadNextPage() {
+        if (_isLoading.value || endReached) return
+
+        _isLoading.value = true
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            val lastLogDate = _systemLogs.value.lastOrNull()?.date
+            val newLogs = fetchSystemCallLogs(getApplication(), limit = 50, olderThan = lastLogDate)
+
+            withContext(Dispatchers.Main) {
+                if (newLogs.isEmpty()) {
+                    endReached = true
+                } else {
+                    val combined = (_systemLogs.value + newLogs).distinctBy { it.id }
+                    _systemLogs.value = combined
+                }
+                _isLoading.value = false
+            }
+        }
+    }
+
+    fun fetchHistoryForNumber(number: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isHistoryLoading.value = true
+            _selectedContactHistory.value = emptyList()
+
+            val logs = fetchSystemCallLogs(getApplication(), numberFilter = number)
+
+            withContext(Dispatchers.Main) {
+                _selectedContactHistory.value = logs
+                _isHistoryLoading.value = false
+            }
+        }
+    }
+
+    override fun onCleared() {
+        getApplication<Application>().contentResolver.unregisterContentObserver(callLogObserver)
+        super.onCleared()
+    }
+}
+
+class RecentCallsViewModelFactory(val app: Application, val repo: ContactRepository) : ViewModelProvider.Factory {
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        return RecentCallsViewModel(app, repo) as T
+    }
+}
+
+// --- Main Composable ---
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecentCallsScreen(
@@ -69,63 +215,30 @@ fun RecentCallsScreen(
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as CallynApplication
+
+    val activity = LocalContext.current as ComponentActivity
+    val viewModel: RecentCallsViewModel = viewModel(
+        viewModelStoreOwner = activity,
+        factory = RecentCallsViewModelFactory(application, application.repository)
+    )
+
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { onScreenEntry() }
 
-    LaunchedEffect(Unit) {
-        onScreenEntry()
-    }
+    // --- State ---
+    val workLogs by viewModel.workLogs.collectAsState()
+    val systemLogs by viewModel.systemLogs.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
-    // --- States ---
-    var workLogs by remember { mutableStateOf<List<WorkCallLog>>(emptyList()) }
-    var systemLogs by remember { mutableStateOf<List<RecentCallUiItem>>(emptyList()) }
+    val selectedContactHistory by viewModel.selectedContactHistory.collectAsState()
+    val isHistoryLoading by viewModel.isHistoryLoading.collectAsState()
+
     var allCalls by remember { mutableStateOf<List<RecentCallUiItem>>(emptyList()) }
-
-    // Pagination States
-    var isLoading by remember { mutableStateOf(false) }
-    var endReached by remember { mutableStateOf(false) }
-
     var searchQuery by remember { mutableStateOf("") }
     var activeFilter by remember { mutableStateOf(CallFilter.ALL) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
-    // --- Bottom Sheet States ---
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedWorkContact by remember { mutableStateOf<AppContact?>(null) }
-    var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
-    var selectedContactHistory by remember { mutableStateOf<List<RecentCallUiItem>>(emptyList()) }
-
-    // --- Data Fetching: Work Logs (Database) ---
-    LaunchedEffect(Unit) {
-        application.repository.allWorkLogs.collect { dbLogs ->
-            workLogs = dbLogs
-        }
-    }
-
-    // --- Data Fetching: System Logs (Pagination) ---
-    val loadNextPage = {
-        if (!isLoading && !endReached) {
-            isLoading = true
-            scope.launch(Dispatchers.Default) {
-                val lastLogDate = systemLogs.lastOrNull()?.date
-                val newLogs = fetchSystemCallLogs(context, limit = 50, olderThan = lastLogDate)
-
-                withContext(Dispatchers.Main) {
-                    if (newLogs.isEmpty()) {
-                        endReached = true
-                    } else {
-                        systemLogs = systemLogs + newLogs
-                    }
-                    isLoading = false
-                }
-            }
-        }
-    }
-
-    // Initial Load
-    LaunchedEffect(Unit) {
-        loadNextPage()
-    }
-
-    // --- Merging Logic (Background Thread) ---
+    // Merging Logic (Background)
     LaunchedEffect(workLogs, systemLogs) {
         withContext(Dispatchers.Default) {
             val workUiLogs = workLogs.map {
@@ -145,34 +258,27 @@ fun RecentCallsScreen(
                 )
             }
             val merged = (systemLogs + workUiLogs).sortedByDescending { it.date }
-
-            withContext(Dispatchers.Main) {
-                allCalls = merged
-            }
+            withContext(Dispatchers.Main) { allCalls = merged }
         }
     }
 
-    // --- Filtering Logic ---
+    // Bottom Sheet UI
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedWorkContact by remember { mutableStateOf<AppContact?>(null) }
+    var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
+
+    // Filtering
     val authManager = remember { AuthManager(context) }
     val department = remember { authManager.getDepartment() }
 
     val filteredCalls = remember(allCalls, searchQuery, activeFilter, department) {
         allCalls.filter { call ->
             val isWorkCall = call.type == "Work"
-
-            // Search Logic
-            val matchesSearch = if (searchQuery.isBlank()) {
-                true
-            } else {
+            val matchesSearch = if (searchQuery.isBlank()) true else {
                 val nameMatch = call.name.contains(searchQuery, ignoreCase = true)
-                val numberMatch = if (isWorkCall && department != "Management") {
-                    false
-                } else {
-                    call.number.contains(searchQuery)
-                }
+                val numberMatch = if (isWorkCall && department != "Management") false else call.number.contains(searchQuery)
                 nameMatch || numberMatch
             }
-
             val matchesFilter = when (activeFilter) {
                 CallFilter.ALL -> true
                 CallFilter.PERSONAL -> call.type == "Personal"
@@ -183,10 +289,9 @@ fun RecentCallsScreen(
         }
     }
 
-    // --- Helper: Handle Item Click ---
     fun onItemClicked(item: RecentCallUiItem) {
         scope.launch {
-            selectedContactHistory = allCalls.filter { it.number == item.number }
+            viewModel.fetchHistoryForNumber(item.number)
 
             if (item.type == "Work") {
                 val workContact = withContext(Dispatchers.IO) {
@@ -196,27 +301,20 @@ fun RecentCallsScreen(
                     selectedWorkContact = workContact
                     sheetState.show()
                 } else {
-                    // [!code focus] FIX: Wrap number in DeviceNumber list
                     selectedDeviceContact = DeviceContact(
-                        id = item.id,
-                        name = item.name,
-                        numbers = listOf(DeviceNumber(item.number, isDefault = true))
+                        id = item.id, name = item.name, numbers = listOf(DeviceNumber(item.number, isDefault = true))
                     )
                     sheetState.show()
                 }
             } else {
-                // [!code focus] FIX: Wrap number in DeviceNumber list
                 selectedDeviceContact = DeviceContact(
-                    id = item.id,
-                    name = item.name,
-                    numbers = listOf(DeviceNumber(item.number, isDefault = true))
+                    id = item.id, name = item.name, numbers = listOf(DeviceNumber(item.number, isDefault = true))
                 )
                 sheetState.show()
             }
         }
     }
 
-    // --- Scroll Detection for Pagination ---
     val listState = rememberLazyListState()
     val reachedBottom by remember {
         derivedStateOf {
@@ -226,131 +324,103 @@ fun RecentCallsScreen(
     }
 
     LaunchedEffect(reachedBottom) {
-        if (reachedBottom) {
-            loadNextPage()
-        }
+        if (reachedBottom) viewModel.loadNextPage()
     }
 
     // --- UI Structure ---
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Fixed Background Layer
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0F172A))
-        )
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)))
 
-        // 2. Content Layer
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(bottom = 80.sdp()),
-            modifier = Modifier.fillMaxSize()
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                scope.launch {
+                    isRefreshing = true
+                    viewModel.refreshAllSuspend()
+                    withContext(Dispatchers.IO) { Thread.sleep(500) }
+                    isRefreshing = false
+                }
+            },
+            // [!code focus] Apply Status Bar Padding to container to prevent scrolling behind it
+            modifier = Modifier.fillMaxSize().statusBarsPadding()
         ) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(bottom = 80.sdp()),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // [!code focus] Removed Spacer item here as container is padded
 
-            // --- SPACER FOR STATUS BAR ---
-            item {
-                Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            }
-
-            // --- HEADER (Scrolls Away) ---
-            item {
-                Text(
-                    text = "Recent Calls",
-                    fontSize = 32.ssp(),
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    modifier = Modifier.padding(top = 24.sdp(), bottom = 16.sdp(), start = 16.sdp(), end = 16.sdp())
-                )
-            }
-
-            // --- SEARCH BAR (Scrolls Away) ---
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.sdp())
-                        .padding(bottom = 4.sdp()),
-                    placeholder = { Text("Search name or number...", color = Color.Gray, fontSize = 14.ssp()) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray)
-                            }
-                        }
-                    },
-                    shape = RoundedCornerShape(12.sdp()),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF3B82F6),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        cursorColor = Color(0xFF3B82F6),
-                        focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                        unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
-                    ),
-                    singleLine = true
-                )
-            }
-
-            // --- STICKY HEADER (Pins to Top) ---
-            stickyHeader {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF0F172A))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.statusBars)
-                            .padding(vertical = 16.sdp(), horizontal = 16.sdp()),
-                        horizontalArrangement = Arrangement.spacedBy(8.sdp())
-                    ) {
-                        FilterChipItem("All", activeFilter == CallFilter.ALL) { activeFilter = CallFilter.ALL }
-                        FilterChipItem(
-                            label = "Missed",
-                            isSelected = activeFilter == CallFilter.MISSED,
-                            icon = Icons.Default.CallMissed,
-                            onClick = { activeFilter = CallFilter.MISSED }
-                        )
-                        FilterChipItem("Personal", activeFilter == CallFilter.PERSONAL) { activeFilter = CallFilter.PERSONAL }
-                        FilterChipItem("Work", activeFilter == CallFilter.WORK) { activeFilter = CallFilter.WORK }
-                    }
-                }
-            }
-
-            // --- EMPTY STATE ---
-            if (filteredCalls.isEmpty() && !isLoading) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().height(400.sdp()), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.History, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.sdp()))
-                            Spacer(modifier = Modifier.height(16.sdp()))
-                            Text("No matching calls", color = Color.Gray, fontSize = 16.ssp())
-                        }
-                    }
-                }
-            }
-
-            // --- LIST ITEMS ---
-            items(filteredCalls, key = { it.id }) { log ->
-                Box(modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp())) {
-                    RecentCallItem(
-                        log = log,
-                        onBodyClick = { onItemClicked(log) },
-                        onCallClick = { onCallClick(log.number) }
+                    Text(
+                        text = "Recent Calls",
+                        fontSize = 24.ssp(),
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 24.sdp(), bottom = 16.sdp(), start = 16.sdp(), end = 16.sdp())
                     )
                 }
-            }
 
-            // --- LOADER ITEM ---
-            if (isLoading) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.sdp()), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = Color.White.copy(alpha = 0.5f))
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.sdp()).padding(bottom = 4.sdp()),
+                        placeholder = { Text("Search name or number...", color = Color.Gray, fontSize = 14.ssp()) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray) }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.sdp()),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF3B82F6), unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                            focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Color(0xFF3B82F6),
+                            focusedContainerColor = Color.White.copy(alpha = 0.05f), unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                        ),
+                        singleLine = true
+                    )
+                }
+
+                stickyHeader {
+                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF0F172A))) {
+                        Row(
+                            // [!code focus] Removed windowInsetsPadding here
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.sdp(), horizontal = 16.sdp()),
+                            horizontalArrangement = Arrangement.spacedBy(8.sdp())
+                        ) {
+                            FilterChipItem("All", activeFilter == CallFilter.ALL) { activeFilter = CallFilter.ALL }
+                            FilterChipItem(label = "Missed", isSelected = activeFilter == CallFilter.MISSED, icon = Icons.Default.CallMissed, onClick = { activeFilter = CallFilter.MISSED })
+                            FilterChipItem("Personal", activeFilter == CallFilter.PERSONAL) { activeFilter = CallFilter.PERSONAL }
+                            FilterChipItem("Work", activeFilter == CallFilter.WORK) { activeFilter = CallFilter.WORK }
+                        }
+                    }
+                }
+
+                if (filteredCalls.isEmpty() && !isLoading) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().height(400.sdp()), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.sdp()))
+                                Spacer(modifier = Modifier.height(16.sdp()))
+                                Text("No matching calls", color = Color.Gray, fontSize = 16.ssp())
+                            }
+                        }
+                    }
+                }
+
+                items(filteredCalls, key = { it.id }) { log ->
+                    Box(modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp())) {
+                        RecentCallItem(log = log, onBodyClick = { onItemClicked(log) }, onCallClick = { onCallClick(log.number) })
+                    }
+                }
+
+                if (isLoading) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.sdp()), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = Color.White.copy(alpha = 0.5f))
+                        }
                     }
                 }
             }
@@ -361,18 +431,10 @@ fun RecentCallsScreen(
             RecentWorkBottomSheet(
                 contact = selectedWorkContact!!,
                 history = selectedContactHistory,
+                isLoading = isHistoryLoading,
                 sheetState = sheetState,
-                onDismiss = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        selectedWorkContact = null
-                    }
-                },
-                onCall = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onCallClick(selectedWorkContact!!.number)
-                        selectedWorkContact = null
-                    }
-                }
+                onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null } },
+                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedWorkContact!!.number); selectedWorkContact = null } }
             )
         }
 
@@ -380,21 +442,137 @@ fun RecentCallsScreen(
             RecentDeviceBottomSheet(
                 contact = selectedDeviceContact!!,
                 history = selectedContactHistory,
+                isLoading = isHistoryLoading,
                 sheetState = sheetState,
-                onDismiss = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        selectedDeviceContact = null
-                    }
-                },
-                onCall = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        // [!code focus] FIX: Access number via object property
-                        onCallClick(selectedDeviceContact!!.numbers.first().number)
-                        selectedDeviceContact = null
-                    }
-                }
+                onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
+                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedDeviceContact!!.numbers.first().number); selectedDeviceContact = null } }
             )
         }
+    }
+}
+
+// --- Helper Functions ---
+
+fun formatTime(millis: Long): String {
+    val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
+    return sdf.format(Date(millis))
+}
+
+fun formatDuration(seconds: Long): String {
+    val m = seconds / 60
+    val s = seconds % 60
+    return if (m > 0) "${m}m ${s}s" else "${s}s"
+}
+
+private fun getColorForName(name: String): Color {
+    val palette = listOf(
+        Color(0xFF6366F1), Color(0xFFEC4899), Color(0xFF8B5CF6),
+        Color(0xFF10B981), Color(0xFFF59E0B), Color(0xFFEF4444),
+        Color(0xFF3B82F6), Color(0xFF14B8A6), Color(0xFFF97316)
+    )
+    return palette[kotlin.math.abs(name.hashCode()) % palette.size]
+}
+
+private fun getInitials(name: String): String {
+    return name.split(" ")
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
+        .ifEmpty { name.take(1).uppercase() }
+        .ifBlank { "?" }
+}
+
+@SuppressLint("MissingPermission")
+suspend fun fetchSystemCallLogs(
+    context: Context,
+    limit: Int? = null,
+    olderThan: Long? = null,
+    numberFilter: String? = null
+): List<RecentCallUiItem> {
+    return withContext(Dispatchers.IO) {
+        val logs = mutableListOf<RecentCallUiItem>()
+        val simMap = mutableMapOf<String, String>()
+        try {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                val subManager = context.getSystemService(SubscriptionManager::class.java)
+                val activeSims = subManager.activeSubscriptionInfoList
+                activeSims?.forEach { info ->
+                    simMap[info.subscriptionId.toString()] = "SIM ${info.simSlotIndex + 1}"
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        val projection = arrayOf(
+            CallLog.Calls.NUMBER,
+            CallLog.Calls.CACHED_NAME,
+            CallLog.Calls.TYPE,
+            CallLog.Calls.DATE,
+            CallLog.Calls.DURATION,
+            CallLog.Calls.PHONE_ACCOUNT_ID
+        )
+
+        // Build selection
+        val selectionParts = mutableListOf<String>()
+        val selectionArgs = mutableListOf<String>()
+
+        if (olderThan != null) {
+            selectionParts.add("${CallLog.Calls.DATE} < ?")
+            selectionArgs.add(olderThan.toString())
+        }
+        if (numberFilter != null) {
+            selectionParts.add("${CallLog.Calls.NUMBER} LIKE ?")
+            selectionArgs.add("%${numberFilter.takeLast(10)}%")
+        }
+
+        val selection = if (selectionParts.isNotEmpty()) selectionParts.joinToString(" AND ") else null
+        val sortOrder = if (limit != null) "${CallLog.Calls.DATE} DESC LIMIT $limit" else "${CallLog.Calls.DATE} DESC"
+
+        try {
+            val cursor = context.contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs.toTypedArray(),
+                sortOrder
+            )
+            cursor?.use {
+                val numberIdx = 0
+                val nameIdx = 1
+                val typeIdx = 2
+                val dateIdx = 3
+                val durationIdx = 4
+                val accountIdIdx = 5
+
+                while (it.moveToNext()) {
+                    val number = it.getString(numberIdx) ?: "Unknown"
+                    val name = it.getString(nameIdx) ?: "Unknown"
+                    val type = it.getInt(typeIdx)
+                    val date = it.getLong(dateIdx)
+                    val durationSec = it.getLong(durationIdx)
+                    val accountId = it.getString(accountIdIdx)
+                    val simLabel = if (accountId != null) simMap[accountId] else null
+
+                    logs.add(
+                        RecentCallUiItem(
+                            id = "s_${date}_${number.takeLast(4)}",
+                            name = if (name != "Unknown") name else number,
+                            number = number,
+                            type = "Personal",
+                            date = date,
+                            duration = formatDuration(durationSec),
+                            isIncoming = type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.MISSED_TYPE,
+                            isMissed = type == CallLog.Calls.MISSED_TYPE,
+                            simSlot = simLabel
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        logs
     }
 }
 
@@ -590,123 +768,6 @@ fun CallHistoryRow(log: RecentCallUiItem) {
     }
 }
 
-
-// --- Optimized Fetch Function (Background Thread) ---
-@SuppressLint("MissingPermission")
-suspend fun fetchSystemCallLogs(
-    context: Context,
-    limit: Int? = null,
-    olderThan: Long? = null
-): List<RecentCallUiItem> {
-    return withContext(Dispatchers.IO) {
-        val logs = mutableListOf<RecentCallUiItem>()
-        val simMap = mutableMapOf<String, String>()
-        try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                val subManager = context.getSystemService(SubscriptionManager::class.java)
-                val activeSims = subManager.activeSubscriptionInfoList
-                activeSims?.forEach { info ->
-                    simMap[info.subscriptionId.toString()] = "SIM ${info.simSlotIndex + 1}"
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        val projection = arrayOf(
-            CallLog.Calls.NUMBER,
-            CallLog.Calls.CACHED_NAME,
-            CallLog.Calls.TYPE,
-            CallLog.Calls.DATE,
-            CallLog.Calls.DURATION,
-            CallLog.Calls.PHONE_ACCOUNT_ID
-        )
-
-        val selection = if (olderThan != null) "${CallLog.Calls.DATE} < ?" else null
-        val selectionArgs = if (olderThan != null) arrayOf(olderThan.toString()) else null
-
-        val sortOrder = if (limit != null) {
-            "${CallLog.Calls.DATE} DESC LIMIT $limit"
-        } else {
-            "${CallLog.Calls.DATE} DESC"
-        }
-
-        try {
-            val cursor = context.contentResolver.query(
-                CallLog.Calls.CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs,
-                sortOrder
-            )
-            cursor?.use {
-                val numberIdx = 0
-                val nameIdx = 1
-                val typeIdx = 2
-                val dateIdx = 3
-                val durationIdx = 4
-                val accountIdIdx = 5
-
-                while (it.moveToNext()) {
-                    val number = it.getString(numberIdx) ?: "Unknown"
-                    val name = it.getString(nameIdx) ?: "Unknown"
-                    val type = it.getInt(typeIdx)
-                    val date = it.getLong(dateIdx)
-                    val durationSec = it.getLong(durationIdx)
-                    val accountId = it.getString(accountIdIdx)
-                    val simLabel = if (accountId != null) simMap[accountId] else null
-
-                    logs.add(
-                        RecentCallUiItem(
-                            id = "s_${date}_${number.takeLast(4)}",
-                            name = if (name != "Unknown") name else number,
-                            number = number,
-                            type = "Personal",
-                            date = date,
-                            duration = formatDuration(durationSec),
-                            isIncoming = type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.MISSED_TYPE,
-                            isMissed = type == CallLog.Calls.MISSED_TYPE,
-                            simSlot = simLabel
-                        )
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        logs
-    }
-}
-
-fun formatTime(millis: Long): String {
-    val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
-    return sdf.format(Date(millis))
-}
-
-fun formatDuration(seconds: Long): String {
-    val m = seconds / 60
-    val s = seconds % 60
-    return if (m > 0) "${m}m ${s}s" else "${s}s"
-}
-
-private fun getColorForName(name: String): Color {
-    val palette = listOf(
-        Color(0xFF6366F1), Color(0xFFEC4899), Color(0xFF8B5CF6),
-        Color(0xFF10B981), Color(0xFFF59E0B), Color(0xFFEF4444),
-        Color(0xFF3B82F6), Color(0xFF14B8A6), Color(0xFFF97316)
-    )
-    return palette[kotlin.math.abs(name.hashCode()) % palette.size]
-}
-
-private fun getInitials(name: String): String {
-    return name.split(" ")
-        .take(2)
-        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-        .joinToString("")
-        .ifEmpty { name.take(1).uppercase() }
-        .ifBlank { "?" }
-}
-
 @Composable
 private fun ContactDetailRow(icon: ImageVector, label: String, value: String, labelColor: Color) {
     Row(
@@ -727,6 +788,7 @@ private fun ContactDetailRow(icon: ImageVector, label: String, value: String, la
 private fun RecentWorkBottomSheet(
     contact: AppContact,
     history: List<RecentCallUiItem>,
+    isLoading: Boolean,
     sheetState: SheetState,
     onDismiss: () -> Unit,
     onCall: () -> Unit
@@ -763,23 +825,30 @@ private fun RecentWorkBottomSheet(
                 Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
             }
 
-            if (history.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(24.sdp()))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-                Spacer(modifier = Modifier.height(16.sdp()))
-                Text(
-                    text = "Previous Calls",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.ssp(),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-                Spacer(modifier = Modifier.height(8.sdp()))
+            Spacer(modifier = Modifier.height(24.sdp()))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(16.sdp()))
+            Text(
+                text = "Previous Calls",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 14.ssp(),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.height(8.sdp()))
+
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth().height(100.sdp()), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                }
+            } else if (history.isNotEmpty()) {
                 LazyColumn(modifier = Modifier.heightIn(max = 250.sdp())) {
                     items(history) { log ->
                         CallHistoryRow(log)
                     }
                 }
+            } else {
+                Text("No recent history", color = Color.White.copy(alpha = 0.3f), fontSize = 12.ssp(), modifier = Modifier.align(Alignment.CenterHorizontally).padding(20.sdp()))
             }
 
             Spacer(modifier = Modifier.height(24.sdp()))
@@ -792,13 +861,13 @@ private fun RecentWorkBottomSheet(
 private fun RecentDeviceBottomSheet(
     contact: DeviceContact,
     history: List<RecentCallUiItem>,
+    isLoading: Boolean,
     sheetState: SheetState,
     onDismiss: () -> Unit,
     onCall: () -> Unit
 ) {
     val context = LocalContext.current
     val contentResolver = context.contentResolver
-    // [!code focus] Access the number property of the first element safely
     val number = contact.numbers.firstOrNull()?.number ?: ""
     var contactUri by remember { mutableStateOf<Uri?>(null) }
     val isUnknown = contactUri == null
@@ -1013,23 +1082,30 @@ private fun RecentDeviceBottomSheet(
                 Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
             }
 
-            if (history.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(24.sdp()))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-                Spacer(modifier = Modifier.height(16.sdp()))
-                Text(
-                    text = "Previous Calls",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.ssp(),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.Start)
-                )
-                Spacer(modifier = Modifier.height(8.sdp()))
+            Spacer(modifier = Modifier.height(24.sdp()))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(16.sdp()))
+            Text(
+                text = "Previous Calls",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 14.ssp(),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.height(8.sdp()))
+
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth().height(100.sdp()), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                }
+            } else if (history.isNotEmpty()) {
                 LazyColumn(modifier = Modifier.heightIn(max = 250.sdp())) {
                     items(history) { log ->
                         CallHistoryRow(log)
                     }
                 }
+            } else {
+                Text("No recent history", color = Color.White.copy(alpha = 0.3f), fontSize = 12.ssp(), modifier = Modifier.align(Alignment.CenterHorizontally).padding(20.sdp()))
             }
 
             Spacer(modifier = Modifier.height(24.sdp()))
