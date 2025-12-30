@@ -1,5 +1,5 @@
 package com.mnivesh.callyn
-
+//after conflict push
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.role.RoleManager
@@ -220,7 +220,7 @@ class MainActivity : ComponentActivity() {
                 val token = authManager.getToken()
 
                 val response = RetrofitInstance.api.getLatestVersion("Bearer $token")
-
+                Log.d(TAG, "${response.body()}")
                 if (response.isSuccessful && response.body() != null) {
                     val remote = response.body()!!
 

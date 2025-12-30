@@ -237,11 +237,7 @@ fun RecentCallsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color(0xFF0F172A), Color(0xFF1E293B))
-                    )
-                )
+                .background(Color(0xFF0F172A))
         )
 
         // 2. Content Layer
@@ -275,7 +271,7 @@ fun RecentCallsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.sdp())
-                        .padding(bottom = 12.sdp()),
+                        .padding(bottom = 4.sdp()),
                     placeholder = { Text("Search name or number...", color = Color.Gray, fontSize = 14.ssp()) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
                     trailingIcon = {
@@ -420,7 +416,7 @@ fun FilterChipItem(
         modifier = Modifier.clickable { onClick() }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 8.sdp()),
+            modifier = Modifier.padding(horizontal = 15.sdp(), vertical = 8.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (icon != null) {
@@ -435,7 +431,7 @@ fun FilterChipItem(
             Text(
                 text = label,
                 color = textColor,
-                fontSize = 14.ssp(),
+                fontSize = 13.ssp(),
                 fontWeight = FontWeight.Medium
             )
         }
@@ -741,7 +737,7 @@ private fun RecentWorkBottomSheet(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
-                modifier = Modifier.size(100.sdp()).clip(CircleShape).background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f)))).shadow(8.sdp(), CircleShape),
+                modifier = Modifier.size(100.sdp()).clip(CircleShape).background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f)))),
                 contentAlignment = Alignment.Center
             ) {
                 Text(getInitials(contact.name), color = Color.White, fontSize = 36.ssp(), fontWeight = FontWeight.Bold)
@@ -859,8 +855,7 @@ private fun RecentDeviceBottomSheet(
                                     getColorForName(contact.name).copy(alpha = 0.7f)
                                 )
                             )
-                        )
-                        .shadow(8.sdp(), CircleShape),
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

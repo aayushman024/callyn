@@ -119,7 +119,7 @@ fun AppDrawer(
         Column(modifier = Modifier.padding(vertical = 16.dp, horizontal = 12.dp)) {
 
             // [!code ++] New Item: Personal Contact Requests (Only for Management)
-            if (department == "Management") {
+            if (department == "Management" || department == "IT Desk") {
                 NavigationDrawerItem(
                     label = { Text("Personal Contact Requests", fontSize = 15.sp, fontWeight = FontWeight.Medium) },
                     icon = {

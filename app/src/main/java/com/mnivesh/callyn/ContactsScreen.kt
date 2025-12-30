@@ -224,7 +224,7 @@ fun ContactsScreen(
 
     // --- FILTER LOGIC ---
     val myContacts = remember(workContacts, userName, department) {
-        if (department == "IT Desk") {
+        if (department == "Management") {
             workContacts
         } else {
             workContacts.filter { (it.rshipManager ?: "").equals(userName, ignoreCase = true) }
@@ -451,7 +451,7 @@ fun ContactsScreen(
                                         EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
                                     }
                                 } else {
-                                    LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         if (favoriteContacts.isNotEmpty()) {
                                             item {
                                                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
@@ -517,7 +517,7 @@ fun ContactsScreen(
                                         EmptyStateCard(if (searchQuery.isNotEmpty()) "No matches found" else "No assigned contacts", Icons.Default.BusinessCenter)
                                     }
                                 } else {
-                                    LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(filteredWorkContacts, key = { it.id }) { contact ->
                                             ModernWorkContactCard(contact, onClick = {
                                                 selectedWorkContact = contact

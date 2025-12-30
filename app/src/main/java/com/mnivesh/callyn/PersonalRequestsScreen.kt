@@ -61,7 +61,7 @@ fun PersonalRequestsScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Personal Access Requests", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+                title = { Text("Personal Contact Requests", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
