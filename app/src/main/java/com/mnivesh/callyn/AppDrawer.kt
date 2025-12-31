@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mnivesh.callyn.api.version
 import android.widget.Toast
+import androidx.compose.material.icons.filled.Group
 import com.mnivesh.callyn.ui.theme.sdp
 
 @Composable
@@ -33,7 +34,8 @@ fun AppDrawer(
     onSync: () -> Unit,
     onLogout: () -> Unit,
     onClose: () -> Unit,
-    onShowRequests: () -> Unit
+    onShowRequests: () -> Unit,
+    onShowUserDetails: () -> Unit
 ) {
     val context = LocalContext.current
     val department = remember { AuthManager(context).getDepartment() }
@@ -118,6 +120,30 @@ fun AppDrawer(
         // --- Drawer Items ---
         Column(modifier = Modifier.padding(vertical = 16.dp, horizontal = 12.dp)) {
 
+            NavigationDrawerItem(
+                label = { Text("Sync Work Contacts", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
+                icon = {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp)
+                    )
+                },
+                selected = false,
+                onClick = {
+                    onClose()
+                    Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
+                    onSync()
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = NavigationDrawerItemDefaults.colors(
+                    unselectedContainerColor = Color.Transparent,
+                    unselectedTextColor = Color.White.copy(alpha = 0.9f),
+                    unselectedIconColor = Color.White.copy(alpha = 0.9f)
+                ),
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+
             // [!code ++] New Item: Personal Contact Requests (Only for Management)
             if (department == "Management" || department == "IT Desk") {
                 NavigationDrawerItem(
@@ -144,52 +170,47 @@ fun AppDrawer(
                 )
             }
 
-            NavigationDrawerItem(
-                label = { Text("Sync Work Contacts", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
-                icon = {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp)
-                    )
-                },
-                selected = false,
-                onClick = {
-                    onClose()
-                    Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
-                    onSync()
-                },
-                shape = RoundedCornerShape(12.dp),
-                colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = Color.Transparent,
-                    unselectedTextColor = Color.White.copy(alpha = 0.9f),
-                    unselectedIconColor = Color.White.copy(alpha = 0.9f)
-                ),
-                modifier = Modifier.padding(vertical = 4.dp)
-            )
+            if (department == "Management" || department == "IT Desk") {
+                NavigationDrawerItem(
+                    label = { Text("User Status", fontSize = 15.sp, fontWeight = FontWeight.Medium) },
+                    icon = { Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(22.dp)) },
+                    selected = false,
+                    onClick = {
+                        onClose()
+                        onShowUserDetails()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color.White.copy(alpha = 0.9f),
+                        unselectedIconColor = Color.White.copy(alpha = 0.9f)
+                    ),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
 
-            NavigationDrawerItem(
-                label = { Text("Logout", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
-                icon = {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Logout,
-                        contentDescription = null,
-                        modifier = Modifier.size(22.dp)
-                    )
-                },
-                selected = false,
-                onClick = {
-                    onClose()
-                    onLogout()
-                },
-                shape = RoundedCornerShape(12.dp),
-                colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = Color.Transparent,
-                    unselectedTextColor = Color(0xFFEF4444), // Minimal Red
-                    unselectedIconColor = Color(0xFFEF4444)
-                ),
-                modifier = Modifier.padding(vertical = 4.dp)
-            )
+                NavigationDrawerItem(
+                    label = { Text("Logout", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
+                    icon = {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    },
+                    selected = false,
+                    onClick = {
+                        onClose()
+                        onLogout()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        unselectedTextColor = Color(0xFFEF4444), // Minimal Red
+                        unselectedIconColor = Color(0xFFEF4444)
+                    ),
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
         }
 
         Spacer(modifier = Modifier.weight(1f))

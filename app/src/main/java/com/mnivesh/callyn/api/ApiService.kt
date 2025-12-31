@@ -88,6 +88,27 @@ data class VersionResponse(
     val downloadUrl: String
 )
 
+//User Details Data Class
+data class UserDetailsRequest(
+    val username: String,
+    val email: String,
+    val phoneModel: String,
+    val osLevel: String,
+    val appVersion: String,
+    val department: String?,
+    val lastSeen: Long
+)
+
+data class UserDetailsResponse(
+    val _id: String,
+    val username: String,
+    val phoneModel: String?,
+    val osLevel: String?,
+    val appVersion: String?,
+    val department: String,
+    val lastSeen: String? // Received as ISO date string
+)
+
 // --- API SERVICE INTERFACE ---
 
 interface ApiService {
@@ -148,4 +169,16 @@ interface ApiService {
         @Header("Authorization") token: String,
         @Body body: UpdateRequestStatusBody
     ): Response<ResponseBody>
+
+    @POST("syncUserDetails")
+    suspend fun syncUserDetails(
+        @Header("Authorization") token: String,
+        @Body details: UserDetailsRequest
+    ): Response<ResponseBody>
+
+    @GET("getUserDetails")
+    suspend fun getAllUserDetails(
+        @Header("Authorization") token: String
+    ): Response<List<UserDetailsResponse>>
 }
+

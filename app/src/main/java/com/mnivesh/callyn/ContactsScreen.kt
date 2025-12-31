@@ -50,6 +50,9 @@ import com.mnivesh.callyn.ui.ContactsViewModelFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 
 // --- Data Classes ---
 
@@ -94,6 +97,7 @@ private fun sanitizePhoneNumber(number: String): String {
 fun ContactsScreen(
     onContactClick: (String, Boolean) -> Unit,
     onShowRequests: () -> Unit,
+    onShowUserDetails: () -> Unit,
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -122,6 +126,19 @@ fun ContactsScreen(
 
     // [!code ++] Refresh State
     var isRefreshing by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, token, userName) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                if (!token.isNullOrBlank() && userName.isNotBlank()) {
+                    viewModel.onRefresh(token!!, userName)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(searchQuery) {
         workListState.scrollToItem(0)
@@ -253,6 +270,7 @@ fun ContactsScreen(
                 },
                 onLogout = { authManager.logout(); onLogout() },
                 onShowRequests = onShowRequests,
+                onShowUserDetails = onShowUserDetails,
                 onClose = { scope.launch { drawerState.close() } }
             )
         }
@@ -869,7 +887,7 @@ private fun EmptyStateCard(message: String, icon: ImageVector) {
 @Composable
 private fun LoadingCard(shimmerOffset: Float) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-        repeat(5) {
+        repeat(1) {
             Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))) {
                 Row(modifier = Modifier
                     .fillMaxWidth()

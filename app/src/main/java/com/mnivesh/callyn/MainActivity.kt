@@ -84,6 +84,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.VersionResponse
 import com.mnivesh.callyn.api.version
@@ -91,6 +96,7 @@ import com.mnivesh.callyn.ui.UpdateDialog
 import com.mnivesh.callyn.ui.ZohoLoginScreen
 import com.mnivesh.callyn.ui.theme.CallynTheme
 import com.mnivesh.callyn.utils.VersionManager
+import com.mnivesh.callyn.workers.SyncUserDetailsWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color as ComposeColor
@@ -280,6 +286,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+
+    internal fun syncDeviceDetails() {
+        // 1. Define constraints (run only when internet is available)
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        // 2. Create the work request
+        val syncRequest = OneTimeWorkRequestBuilder<SyncUserDetailsWorker>()
+            .setConstraints(constraints)
+            .build()
+
+        // 3. Enqueue Unique Work
+        // "KEEP" means: If a sync is already running or queued, don't start a new one.
+        // This prevents spamming the API on screen rotations.
+        WorkManager.getInstance(this).enqueueUniqueWork(
+            "SyncUserDetailsWork",
+            ExistingWorkPolicy.REPLACE,
+            syncRequest
+        )
+    }
+
+
     private fun checkLoginState() {
         val token = authManager.getToken()
         val savedName = authManager.getUserName()
@@ -301,6 +330,7 @@ class MainActivity : ComponentActivity() {
         if (data != null && "callyn" == data.scheme && "auth" == data.host) {
             val token = data.getQueryParameter("token")
             val department = data.getQueryParameter("department")
+            val email = data.getQueryParameter("email")
 
             if (!token.isNullOrEmpty()) {
                 authManager.saveToken(token)
@@ -308,7 +338,9 @@ class MainActivity : ComponentActivity() {
                 // Save Department if present
                 if (department != null) {
                     authManager.saveDepartment(department)
+                    authManager.saveUserEmail(email)
                     Log.d(TAG, "Department saved from deep link: $department")
+                    Log.d(TAG, "Email saved from deep link: $email")
                 }
 
                 fetchUserName("Bearer $token")
@@ -501,6 +533,11 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
+
+//    androidx.compose.runtime.LaunchedEffect(Unit) {
+//        syncDeviceDetails()
+//    }
+
     var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
     var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
     var missingPermissions by remember { mutableStateOf(getMissingPermissions()) }
@@ -546,6 +583,7 @@ sealed class Screen(val route: String) {
     object Contacts : Screen("contacts")
     object Dialer : Screen("dialer")
     object Requests : Screen("requests")
+    object UserDetails : Screen("user_details")
 }
 
 @Composable
@@ -617,6 +655,7 @@ fun MainScreenContent(
                         onSmartDial(number, isWorkCall)
                     },
                     onLogout = onLogout,
+                    onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
                     onShowRequests = { navController.navigate(Screen.Requests.route) }
                 )
             }
@@ -629,6 +668,11 @@ fun MainScreenContent(
             }
             composable(Screen.Requests.route) {
                 PersonalRequestsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.UserDetails.route) {
+                UserDetailsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
