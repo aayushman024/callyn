@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.ContactsContract
+import android.telephony.SubscriptionManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,7 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox // [!code ++] Correct Import
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -98,6 +100,7 @@ fun ContactsScreen(
     onContactClick: (String, Boolean) -> Unit,
     onShowRequests: () -> Unit,
     onShowUserDetails: () -> Unit,
+    onShowCallLogs: () -> Unit,
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
@@ -124,7 +127,6 @@ fun ContactsScreen(
     val workListState = rememberLazyListState()
     val personalListState = rememberLazyListState()
 
-    // [!code ++] Refresh State
     var isRefreshing by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -150,6 +152,8 @@ fun ContactsScreen(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
+
     // --- PERMISSIONS ---
     var hasContactsPermission by remember {
         mutableStateOf(
@@ -163,12 +167,38 @@ fun ContactsScreen(
         )
     }
 
+    // [!code ++] Sim Count State
+    var isDualSim by remember { mutableStateOf(false) }
+
+    fun checkSimStatus() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                val activeSims = subManager.activeSubscriptionInfoCount
+                isDualSim = activeSims > 1
+            } catch (e: Exception) {
+                isDualSim = false
+            }
+        } else {
+            isDualSim = false
+        }
+    }
+
+    // Check SIM initially
+    LaunchedEffect(Unit) { checkSimStatus() }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val isGranted = permissions[Manifest.permission.READ_CONTACTS] == true
         hasContactsPermission = isGranted
         hasWritePermission = permissions[Manifest.permission.WRITE_CONTACTS] == true
+
+        // [!code ++] Re-check sim status after permission
+        if (permissions[Manifest.permission.READ_PHONE_STATE] == true) {
+            checkSimStatus()
+        }
+
         if (isGranted) viewModel.loadDeviceContacts()
     }
 
@@ -271,6 +301,7 @@ fun ContactsScreen(
                 onLogout = { authManager.logout(); onLogout() },
                 onShowRequests = onShowRequests,
                 onShowUserDetails = onShowUserDetails,
+                onShowCallLogs = onShowCallLogs,
                 onClose = { scope.launch { drawerState.close() } }
             )
         }
@@ -285,23 +316,11 @@ fun ContactsScreen(
             )
 
             Scaffold(
+                modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                 containerColor = Color.Transparent,
                 topBar = {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 35.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.align(Alignment.CenterStart)) {
-                                Icon(Icons.Default.Menu, "Menu", tint = Color.White)
-                            }
+                    CenterAlignedTopAppBar(
+                        title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Callyn", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                                 if (department == "Management" || department == "IT Desk") {
@@ -322,174 +341,187 @@ fun ContactsScreen(
                                     }
                                 }
                             }
-                        }
-
-                        TabRow(
-                            selectedTabIndex = selectedTabIndex,
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, "Menu", tint = Color.White)
+                            }
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                             containerColor = Color.Transparent,
-                            contentColor = Color.White,
-                            indicator = { tabPositions ->
-                                if (selectedTabIndex < tabPositions.size) {
-                                    TabRowDefaults.SecondaryIndicator(
-                                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                                        color = Color(0xFF3B82F6), height = 3.dp
-                                    )
-                                }
-                            },
-                            divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.1f)) }
-                        ) {
-                            Tab(
-                                selected = selectedTabIndex == 0,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                                text = { CustomTabContent("Personal", Icons.Default.Person, deviceContacts.size, selectedTabIndex == 0) }
-                            )
-                            Tab(
-                                selected = selectedTabIndex == 1,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                                text = { CustomTabContent("Work", Icons.Default.BusinessCenter, myContacts.size, selectedTabIndex == 1) }
-                            )
-                        }
-                    }
+                            scrolledContainerColor = Color.Transparent,
+                            titleContentColor = Color.White,
+                            navigationIconContentColor = Color.White
+                        ),
+                        scrollBehavior = scrollBehavior
+                    )
                 }
             ) { innerPadding ->
-
-                // [!code ++] PullToRefreshBox handles the refresh logic and indicator
-                PullToRefreshBox(
-                    isRefreshing = isRefreshing,
-                    onRefresh = {
-                        scope.launch {
-                            isRefreshing = true
-                            if (token != null) {
-                                viewModel.refreshAllAwait(token!!, userName)
+                Column(modifier = Modifier.padding(innerPadding)) {
+                    TabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        indicator = { tabPositions ->
+                            if (selectedTabIndex < tabPositions.size) {
+                                TabRowDefaults.SecondaryIndicator(
+                                    Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
+                                    color = Color(0xFF3B82F6), height = 3.dp
+                                )
                             }
-                            isRefreshing = false
-                        }
-                    },
-                    modifier = Modifier.padding(innerPadding).fillMaxSize()
-                ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp, 15.dp, 16.dp, 10.dp)
-                        ) {
-                            TextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
+                        },
+                        divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.1f)) }
+                    ) {
+                        Tab(
+                            selected = selectedTabIndex == 0,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                            text = { CustomTabContent("Personal", Icons.Default.Person, deviceContacts.size, selectedTabIndex == 0) }
+                        )
+                        Tab(
+                            selected = selectedTabIndex == 1,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                            text = { CustomTabContent("Work", Icons.Default.BusinessCenter, myContacts.size, selectedTabIndex == 1) }
+                        )
+                    }
+
+                    PullToRefreshBox(
+                        isRefreshing = isRefreshing,
+                        onRefresh = {
+                            scope.launch {
+                                isRefreshing = true
+                                if (token != null) {
+                                    viewModel.refreshAllAwait(token!!, userName)
+                                }
+                                isRefreshing = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp)),
-                                placeholder = { Text("Search contacts...", color = Color.White.copy(alpha = 0.5f)) },
-                                leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.White.copy(alpha = 0.6f)) },
-                                trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f)) }
-                                    }
-                                },
-                                singleLine = true,
-                                colors = TextFieldDefaults.colors(
-                                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                                    focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                    unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
-                                    focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                                    cursorColor = Color.White
+                                    .padding(16.dp, 15.dp, 16.dp, 10.dp)
+                            ) {
+                                TextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp)),
+                                    placeholder = { Text("Search contacts...", color = Color.White.copy(alpha = 0.5f)) },
+                                    leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.White.copy(alpha = 0.6f)) },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f)) }
+                                        }
+                                    },
+                                    singleLine = true,
+                                    colors = TextFieldDefaults.colors(
+                                        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                        unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
+                                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                                        cursorColor = Color.White
+                                    )
                                 )
-                            )
-                        }
+                            }
 
-                        HorizontalPager(
-                            state = pagerState, modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp), verticalAlignment = Alignment.Top
-                        ) { page ->
-                            when (page) {
-                                0 -> { // Personal Tab
-                                    if (!hasContactsPermission) {
-                                        PermissionRequiredCard {
-                                            permissionLauncher.launch(
-                                                arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
-                                            )
-                                        }
-                                    } else if (filteredDeviceContacts.isEmpty() && favoriteContacts.isEmpty()) {
-                                        Box (
-                                            modifier = Modifier.fillMaxWidth(),
-                                            contentAlignment = Alignment.Center
-                                        ){
-                                            EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
-                                        }
-                                    } else {
-                                        LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            if (favoriteContacts.isNotEmpty()) {
-                                                item {
-                                                    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                                                        Text(
-                                                            text = "Favourites",
-                                                            color = Color(0xFFF59E0B),
-                                                            fontWeight = FontWeight.Bold,
-                                                            fontSize = 14.sp,
-                                                            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
-                                                        )
-                                                        LazyRow(
-                                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                                            contentPadding = PaddingValues(horizontal = 4.dp)
-                                                        ) {
-                                                            items(favoriteContacts) { contact ->
-                                                                FavoriteContactItem(
-                                                                    contact = contact,
-                                                                    onClick = {
-                                                                        selectedDeviceContact = contact
-                                                                        scope.launch { sheetState.show() }
-                                                                    }
-                                                                )
+                            HorizontalPager(
+                                state = pagerState, modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp), verticalAlignment = Alignment.Top
+                            ) { page ->
+                                when (page) {
+                                    0 -> { // Personal Tab
+                                        if (!hasContactsPermission) {
+                                            PermissionRequiredCard {
+                                                permissionLauncher.launch(
+                                                    // [!code ++] Added READ_PHONE_STATE for SIM detection
+                                                    arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_PHONE_STATE)
+                                                )
+                                            }
+                                        } else if (filteredDeviceContacts.isEmpty() && favoriteContacts.isEmpty()) {
+                                            Box (
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = Alignment.Center
+                                            ){
+                                                EmptyStateCard("No personal contacts found", Icons.Default.PersonOff)
+                                            }
+                                        } else {
+                                            LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                if (favoriteContacts.isNotEmpty()) {
+                                                    item {
+                                                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                                                            Text(
+                                                                text = "Favourites",
+                                                                color = Color(0xFFF59E0B),
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 14.sp,
+                                                                modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
+                                                            )
+                                                            LazyRow(
+                                                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                                                contentPadding = PaddingValues(horizontal = 4.dp)
+                                                            ) {
+                                                                items(favoriteContacts) { contact ->
+                                                                    FavoriteContactItem(
+                                                                        contact = contact,
+                                                                        onClick = {
+                                                                            selectedDeviceContact = contact
+                                                                            scope.launch { sheetState.show() }
+                                                                        }
+                                                                    )
+                                                                }
                                                             }
+                                                            Spacer(modifier = Modifier.height(16.dp))
+                                                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                                                         }
-                                                        Spacer(modifier = Modifier.height(16.dp))
-                                                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                                                     }
                                                 }
-                                            }
 
-                                            if (favoriteContacts.isNotEmpty() && searchQuery.isBlank()) {
-                                                item {
-                                                    Text(
-                                                        text = "All Contacts",
-                                                        color = Color.White.copy(alpha = 0.5f),
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 14.sp,
-                                                        modifier = Modifier.padding(top = 8.dp, start = 4.dp)
-                                                    )
+                                                if (favoriteContacts.isNotEmpty() && searchQuery.isBlank()) {
+                                                    item {
+                                                        Text(
+                                                            text = "All Contacts",
+                                                            color = Color.White.copy(alpha = 0.5f),
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 14.sp,
+                                                            modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                                                        )
+                                                    }
                                                 }
-                                            }
 
-                                            items(filteredDeviceContacts, key = { it.id }) { contact ->
-                                                ModernDeviceContactCard(contact, onClick = {
-                                                    selectedDeviceContact = contact
-                                                    scope.launch { sheetState.show() }
-                                                })
+                                                items(filteredDeviceContacts, key = { it.id }) { contact ->
+                                                    ModernDeviceContactCard(contact, onClick = {
+                                                        selectedDeviceContact = contact
+                                                        scope.launch { sheetState.show() }
+                                                    })
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                1 -> { // Work Tab
-                                    if (uiState.isLoading && workContacts.isEmpty()) {
-                                        LoadingCard(shimmerOffset)
-                                    } else if (uiState.errorMessage != null) {
-                                        ErrorCard(uiState.errorMessage!!)
-                                    } else if (filteredWorkContacts.isEmpty()) {
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            EmptyStateCard(if (searchQuery.isNotEmpty()) "No matches found" else "No assigned contacts", Icons.Default.BusinessCenter)
-                                        }
-                                    } else {
-                                        LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            items(filteredWorkContacts, key = { it.id }) { contact ->
-                                                ModernWorkContactCard(contact, onClick = {
-                                                    selectedWorkContact = contact
-                                                    scope.launch { sheetState.show() }
-                                                })
+                                    1 -> { // Work Tab
+                                        if (uiState.isLoading && workContacts.isEmpty()) {
+                                            LoadingCard(shimmerOffset)
+                                        } else if (uiState.errorMessage != null) {
+                                            ErrorCard(uiState.errorMessage!!)
+                                        } else if (filteredWorkContacts.isEmpty()) {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                EmptyStateCard(if (searchQuery.isNotEmpty()) "No matches found" else "No assigned contacts", Icons.Default.BusinessCenter)
+                                            }
+                                        } else {
+                                            LazyColumn(state = workListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                items(filteredWorkContacts, key = { it.id }) { contact ->
+                                                    ModernWorkContactCard(contact, onClick = {
+                                                        selectedWorkContact = contact
+                                                        scope.launch { sheetState.show() }
+                                                    })
+                                                }
                                             }
                                         }
                                     }
@@ -500,7 +532,6 @@ fun ContactsScreen(
                 }
             }
 
-            // ... (Rest of the Bottom Sheets and Dialogs logic remains the same)
             if (selectedWorkContact != null) {
                 ModernBottomSheet(
                     contact = selectedWorkContact!!,
@@ -514,6 +545,7 @@ fun ContactsScreen(
                         }
                     },
                     isWorkContact = true,
+                    isDualSim = isDualSim, // [!code ++] Pass Dual Sim State
                     onRequestSubmit = { reason ->
                         if (token != null) {
                             viewModel.submitPersonalRequest(
@@ -534,6 +566,7 @@ fun ContactsScreen(
                 ModernDeviceBottomSheet(
                     contact = selectedDeviceContact!!,
                     sheetState = sheetState,
+                    isDualSim = isDualSim, // [!code ++] Pass Dual Sim State
                     onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
                     onCall = { number ->
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -590,7 +623,7 @@ fun ContactsScreen(
                                         }
                                     } else {
                                         Toast.makeText(context, "Write Permission Required", Toast.LENGTH_SHORT).show()
-                                        permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS))
+                                        permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_PHONE_STATE))
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
@@ -698,6 +731,7 @@ fun ContactsScreen(
         }
     }
 }
+
 // ---------------------------------------------
 // HELPER COMPOSABLES
 // ---------------------------------------------
@@ -953,6 +987,7 @@ private fun ModernBottomSheet(
     onDismiss: () -> Unit,
     onCall: () -> Unit,
     isWorkContact: Boolean,
+    isDualSim: Boolean, // [!code ++] New Parameter
     department: String?,
     onRequestSubmit: (String) -> Unit
 ) {
@@ -1072,7 +1107,16 @@ private fun ModernBottomSheet(
                 ) {
                     Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(if (isWorkContact) "Call via SIM 2 (Work)" else "Call via SIM 1 (Personal)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    // [!code ++] Conditional Text Logic based on SIM count
+                    Text(
+                        text = if (isDualSim) {
+                            if (isWorkContact) "Call via SIM 2 (Work)" else "Call via SIM 1 (Personal)"
+                        } else {
+                            "Call"
+                        },
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -1136,6 +1180,7 @@ private fun ModernBottomSheet(
 private fun ModernDeviceBottomSheet(
     contact: DeviceContact,
     sheetState: SheetState,
+    isDualSim: Boolean, // [!code ++] New Parameter
     onDismiss: () -> Unit,
     onCall: (String) -> Unit
 ) {
@@ -1267,7 +1312,18 @@ private fun ModernDeviceBottomSheet(
                 ) {
                     Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                        Text(if (contact.numbers.size > 1) "Call Default" else "Call via SIM 1 (Personal)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    // [!code ++] Conditional Text Logic based on SIM count and Number count
+                    Text(
+                        text = if (contact.numbers.size > 1) {
+                            "Call Default"
+                        } else if (isDualSim) {
+                            "Call via SIM 1 (Personal)"
+                        } else {
+                            "Call"
+                        },
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             } else if (contact.numbers.size > 1) {
                 Spacer(modifier = Modifier.height(24.dp))

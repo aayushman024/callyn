@@ -58,6 +58,22 @@ data class CallLogRequest(
     val duration: Long
 )
 
+data class CallLogResponse(
+    val _id: String,
+    val callerName: String,
+    val rshipManagerName: String?,
+    val type: String, // "outgoing", "incoming", "missed"
+    val timestamp: String,
+    val duration: Long,
+    val uploadedBy: String?,
+    val uploadedAt: String?
+)
+
+data class CallLogListResponse(
+    val count: Int,
+    val data: List<CallLogResponse>
+)
+
 //request as personal contact
 data class PersonalRequestData(
     val requestedContact: String,
@@ -101,6 +117,7 @@ data class UserDetailsRequest(
 
 data class UserDetailsResponse(
     val _id: String,
+    val email: String,
     val username: String,
     val phoneModel: String?,
     val osLevel: String?,
@@ -180,5 +197,12 @@ interface ApiService {
     suspend fun getAllUserDetails(
         @Header("Authorization") token: String
     ): Response<List<UserDetailsResponse>>
+
+    @GET("getCallLogs")
+    suspend fun getCallLogs(
+        @Header("Authorization") token: String,
+        @Query("date") date: String? = null, // Format: YYYY-MM-DD
+        @Query("uploadedBy") uploadedBy: String? = null
+    ): Response<CallLogListResponse>
 }
 

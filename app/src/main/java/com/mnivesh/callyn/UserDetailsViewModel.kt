@@ -20,18 +20,23 @@ class UserDetailsViewModel : ViewModel() {
     var uiState: UserDetailsUiState by mutableStateOf(UserDetailsUiState.Loading)
         private set
 
+    // [!code ++] New separate list for Usernames only, accessible elsewhere
+    var userNamesList: List<String> by mutableStateOf(emptyList())
+        private set
+
     fun fetchUserDetails(token: String) {
         viewModelScope.launch {
             uiState = UserDetailsUiState.Loading
             try {
                 val response = RetrofitInstance.api.getAllUserDetails("Bearer $token")
 
-                // [!code ++] Handle 404 with Hardcoded Data
+                // Handle 404 with Hardcoded Data
                 if (response.code() == 404) {
                     val dummyList = listOf(
                         UserDetailsResponse(
                             _id = "1",
                             username = "Aayushman Ranjan",
+                            email = "aayushman@niveshonline",
                             phoneModel = "Samsung Galaxy S24",
                             osLevel = "Android 14 (SDK 34)",
                             appVersion = "1.0.5",
@@ -41,6 +46,7 @@ class UserDetailsViewModel : ViewModel() {
                         UserDetailsResponse(
                             _id = "2",
                             username = "Demo User 2",
+                            email = "aayushman@niveshonline",
                             phoneModel = "Pixel 8 Pro",
                             osLevel = "Android 15 (SDK 35)",
                             appVersion = "1.0.4",
@@ -50,6 +56,7 @@ class UserDetailsViewModel : ViewModel() {
                         UserDetailsResponse(
                             _id = "3",
                             username = "Ishu Mavar",
+                            email = "aayushman@niveshonline",
                             phoneModel = "OnePlus 12",
                             osLevel = "Android 13 (SDK 33)",
                             appVersion = "1.0.5",
@@ -57,11 +64,17 @@ class UserDetailsViewModel : ViewModel() {
                             lastSeen = "2025-12-31T09:15:00.000Z"
                         )
                     )
+
+                    // [!code ++] Extract usernames from dummy list
+                    userNamesList = dummyList.map { it.username }
+
                     uiState = UserDetailsUiState.Success(dummyList)
                 }
                 // Existing Success Logic
                 else if (response.isSuccessful && response.body() != null) {
-                    uiState = UserDetailsUiState.Success(response.body()!!)
+                    val users = response.body()!!
+
+                    uiState = UserDetailsUiState.Success(users)
                 } else {
                     uiState = UserDetailsUiState.Error("Failed to fetch data: ${response.code()}")
                 }

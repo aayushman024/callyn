@@ -7,10 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.AssignmentInd
-import androidx.compose.material.icons.filled.BusinessCenter
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,11 +18,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mnivesh.callyn.api.version
 import android.widget.Toast
-import androidx.compose.material.icons.filled.Group
 import com.mnivesh.callyn.ui.theme.sdp
 
 @Composable
@@ -35,79 +32,97 @@ fun AppDrawer(
     onLogout: () -> Unit,
     onClose: () -> Unit,
     onShowRequests: () -> Unit,
-    onShowUserDetails: () -> Unit
+    onShowUserDetails: () -> Unit,
+    onShowCallLogs: () -> Unit
 ) {
     val context = LocalContext.current
     val department = remember { AuthManager(context).getDepartment() }
+    val email = remember { AuthManager(context).getUserEmail() }
 
     ModalDrawerSheet(
-        drawerContainerColor = Color(0xFF1E293B), // Dark Theme Background
+        drawerContainerColor = Color(0xFF0B1220),
         drawerContentColor = Color.White,
-        modifier = Modifier.width(300.dp)
+        modifier = Modifier.width(320.dp)
     ) {
-        // --- Redesigned Header ---
+
+        // HEADER
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color(0xFF0F172A), Color(0xFF1E293B))
+                        listOf(
+                            Color(0xFF020617),
+                            Color(0xFF0B1220),
+                            Color(0xFF111827)
+                        )
                     )
                 )
-                .padding(top = 40.dp, bottom = 24.dp, start = 24.dp, end = 24.dp)
+                .padding(top = 44.dp, bottom = 28.dp, start = 24.dp, end = 24.dp)
         ) {
-            // 1. User Avatar (Initials)
             Box(
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(76.dp)
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
-                            listOf(Color(0xFF3B82F6), Color(0xFF60A5FA))
+                            listOf(Color(0xFF2563EB), Color(0xFF60A5FA))
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
-                    fontSize = 32.sp,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 2. User Name
             Text(
                 text = userName,
-                fontSize = 22.sp,
+                fontSize = 21.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White
+                color = Color(0xFFF1F5F9)
             )
 
-            // 3. Department Badge
+            // ➜ IMPROVED EMAIL TEXT
+            if (!email.isNullOrBlank() && email != "N/A") {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = email,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF9CA3AF),
+                    overflow = TextOverflow.Ellipsis,
+                    maxLines = 1
+                )
+            }
+
             if (!department.isNullOrBlank() && department != "N/A") {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFF1F2937),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.BusinessCenter,
-                            contentDescription = "Department",
-                            tint = Color(0xFF94A3B8), // Slate-400
-                            modifier = Modifier.size(14.dp)
+                            Icons.Default.BusinessCenter,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = department,
                             fontSize = 13.sp,
-                            color = Color(0xFFCBD5E1), // Slate-300
+                            color = Color(0xFFD1D5DB),
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -115,137 +130,158 @@ fun AppDrawer(
             }
         }
 
-        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+        HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
 
-        // --- Drawer Items ---
-        Column(modifier = Modifier.padding(vertical = 16.dp, horizontal = 12.dp)) {
+        // CONTENT
+        Column(
+            modifier = Modifier
+                .padding(vertical = 14.dp, horizontal = 14.dp)
+        ) {
 
-            NavigationDrawerItem(
-                label = { Text("Sync Work Contacts", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
+            @Composable
+            fun drawerItem(
+                label: String,
+                icon: @Composable () -> Unit,
+                onClick: () -> Unit
+            ) {
+                NavigationDrawerItem(
+                    label = {
+                        Text(
+                            text = label,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    icon = icon,
+                    selected = false,
+                    onClick = {
+                        onClose()
+                        onClick()
+                    },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.White.copy(alpha = 0.04f),
+                        unselectedTextColor = Color.White.copy(alpha = 0.92f),
+                        unselectedIconColor = Color.White.copy(alpha = 0.92f),
+                        selectedContainerColor = Color.White.copy(alpha = 0.1f)
+                    ),
+                    modifier = Modifier
+                        .padding(vertical = 5.dp)
+                        .fillMaxWidth()
+                )
+            }
+
+            drawerItem(
+                label = "Sync Work Contacts",
                 icon = {
                     Icon(
                         Icons.Default.Refresh,
                         contentDescription = null,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(22.dp),
+                        tint = Color(0xFF38BDF8)   // cyan
+                    )
+                }
+            ) {
+                Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
+                onSync()
+            }
+
+            if (department == "Management" || department == "IT Desk") {
+
+                drawerItem(
+                    "Personal Contact Requests",
+                    {
+                        Icon(
+                            Icons.Default.AssignmentInd,
+                            null,
+                            Modifier.size(22.dp),
+                            tint = Color(0xFFFACC15) // yellow
+                        )
+                    }
+                ) { onShowRequests() }
+
+                drawerItem(
+                    "User Status",
+                    {
+                        Icon(
+                            Icons.Default.Group,
+                            null,
+                            Modifier.size(22.dp),
+                            tint = Color(0xFFA5B4FC) // indigo
+                        )
+                    }
+                ) { onShowUserDetails() }
+
+                drawerItem(
+                    "View Call Logs",
+                    {
+                        Icon(
+                            Icons.Default.List,
+                            null,
+                            Modifier.size(22.dp),
+                            tint = Color(0xFF34D399) // green
+                        )
+                    }
+                ) { onShowCallLogs() }
+            }
+
+            NavigationDrawerItem(
+                label = { Text("Logout", fontSize = 15.sp, fontWeight = FontWeight.Medium) },
+                icon = {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Logout,
+                        null,
+                        Modifier.size(22.dp),
+                        tint = Color(0xFFF87171) // soft red
                     )
                 },
                 selected = false,
                 onClick = {
                     onClose()
-                    Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
-                    onSync()
+                    onLogout()
                 },
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(18.dp),
                 colors = NavigationDrawerItemDefaults.colors(
-                    unselectedContainerColor = Color.Transparent,
-                    unselectedTextColor = Color.White.copy(alpha = 0.9f),
-                    unselectedIconColor = Color.White.copy(alpha = 0.9f)
+                    unselectedContainerColor = Color.White.copy(alpha = 0.03f),
+                    unselectedTextColor = Color(0xFFF87171),
+                    unselectedIconColor = Color(0xFFF87171)
                 ),
-                modifier = Modifier.padding(vertical = 4.dp)
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .fillMaxWidth()
             )
-
-            // [!code ++] New Item: Personal Contact Requests (Only for Management)
-            if (department == "Management" || department == "IT Desk") {
-                NavigationDrawerItem(
-                    label = { Text("Personal Contact Requests", fontSize = 15.sp, fontWeight = FontWeight.Medium) },
-                    icon = {
-                        Icon(
-                            Icons.Default.AssignmentInd,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    selected = false,
-                    onClick = {
-                        onClose()
-                        onShowRequests()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = Color.Transparent,
-                        unselectedTextColor = Color.White.copy(alpha = 0.9f),
-                        unselectedIconColor = Color.White.copy(alpha = 0.9f)
-                    ),
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-            }
-
-            if (department == "Management" || department == "IT Desk") {
-                NavigationDrawerItem(
-                    label = { Text("User Status", fontSize = 15.sp, fontWeight = FontWeight.Medium) },
-                    icon = { Icon(Icons.Default.Group, contentDescription = null, modifier = Modifier.size(22.dp)) },
-                    selected = false,
-                    onClick = {
-                        onClose()
-                        onShowUserDetails()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = Color.Transparent,
-                        unselectedTextColor = Color.White.copy(alpha = 0.9f),
-                        unselectedIconColor = Color.White.copy(alpha = 0.9f)
-                    ),
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-
-                NavigationDrawerItem(
-                    label = { Text("Logout", fontSize = 16.sp, fontWeight = FontWeight.Medium) },
-                    icon = {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Logout,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    selected = false,
-                    onClick = {
-                        onClose()
-                        onLogout()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = Color.Transparent,
-                        unselectedTextColor = Color(0xFFEF4444), // Minimal Red
-                        unselectedIconColor = Color(0xFFEF4444)
-                    ),
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
-            }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // --- Version Pill ---
+        // VERSION PILL
         Surface(
-            onClick = {
-                (context as? MainActivity)?.manualUpdateCheck()
-            },
-            shape = RoundedCornerShape(50),
-            color = Color.White.copy(alpha = 0.05f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+            onClick = { (context as? MainActivity)?.manualUpdateCheck() },
+            shape = RoundedCornerShape(30),
+            color = Color.White.copy(alpha = 0.06f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
                 .padding(bottom = 80.sdp())
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.SystemUpdate,
-                    contentDescription = "Check for updates",
-                    tint = Color.White.copy(alpha = 0.5f),
+                    Icons.Default.SystemUpdate,
+                    contentDescription = null,
+                    tint = Color(0xFF93C5FD),
                     modifier = Modifier.size(14.dp)
                 )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Text(
                     text = "Callyn v$version",
                     fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                    letterSpacing = 1.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    letterSpacing = 0.5.sp,
                     fontWeight = FontWeight.Medium
                 )
             }

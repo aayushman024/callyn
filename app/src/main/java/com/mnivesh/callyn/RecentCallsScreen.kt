@@ -210,7 +210,7 @@ class RecentCallsViewModelFactory(val app: Application, val repo: ContactReposit
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecentCallsScreen(
-    onCallClick: (String) -> Unit,
+    onCallClick: (String, Boolean) -> Unit, // [!code ++] CHANGED: Accepts isWork boolean
     onScreenEntry: () -> Unit
 ) {
     val context = LocalContext.current
@@ -341,7 +341,6 @@ fun RecentCallsScreen(
                     isRefreshing = false
                 }
             },
-            // [!code focus] Apply Status Bar Padding to container to prevent scrolling behind it
             modifier = Modifier.fillMaxSize().statusBarsPadding()
         ) {
             LazyColumn(
@@ -349,8 +348,6 @@ fun RecentCallsScreen(
                 contentPadding = PaddingValues(bottom = 80.sdp()),
                 modifier = Modifier.fillMaxSize()
             ) {
-                // [!code focus] Removed Spacer item here as container is padded
-
                 item {
                     Text(
                         text = "Recent Calls",
@@ -386,7 +383,6 @@ fun RecentCallsScreen(
                 stickyHeader {
                     Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF0F172A))) {
                         Row(
-                            // [!code focus] Removed windowInsetsPadding here
                             modifier = Modifier.fillMaxWidth().padding(vertical = 16.sdp(), horizontal = 16.sdp()),
                             horizontalArrangement = Arrangement.spacedBy(8.sdp())
                         ) {
@@ -412,7 +408,12 @@ fun RecentCallsScreen(
 
                 items(filteredCalls, key = { it.id }) { log ->
                     Box(modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp())) {
-                        RecentCallItem(log = log, onBodyClick = { onItemClicked(log) }, onCallClick = { onCallClick(log.number) })
+                        RecentCallItem(
+                            log = log,
+                            onBodyClick = { onItemClicked(log) },
+                            // [!code ++] CHANGED: Checks log.type to determine if it's work call
+                            onCallClick = { onCallClick(log.number, log.type.equals("Work", ignoreCase = true)) }
+                        )
                     }
                 }
 
@@ -434,7 +435,8 @@ fun RecentCallsScreen(
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null } },
-                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedWorkContact!!.number); selectedWorkContact = null } }
+                // [!code ++] CHANGED: Pass true for work contact
+                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedWorkContact!!.number, true); selectedWorkContact = null } }
             )
         }
 
@@ -445,13 +447,15 @@ fun RecentCallsScreen(
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
-                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedDeviceContact!!.numbers.first().number); selectedDeviceContact = null } }
+                // [!code ++] CHANGED: Pass false for personal contact
+                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedDeviceContact!!.numbers.first().number, false); selectedDeviceContact = null } }
             )
         }
     }
 }
 
-// --- Helper Functions ---
+// ... (Rest of Helper functions and UI components remain unchanged)
+// Helper Functions
 
 fun formatTime(millis: Long): String {
     val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())

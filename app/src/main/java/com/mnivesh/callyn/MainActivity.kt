@@ -534,9 +534,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
 
-//    androidx.compose.runtime.LaunchedEffect(Unit) {
-//        syncDeviceDetails()
-//    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        syncDeviceDetails()
+    }
 
     var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
     var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
@@ -584,6 +584,7 @@ sealed class Screen(val route: String) {
     object Dialer : Screen("dialer")
     object Requests : Screen("requests")
     object UserDetails : Screen("user_details")
+    object ShowCallLogs : Screen("show_call_logs")
 }
 
 @Composable
@@ -645,7 +646,7 @@ fun MainScreenContent(
         ) {
             composable(Screen.Recents.route) {
                 RecentCallsScreen(
-                    onCallClick = { num -> onSmartDial(num, false) },
+                    onCallClick = { num, isWork -> onSmartDial(num, isWork) },
                     onScreenEntry = onResetMissedCount
                 )
             }
@@ -656,6 +657,7 @@ fun MainScreenContent(
                     },
                     onLogout = onLogout,
                     onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
+                    onShowCallLogs = { navController.navigate(Screen.ShowCallLogs.route) },
                     onShowRequests = { navController.navigate(Screen.Requests.route) }
                 )
             }
@@ -673,6 +675,11 @@ fun MainScreenContent(
             }
             composable(Screen.UserDetails.route) {
                 UserDetailsScreen(
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.ShowCallLogs.route) {
+                ShowCallLogsScreen(
                     onNavigateBack = { navController.popBackStack() }
                 )
             }
