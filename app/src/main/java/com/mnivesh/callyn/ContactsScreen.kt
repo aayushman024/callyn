@@ -223,7 +223,7 @@ fun ContactsScreen(
     var hasCheckedConflicts by remember { mutableStateOf(false) }
 
     LaunchedEffect(workContacts, deviceContacts) {
-        if (department != "Management" && !hasCheckedConflicts && workContacts.isNotEmpty() && deviceContacts.isNotEmpty()) {
+        if (department != "Management" && department != "IT Desk"  && !hasCheckedConflicts && workContacts.isNotEmpty() && deviceContacts.isNotEmpty()) {
             withContext(Dispatchers.IO) {
                 val conflicts = deviceContacts.filter { device ->
                     device.numbers.any { numObj ->
