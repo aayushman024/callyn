@@ -479,11 +479,14 @@ private fun getColorForName(name: String): Color {
 
 private fun getInitials(name: String): String {
     return name.split(" ")
+        // Find the first actual letter in each word, ignoring symbols
+        .mapNotNull { word -> word.firstOrNull { it.isLetter() }?.uppercaseChar() }
         .take(2)
-        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
         .joinToString("")
-        .ifEmpty { name.take(1).uppercase() }
-        .ifBlank { "?" }
+        .ifEmpty {
+            // Fallback: Find first letter of the name or return empty
+            name.firstOrNull { it.isLetter() }?.uppercase() ?: ""
+        }
 }
 
 @SuppressLint("MissingPermission")
@@ -694,14 +697,13 @@ fun RecentCallItem(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 4.sdp())
                 ) {
-                    Text(
-                        text = log.type,
-                        color = tagColor,
-                        fontSize = 12.ssp(),
-                        fontWeight = FontWeight.Bold
+                    Icon(
+                        imageVector = if (log.type.equals("Work", ignoreCase = true)) Icons.Default.BusinessCenter else Icons.Default.Person,
+                        contentDescription = null,
+                        tint = tagColor,
+                        modifier = Modifier.size(14.sdp())
                     )
-                    Spacer(modifier = Modifier.width(6.sdp()))
-                    Text("•", color = Color.White.copy(alpha = 0.2f), fontSize = 10.ssp())
+                    Text(" • ", color = Color.White.copy(alpha = 0.3f), fontSize = 11.ssp())
                     Spacer(modifier = Modifier.width(6.sdp()))
                     Text(
                         text = formatTime(log.date),

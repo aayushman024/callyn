@@ -187,19 +187,6 @@ fun AppDrawer(
             }
 
             if (department == "Management" || department == "IT Desk") {
-
-                drawerItem(
-                    "Personal Contact Requests",
-                    {
-                        Icon(
-                            Icons.Default.AssignmentInd,
-                            null,
-                            Modifier.size(22.dp),
-                            tint = Color(0xFFFACC15) // yellow
-                        )
-                    }
-                ) { onShowRequests() }
-
                 drawerItem(
                     "User Status",
                     {
@@ -223,6 +210,19 @@ fun AppDrawer(
                         )
                     }
                 ) { onShowCallLogs() }
+
+                drawerItem(
+                    "Personal Contact Requests",
+                    {
+                        Icon(
+                            Icons.Default.AssignmentInd,
+                            null,
+                            Modifier.size(22.dp),
+                            tint = Color(0xFFFACC15) // yellow
+                        )
+                    }
+                ) { onShowRequests() }
+
             }
 
             NavigationDrawerItem(

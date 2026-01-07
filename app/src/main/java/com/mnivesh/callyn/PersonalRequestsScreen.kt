@@ -89,7 +89,7 @@ fun PersonalRequestsScreen(
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(uiState.requests, key = { it._id }) { request ->
@@ -98,11 +98,11 @@ fun PersonalRequestsScreen(
                             isProcessing = processingRequestId == request._id,
                             onApprove = {
                                 actionRequest = request
-                                actionType = "approved" // [!code ++] Fixed: Send status, not verb
+                                actionType = "approved"
                             },
                             onDeny = {
                                 actionRequest = request
-                                actionType = "rejected" // [!code ++] Fixed: Send status, not verb
+                                actionType = "rejected"
                             }
                         )
                     }

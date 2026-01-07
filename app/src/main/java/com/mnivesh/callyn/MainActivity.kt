@@ -206,6 +206,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkForUpdates()
+        syncDeviceDetails()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -303,7 +304,7 @@ class MainActivity : ComponentActivity() {
         // This prevents spamming the API on screen rotations.
         WorkManager.getInstance(this).enqueueUniqueWork(
             "SyncUserDetailsWork",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             syncRequest
         )
     }
@@ -534,9 +535,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        syncDeviceDetails()
-    }
+//    androidx.compose.runtime.LaunchedEffect(Unit) {
+//        syncDeviceDetails()
+//    }
 
     var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
     var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
