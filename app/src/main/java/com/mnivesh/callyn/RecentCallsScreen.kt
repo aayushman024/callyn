@@ -3,6 +3,7 @@ package com.mnivesh.callyn
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.ContentUris // [!code ++] Added
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -10,6 +11,7 @@ import android.database.ContentObserver
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.provider.BlockedNumberContract // [!code ++] Added
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telephony.SubscriptionManager
@@ -18,6 +20,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable // [!code ++] Added
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -66,6 +69,7 @@ enum class CallFilter {
 
 data class RecentCallUiItem(
     val id: String,
+    val providerId: Long = 0, // [!code ++] Added to identify row for deletion
     val name: String,
     val number: String,
     val type: String, // "Work" or "Personal"
@@ -190,7 +194,7 @@ class RecentCallsViewModel(
             // 1. Fetch System Logs
             val sysLogs = fetchSystemCallLogs(getApplication(), numberFilter = number)
 
-            // [!code ++] 2. Filter Work Logs (Fixed Logic)
+            // 2. Filter Work Logs (Fixed Logic)
             val normalizedQuery = number.filter { it.isDigit() }.takeLast(10)
 
             val localWorkLogs = _workLogs.value.filter {
@@ -210,12 +214,59 @@ class RecentCallsViewModel(
                 )
             }
 
-            // [!code ++] 3. Merge and Sort
+            // 3. Merge and Sort
             val combined = (sysLogs + localWorkLogs).sortedByDescending { it.date }
 
             withContext(Dispatchers.Main) {
                 _selectedContactHistory.value = combined
                 _isHistoryLoading.value = false
+            }
+        }
+    }
+
+    // [!code ++] Delete Log
+    // [!code ++] Updated deleteLog function to fix crash
+    fun deleteLog(providerId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Fix: Use selection clause instead of appending ID to URI
+                val selection = "${CallLog.Calls._ID} = ?"
+                val selectionArgs = arrayOf(providerId.toString())
+
+                getApplication<Application>().contentResolver.delete(
+                    CallLog.Calls.CONTENT_URI,
+                    selection,
+                    selectionArgs
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    // Requires WRITE_CALL_LOG permission or Default Dialer status
+                    Toast.makeText(getApplication(), "Could not delete. Check permissions.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // [!code ++] Block Number
+    fun blockNumber(number: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val values = android.content.ContentValues().apply {
+                    put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, number)
+                }
+                getApplication<Application>().contentResolver.insert(
+                    BlockedNumberContract.BlockedNumbers.CONTENT_URI,
+                    values
+                )
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(getApplication(), "Number blocked", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(getApplication(), "Failed to block. Ensure app is Default Dialer.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -453,7 +504,9 @@ fun RecentCallsScreen(
                         RecentCallItem(
                             log = log,
                             onBodyClick = { onItemClicked(log) },
-                            onCallClick = { onCallClick(log.number, null) }
+                            onCallClick = { onCallClick(log.number, null) },
+                            onDelete = { viewModel.deleteLog(log.providerId) }, // [!code ++]
+                            onBlock = { viewModel.blockNumber(log.number) }     // [!code ++]
                         )
                     }
                 }
@@ -560,6 +613,7 @@ suspend fun fetchSystemCallLogs(
         }
 
         val projection = arrayOf(
+            CallLog.Calls._ID, // [!code ++] Add ID
             CallLog.Calls.NUMBER,
             CallLog.Calls.CACHED_NAME,
             CallLog.Calls.TYPE,
@@ -592,14 +646,17 @@ suspend fun fetchSystemCallLogs(
                 sortOrder
             )
             cursor?.use {
-                val numberIdx = 0
-                val nameIdx = 1
-                val typeIdx = 2
-                val dateIdx = 3
-                val durationIdx = 4
-                val accountIdIdx = 5
+                // [!code ++] Update indices
+                val idIdx = 0
+                val numberIdx = 1
+                val nameIdx = 2
+                val typeIdx = 3
+                val dateIdx = 4
+                val durationIdx = 5
+                val accountIdIdx = 6
 
                 while (it.moveToNext()) {
+                    val realId = it.getLong(idIdx) // [!code ++]
                     val number = it.getString(numberIdx) ?: "Unknown"
                     val name = it.getString(nameIdx) ?: "Unknown"
                     val type = it.getInt(typeIdx)
@@ -611,6 +668,7 @@ suspend fun fetchSystemCallLogs(
                     logs.add(
                         RecentCallUiItem(
                             id = "s_${date}_${number.takeLast(4)}",
+                            providerId = realId, // [!code ++]
                             name = if (name != "Unknown") name else number,
                             number = number,
                             type = "Personal",
@@ -670,14 +728,20 @@ fun FilterChipItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class) // [!code ++]
 @Composable
 fun RecentCallItem(
     log: RecentCallUiItem,
     onBodyClick: () -> Unit,
-    onCallClick: () -> Unit
+    onCallClick: () -> Unit,
+    onDelete: () -> Unit, // [!code ++]
+    onBlock: () -> Unit   // [!code ++]
 ) {
     val isWork = log.type.equals("Work", ignoreCase = true)
     val tagColor = if (isWork) Color(0xFF60A5FA) else Color(0xFF10B981)
+
+    // [!code ++] Menu State
+    var showMenu by remember { mutableStateOf(false) }
 
     val icon = when {
         log.isMissed -> Icons.Default.CallMissed
@@ -690,88 +754,122 @@ fun RecentCallItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onBodyClick() },
+            // [!code ++] Use combinedClickable for long press
+            .combinedClickable(
+                onClick = onBodyClick,
+                onLongClick = {
+                    if (!isWork) {
+                        showMenu = true
+                    }
+                }
+            ),
         shape = RoundedCornerShape(16.sdp()),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
     ) {
-        Row(
-            modifier = Modifier
-                .padding(16.sdp())
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
+        Box { // [!code ++] Wrap for anchoring menu
+            Row(
                 modifier = Modifier
-                    .size(48.sdp())
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
+                    .padding(16.sdp())
+                    .fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.sdp()))
-            }
-
-            Spacer(modifier = Modifier.width(16.sdp()))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = log.name.ifBlank { log.number },
-                        color = if (log.isMissed) Color(0xFFEF4444) else Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.ssp(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-
-                    if (!log.simSlot.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.width(8.sdp()))
-                        val simColor = when {
-                            log.simSlot.contains("1") -> Color(0xFF10B981)
-                            log.simSlot.contains("2") -> Color(0xFF60A5FA)
-                            else -> Color.White.copy(alpha = 0.7f)
-                        }
-                        Text(
-                            text = log.simSlot,
-                            color = simColor,
-                            fontSize = 12.ssp(),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                Box(
+                    modifier = Modifier
+                        .size(48.sdp())
+                        .clip(CircleShape)
+                        .background(iconTint.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.sdp()))
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.sdp())
-                ) {
-                    Icon(
-                        imageVector = if (log.type.equals("Work", ignoreCase = true)) Icons.Default.BusinessCenter else Icons.Default.Person,
-                        contentDescription = null,
-                        tint = tagColor,
-                        modifier = Modifier.size(14.sdp())
-                    )
-                    Text(" • ", color = Color.White.copy(alpha = 0.3f), fontSize = 11.ssp())
-                    Spacer(modifier = Modifier.width(6.sdp()))
-                    Text(
-                        text = formatTime(log.date),
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 12.ssp()
-                    )
-                    if (log.duration.isNotEmpty() && log.duration != "0s") {
-                        Spacer(modifier = Modifier.width(6.sdp()))
-                        Text("•", color = Color.White.copy(alpha = 0.2f), fontSize = 10.ssp())
+                Spacer(modifier = Modifier.width(16.sdp()))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = log.name.ifBlank { log.number },
+                            color = if (log.isMissed) Color(0xFFEF4444) else Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.ssp(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+
+                        if (!log.simSlot.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.width(8.sdp()))
+                            val simColor = when {
+                                log.simSlot.contains("1") -> Color(0xFF10B981)
+                                log.simSlot.contains("2") -> Color(0xFF60A5FA)
+                                else -> Color.White.copy(alpha = 0.7f)
+                            }
+                            Text(
+                                text = log.simSlot,
+                                color = simColor,
+                                fontSize = 12.ssp(),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 4.sdp())
+                    ) {
+                        Icon(
+                            imageVector = if (log.type.equals("Work", ignoreCase = true)) Icons.Default.BusinessCenter else Icons.Default.Person,
+                            contentDescription = null,
+                            tint = tagColor,
+                            modifier = Modifier.size(14.sdp())
+                        )
+                        Text(" • ", color = Color.White.copy(alpha = 0.3f), fontSize = 11.ssp())
                         Spacer(modifier = Modifier.width(6.sdp()))
                         Text(
-                            text = log.duration,
+                            text = formatTime(log.date),
                             color = Color.White.copy(alpha = 0.5f),
                             fontSize = 12.ssp()
                         )
+                        if (log.duration.isNotEmpty() && log.duration != "0s") {
+                            Spacer(modifier = Modifier.width(6.sdp()))
+                            Text("•", color = Color.White.copy(alpha = 0.2f), fontSize = 10.ssp())
+                            Spacer(modifier = Modifier.width(6.sdp()))
+                            Text(
+                                text = log.duration,
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 12.ssp()
+                            )
+                        }
                     }
+                }
+
+                IconButton(onClick = onCallClick) {
+                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(24.sdp()))
                 }
             }
 
-            IconButton(onClick = onCallClick) {
-                Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(24.sdp()))
+            // [!code ++] Dropdown Menu
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false },
+                modifier = Modifier.background(Color(0xFF1E293B))
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Delete Log", color = Color.White) },
+                    onClick = {
+                        showMenu = false
+                        onDelete()
+                    },
+                    leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) }
+                )
+                DropdownMenuItem(
+                    text = { Text("Block Number", color = Color.White) },
+                    onClick = {
+                        showMenu = false
+                        onBlock()
+                    },
+                    leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.White) }
+                )
             }
         }
     }
@@ -961,9 +1059,9 @@ private fun RecentDeviceBottomSheet(
     history: List<RecentCallUiItem>,
     isLoading: Boolean,
     sheetState: SheetState,
-    isDualSim: Boolean, // [!code ++]
+    isDualSim: Boolean,
     onDismiss: () -> Unit,
-    onCall: (Int?) -> Unit // [!code ++]
+    onCall: (Int?) -> Unit
 ) {
     val context = LocalContext.current
     val contentResolver = context.contentResolver
@@ -1188,6 +1286,7 @@ private fun RecentDeviceBottomSheet(
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, contentDescription = null)
                             Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+
                         }
                     }
 
