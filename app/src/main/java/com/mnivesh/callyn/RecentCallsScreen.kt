@@ -32,12 +32,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -185,10 +187,34 @@ class RecentCallsViewModel(
             _isHistoryLoading.value = true
             _selectedContactHistory.value = emptyList()
 
-            val logs = fetchSystemCallLogs(getApplication(), numberFilter = number)
+            // 1. Fetch System Logs
+            val sysLogs = fetchSystemCallLogs(getApplication(), numberFilter = number)
+
+            // [!code ++] 2. Filter Work Logs (Fixed Logic)
+            val normalizedQuery = number.filter { it.isDigit() }.takeLast(10)
+
+            val localWorkLogs = _workLogs.value.filter {
+                it.number.filter { c -> c.isDigit() }.takeLast(10) == normalizedQuery
+            }.map { workLog ->
+                val isIncoming = workLog.direction.equals("incoming", true) || workLog.direction.equals("missed", true)
+                RecentCallUiItem(
+                    id = "w_hist_${workLog.id}",
+                    name = workLog.name,
+                    number = workLog.number,
+                    type = "Work",
+                    date = workLog.timestamp,
+                    duration = formatDuration(workLog.duration),
+                    isIncoming = isIncoming,
+                    isMissed = workLog.direction.equals("missed", true),
+                    simSlot = null
+                )
+            }
+
+            // [!code ++] 3. Merge and Sort
+            val combined = (sysLogs + localWorkLogs).sortedByDescending { it.date }
 
             withContext(Dispatchers.Main) {
-                _selectedContactHistory.value = logs
+                _selectedContactHistory.value = combined
                 _isHistoryLoading.value = false
             }
         }
@@ -210,7 +236,7 @@ class RecentCallsViewModelFactory(val app: Application, val repo: ContactReposit
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecentCallsScreen(
-    onCallClick: (String, Boolean) -> Unit, // [!code ++] CHANGED: Accepts isWork boolean
+    onCallClick: (String, Int?) -> Unit,
     onScreenEntry: () -> Unit
 ) {
     val context = LocalContext.current
@@ -237,6 +263,22 @@ fun RecentCallsScreen(
     var searchQuery by remember { mutableStateOf("") }
     var activeFilter by remember { mutableStateOf(CallFilter.ALL) }
     var isRefreshing by remember { mutableStateOf(false) }
+
+    // Sim Count State
+    var isDualSim by remember { mutableStateOf(false) }
+
+    // Check SIM Status
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                val activeSims = subManager.activeSubscriptionInfoCount
+                isDualSim = activeSims > 1
+            } catch (e: Exception) {
+                isDualSim = false
+            }
+        }
+    }
 
     // Merging Logic (Background)
     LaunchedEffect(workLogs, systemLogs) {
@@ -411,8 +453,7 @@ fun RecentCallsScreen(
                         RecentCallItem(
                             log = log,
                             onBodyClick = { onItemClicked(log) },
-                            // [!code ++] CHANGED: Checks log.type to determine if it's work call
-                            onCallClick = { onCallClick(log.number, log.type.equals("Work", ignoreCase = true)) }
+                            onCallClick = { onCallClick(log.number, null) }
                         )
                     }
                 }
@@ -434,9 +475,14 @@ fun RecentCallsScreen(
                 history = selectedContactHistory,
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
+                isDualSim = isDualSim,
                 onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null } },
-                // [!code ++] CHANGED: Pass true for work contact
-                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedWorkContact!!.number, true); selectedWorkContact = null } }
+                onCall = { slotIndex ->
+                    scope.launch { sheetState.hide() }.invokeOnCompletion {
+                        onCallClick(selectedWorkContact!!.number, slotIndex)
+                        selectedWorkContact = null
+                    }
+                }
             )
         }
 
@@ -446,16 +492,20 @@ fun RecentCallsScreen(
                 history = selectedContactHistory,
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
+                isDualSim = isDualSim,
                 onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
-                // [!code ++] CHANGED: Pass false for personal contact
-                onCall = { scope.launch { sheetState.hide() }.invokeOnCompletion { onCallClick(selectedDeviceContact!!.numbers.first().number, false); selectedDeviceContact = null } }
+                onCall = { slotIndex ->
+                    scope.launch { sheetState.hide() }.invokeOnCompletion {
+                        onCallClick(selectedDeviceContact!!.numbers.first().number, slotIndex)
+                        selectedDeviceContact = null
+                    }
+                }
             )
         }
     }
 }
 
-// ... (Rest of Helper functions and UI components remain unchanged)
-// Helper Functions
+// ... (Rest of Helper functions and UI components)
 
 fun formatTime(millis: Long): String {
     val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
@@ -479,12 +529,10 @@ private fun getColorForName(name: String): Color {
 
 private fun getInitials(name: String): String {
     return name.split(" ")
-        // Find the first actual letter in each word, ignoring symbols
         .mapNotNull { word -> word.firstOrNull { it.isLetter() }?.uppercaseChar() }
         .take(2)
         .joinToString("")
         .ifEmpty {
-            // Fallback: Find first letter of the name or return empty
             name.firstOrNull { it.isLetter() }?.uppercase() ?: ""
         }
 }
@@ -520,7 +568,6 @@ suspend fun fetchSystemCallLogs(
             CallLog.Calls.PHONE_ACCOUNT_ID
         )
 
-        // Build selection
         val selectionParts = mutableListOf<String>()
         val selectionArgs = mutableListOf<String>()
 
@@ -796,8 +843,9 @@ private fun RecentWorkBottomSheet(
     history: List<RecentCallUiItem>,
     isLoading: Boolean,
     sheetState: SheetState,
+    isDualSim: Boolean,
     onDismiss: () -> Unit,
-    onCall: () -> Unit
+    onCall: (Int?) -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF1E293B), contentColor = Color.White) {
         Column(
@@ -825,10 +873,54 @@ private fun RecentWorkBottomSheet(
             ContactDetailRow(Icons.Default.AccountBox, "Relationship Manager", contact.rshipManager ?: "N/A", Color(0xFFC084FC))
 
             Spacer(modifier = Modifier.height(24.sdp()))
-            Button(onClick = onCall, modifier = Modifier.fillMaxWidth().height(52.sdp()), shape = RoundedCornerShape(16.sdp()), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
-                Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
-                Spacer(modifier = Modifier.width(12.sdp()))
-                Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
+
+            // Dual SIM Logic
+            if (isDualSim) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                ) {
+                    // SIM 1 Button
+                    Button(
+                        onClick = { onCall(0) }, // Slot 0
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.sdp())
+                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                        shape = RoundedCornerShape(20.sdp()),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // SIM 2 Button
+                    Button(
+                        onClick = { onCall(1) }, // Slot 1
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.sdp())
+                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(20.sdp()),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                // Original Single Button
+                Button(onClick = { onCall(null) }, modifier = Modifier.fillMaxWidth().height(52.sdp()), shape = RoundedCornerShape(16.sdp()), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                    Spacer(modifier = Modifier.width(12.sdp()))
+                    Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(modifier = Modifier.height(24.sdp()))
@@ -869,8 +961,9 @@ private fun RecentDeviceBottomSheet(
     history: List<RecentCallUiItem>,
     isLoading: Boolean,
     sheetState: SheetState,
+    isDualSim: Boolean, // [!code ++]
     onDismiss: () -> Unit,
-    onCall: () -> Unit
+    onCall: (Int?) -> Unit // [!code ++]
 ) {
     val context = LocalContext.current
     val contentResolver = context.contentResolver
@@ -1075,17 +1168,60 @@ private fun RecentDeviceBottomSheet(
 
             Spacer(modifier = Modifier.height(32.sdp()))
 
-            Button(
-                onClick = onCall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.sdp()),
-                shape = RoundedCornerShape(16.sdp()),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-            ) {
-                Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
-                Spacer(modifier = Modifier.width(12.sdp()))
-                Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
+            // Dual SIM Logic
+            if (isDualSim) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                ) {
+                    // SIM 1 Button
+                    Button(
+                        onClick = { onCall(0) }, // Slot 0
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.sdp())
+                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                        shape = RoundedCornerShape(20.sdp()),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // SIM 2 Button
+                    Button(
+                        onClick = { onCall(1) }, // Slot 1
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.sdp())
+                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(20.sdp()),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                // Original Single Button
+                Button(
+                    onClick = { onCall(null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.sdp()),
+                    shape = RoundedCornerShape(16.sdp()),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                    Spacer(modifier = Modifier.width(12.sdp()))
+                    Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(modifier = Modifier.height(24.sdp()))

@@ -474,7 +474,8 @@ class MainActivity : ComponentActivity() {
     // --- LOGIC: Smart Dialing (Sim 1 vs Sim 2) ---
 
     @SuppressLint("MissingPermission")
-    fun dialSmart(number: String, isWorkCall: Boolean) {
+//    fun dialSmart(number: String, isWorkCall: Boolean) {
+    fun dialSmart(number: String, specificSlot: Int?) {
         if (!isDefaultDialer()) {
             offerDefaultDialer(); return
         }
@@ -498,13 +499,22 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            val targetSlotIndex = if (isWorkCall) 1 else 0
-            val selectedSim = activeSims.find { it.simSlotIndex == targetSlotIndex }
-                ?: activeSims.first()
+//            val targetSlotIndex = if (isWorkCall) 1 else 0
+//            val selectedSim = activeSims.find { it.simSlotIndex == targetSlotIndex }
+//                ?: activeSims.first()
+
+            val selectedSim = if (specificSlot != null) {
+                activeSims.find { it.simSlotIndex == specificSlot } ?: activeSims.first()
+            } else {
+                // If no slot specified (single sim device or simple call), use default
+                activeSims.first()
+            }
 
             val simName = selectedSim.displayName ?: "SIM ${selectedSim.simSlotIndex + 1}"
-            val type = if (isWorkCall) "Work" else "Personal"
-            Toast.makeText(this, "Dialing $type call via $simName", Toast.LENGTH_SHORT).show()
+//            val type = if (isWorkCall) "Work" else "Personal"
+//            Toast.makeText(this, "Dialing $type call via $simName", Toast.LENGTH_SHORT).show()
+
+            Toast.makeText(this, "Dialing via $simName", Toast.LENGTH_SHORT).show() // [!code ++]
 
             val uri = Uri.fromParts("tel", numberToDial, null)
             val intent = Intent(Intent.ACTION_CALL, uri)
@@ -568,9 +578,8 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
         missedCallCount = missedCallCount,
         onRequestPermissions = { requestPermissions() },
         onRequestDefaultDialer = { offerDefaultDialer() },
-        onSmartDial = { number, isWork ->
-            this.dialSmart(number, isWork)
-        },
+//        onSmartDial = { number, slot -> this.dialSmart(number, slot) }, // [!code ++]
+        onSmartDial = { number, slot -> this.dialSmart(number, slot) }, // [!code ++]
         onResetMissedCount = {
             missedCallCount = 0
             markMissedCallsAsRead()
@@ -597,7 +606,8 @@ fun MainScreen(
     missedCallCount: Int,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
-    onSmartDial: (String, Boolean) -> Unit,
+//    onSmartDial: (String, Boolean) -> Unit,
+    onSmartDial: (String, Int?) -> Unit,
     onResetMissedCount: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -626,7 +636,8 @@ fun MainScreen(
 @Composable
 fun MainScreenContent(
     userName: String,
-    onSmartDial: (String, Boolean) -> Unit,
+//    onSmartDial: (String, Boolean) -> Unit,
+    onSmartDial: (String, Int?) -> Unit, // [!code ++]
     onLogout: () -> Unit,
     missedCallCount: Int,
     onResetMissedCount: () -> Unit
@@ -647,15 +658,17 @@ fun MainScreenContent(
         ) {
             composable(Screen.Recents.route) {
                 RecentCallsScreen(
-                    onCallClick = { num, isWork -> onSmartDial(num, isWork) },
+//           onCallClick = { num, isWork -> onSmartDial(num, isWork) },
+                    onCallClick = { num, slot -> onSmartDial(num, slot) }, // [!code ++] Temporary fix for recents
                     onScreenEntry = onResetMissedCount
                 )
             }
             composable(Screen.Contacts.route) {
                 ContactsScreen(
-                    onContactClick = { number, isWorkCall ->
-                        onSmartDial(number, isWorkCall)
-                    },
+//                    onContactClick = { number, isWorkCall ->
+//                        onSmartDial(number, isWorkCall)
+//                    },
+                    onContactClick = { number, slot -> onSmartDial(number, slot) },
                     onLogout = onLogout,
                     onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
                     onShowCallLogs = { navController.navigate(Screen.ShowCallLogs.route) },
@@ -664,9 +677,7 @@ fun MainScreenContent(
             }
             composable(Screen.Dialer.route) {
                 DialerScreen(
-                    onCallClick = { num, isWork ->
-                        onSmartDial(num, isWork)
-                    }
+                    onCallClick = { num, slot -> onSmartDial(num, slot) }, // [!code ++] Temporary fix for dialer
                 )
             }
             composable(Screen.Requests.route) {

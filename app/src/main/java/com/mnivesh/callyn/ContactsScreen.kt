@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -104,7 +105,7 @@ private fun sanitizePhoneNumber(number: String): String {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ContactsScreen(
-    onContactClick: (String, Boolean) -> Unit,
+    onContactClick: (String, Int?) -> Unit, // Changed to accept Slot Index (Int?)
     onShowRequests: () -> Unit,
     onShowUserDetails: () -> Unit,
     onShowCallLogs: () -> Unit,
@@ -174,7 +175,7 @@ fun ContactsScreen(
         )
     }
 
-    // [!code ++] Sim Count State
+    // Sim Count State
     var isDualSim by remember { mutableStateOf(false) }
 
     fun checkSimStatus() {
@@ -201,7 +202,6 @@ fun ContactsScreen(
         hasContactsPermission = isGranted
         hasWritePermission = permissions[Manifest.permission.WRITE_CONTACTS] == true
 
-        // [!code ++] Re-check sim status after permission
         if (permissions[Manifest.permission.READ_PHONE_STATE] == true) {
             checkSimStatus()
         }
@@ -444,7 +444,6 @@ fun ContactsScreen(
                                         if (!hasContactsPermission) {
                                             PermissionRequiredCard {
                                                 permissionLauncher.launch(
-                                                    // [!code ++] Added READ_PHONE_STATE for SIM detection
                                                     arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_PHONE_STATE)
                                                 )
                                             }
@@ -545,14 +544,14 @@ fun ContactsScreen(
                     sheetState = sheetState,
                     department = department,
                     onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null } },
-                    onCall = {
+                    onCall = { slotIndex ->
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onContactClick(selectedWorkContact!!.number, true)
+                            onContactClick(selectedWorkContact!!.number, slotIndex)
                             selectedWorkContact = null
                         }
                     },
                     isWorkContact = true,
-                    isDualSim = isDualSim, // [!code ++] Pass Dual Sim State
+                    isDualSim = isDualSim,
                     onRequestSubmit = { reason ->
                         if (token != null) {
                             viewModel.submitPersonalRequest(
@@ -573,11 +572,11 @@ fun ContactsScreen(
                 ModernDeviceBottomSheet(
                     contact = selectedDeviceContact!!,
                     sheetState = sheetState,
-                    isDualSim = isDualSim, // [!code ++] Pass Dual Sim State
+                    isDualSim = isDualSim,
                     onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
-                    onCall = { number ->
+                    onCall = { number, slotIndex ->
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
-                            onContactClick(number, false)
+                            onContactClick(number, slotIndex)
                             selectedDeviceContact = null
                         }
                     }
@@ -607,7 +606,7 @@ fun ContactsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Duplicate Contacts Found", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.White)
+                            Text("Duplicate Contacts Found", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
                             Button(
                                 onClick = {
                                     if (hasWritePermission) {
@@ -636,7 +635,7 @@ fun ContactsScreen(
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("Continue to Delete")
+                                Text("Continue to Delete", fontSize = 12.sp)
                             }
                         }
 
@@ -992,7 +991,7 @@ private fun ModernBottomSheet(
     contact: AppContact,
     sheetState: SheetState,
     onDismiss: () -> Unit,
-    onCall: () -> Unit,
+    onCall: (Int?) -> Unit,
     isWorkContact: Boolean,
     isDualSim: Boolean,
     department: String?,
@@ -1244,28 +1243,66 @@ private fun ModernBottomSheet(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // --- Main Call Button ---
-            Button(
-                onClick = onCall,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
-            ) {
-                Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = if (isDualSim) {
-                        if (isWorkContact) "Call via SIM 2 (Work)" else "Call via SIM 1 (Personal)"
-                    } else {
-                        "Call"
-                    },
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            // --- Main Call Button Logic (Split for Dual Sim) ---
+            if (isDualSim) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // SIM 1 Button
+                    Button(
+                        onClick = { onCall(0) }, // Slot 0
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // SIM 2 Button
+                    Button(
+                        onClick = { onCall(1) }, // Slot 1
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                // Original Single Button
+                Button(
+                    onClick = { onCall(null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Call",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -1377,7 +1414,7 @@ private fun ModernDeviceBottomSheet(
     sheetState: SheetState,
     isDualSim: Boolean,
     onDismiss: () -> Unit,
-    onCall: (String) -> Unit
+    onCall: (String, Int?) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -1554,7 +1591,7 @@ private fun ModernDeviceBottomSheet(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable { onCall(numObj.number) } // Make whole row clickable
+                                        .clickable { onCall(numObj.number, null) } // Default to system choice/auto
                                         .padding(horizontal = 16.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -1597,7 +1634,7 @@ private fun ModernDeviceBottomSheet(
                                                 .size(36.dp)
                                                 .clip(CircleShape)
                                                 .background(primaryColor)
-                                                .clickable { onCall(numObj.number) },
+                                                .clickable { onCall(numObj.number, null) },
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(Icons.Default.Call, null, tint = Color.White, modifier = Modifier.size(18.dp))
@@ -1656,36 +1693,66 @@ private fun ModernDeviceBottomSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // --- Main Call Button ---
+            // --- Main Call Button (Split for Dual Sim) ---
             if (effectiveDefault != null) {
-                Button(
-                    onClick = { onCall(effectiveDefault.number) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = primaryColor
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 4.dp
-                    )
-                ) {
-                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = if (contact.numbers.size > 1) {
-                            "Call Default"
-                        } else if (isDualSim) {
-                            "Call via SIM 1 (Personal)"
-                        } else {
-                            "Call"
-                        },
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                if (isDualSim) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // SIM 1
+                        Button(
+                            onClick = { onCall(effectiveDefault.number, 0) },
+                            modifier = Modifier.weight(1f).height(64.dp).shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.Center) {
+                                Icon(Icons.Default.Phone, contentDescription = null)
+                                Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // SIM 2
+                        Button(
+                            onClick = { onCall(effectiveDefault.number, 1) },
+                            modifier = Modifier.weight(1f).height(64.dp).shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        ) {
+                            Row(horizontalArrangement = Arrangement.Center) {
+                                Icon(Icons.Default.Phone, contentDescription = null)
+                                Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    // Original Single Button
+                    Button(
+                        onClick = { onCall(effectiveDefault.number, null) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryColor
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (contact.numbers.size > 1) "Call Default" else "Call",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 

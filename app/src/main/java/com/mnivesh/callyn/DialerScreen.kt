@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -41,30 +42,49 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.mnivesh.callyn.db.AppContact
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 
 data class ContactResult(val name: String, val number: String, val isWork: Boolean = false)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DialerScreen(
-    // false = Personal (SIM1), true = Work (SIM2)
-    onCallClick: (String, Boolean) -> Unit
+    // [!code --] onCallClick: (String, Boolean) -> Unit
+    onCallClick: (String, Int?) -> Unit // [!code ++] Changed to accept Slot Index
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val application = context.applicationContext as CallynApplication
 
-    // [!code ++] Auth & Work Contacts Setup
+    // Auth & Work Contacts Setup
     val authManager = remember { AuthManager(context) }
     val department = remember { authManager.getDepartment() }
-    val workContacts by application.repository.allContacts .collectAsState(initial = emptyList<AppContact>())
+    val workContacts by application.repository.allContacts.collectAsState(initial = emptyList<AppContact>())
 
     var phoneNumber by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<ContactResult>>(emptyList()) }
+
     // SIM sheet
     var showSimSheet by remember { mutableStateOf(false) }
     val simSheetState = rememberModalBottomSheetState()
+
+    // [!code ++] Sim Count State
+    var isDualSim by remember { mutableStateOf(false) }
+
+    // [!code ++] Check SIM Status
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                val activeSims = subManager.activeSubscriptionInfoCount
+                isDualSim = activeSims > 1
+            } catch (e: Exception) {
+                isDualSim = false
+            }
+        }
+    }
 
     // ---------------- SEARCH ----------------
     LaunchedEffect(phoneNumber, workContacts) {
@@ -111,12 +131,12 @@ fun DialerScreen(
                 } catch (_: Exception) { }
             }
 
-            // [!code ++] 2. Search Work Contacts (If Management)
+            // 2. Search Work Contacts (If Management)
             if (department == "Management") {
                 val matches = workContacts.filter {
                     it.name.contains(phoneNumber, ignoreCase = true) ||
-                            it.number.contains(phoneNumber) // Assuming 'number' property exists on AppContact
-                }.take(4) // Limit work results
+                            it.number.contains(phoneNumber)
+                }.take(4)
 
                 matches.forEach { appContact ->
                     combinedResults.add(
@@ -129,24 +149,29 @@ fun DialerScreen(
                 }
             }
 
-            // Update State (Deduplicate based on number if needed, or just show all)
+            // Update State
             searchResults = combinedResults.distinctBy { it.number }
         }
     }
 
-    // ---------------- CALL LOGIC ----------------
-    fun checkSimsAndCall() {
+    // [!code ++] ---------------- CALL LOGIC (UPDATED) ----------------
+    fun initiateCall() {
         if (phoneNumber.isBlank()) return
 
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            val subManager =
-                context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-            val activeSims = subManager.activeSubscriptionInfoList
+        if (isDualSim) {
+            showSimSheet = true
+        } else {
+            onCallClick(phoneNumber, null) // Default/System choice
+        }
+    }
 
+    // [!code --] Previous checkSimsAndCall logic commented out
+    /*
+    fun checkSimsAndCall() {
+        if (phoneNumber.isBlank()) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+            val activeSims = subManager.activeSubscriptionInfoList
             if (activeSims != null && activeSims.size > 1) {
                 showSimSheet = true
             } else {
@@ -156,6 +181,7 @@ fun DialerScreen(
             onCallClick(phoneNumber, false)
         }
     }
+    */
 
     // ---------------- UI ----------------
     Column(
@@ -196,7 +222,6 @@ fun DialerScreen(
                             modifier = Modifier
                                 .size(44.dp)
                                 .background(
-                                    // [!code ++] Different Gradient for Work Contacts
                                     if (contact.isWork) {
                                         Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))
                                     } else {
@@ -233,7 +258,7 @@ fun DialerScreen(
                                     fontSize = 13.sp,
                                     color = Color.Gray
                                 )
-                                // [!code ++] Work Badge
+                                // Work Badge
                                 if (contact.isWork) {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
@@ -307,14 +332,13 @@ fun DialerScreen(
                     enabled = phoneNumber.isNotEmpty(),
                     onClick = {
                         try {
-                            // Create an Intent to insert a new contact
                             val intent = Intent(Intent.ACTION_INSERT).apply {
                                 type = ContactsContract.Contacts.CONTENT_TYPE
                                 putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
                             }
                             context.startActivity(intent)
                         } catch (e: Exception) {
-                            e.printStackTrace() // Handle case where no contact app is found
+                            e.printStackTrace()
                         }
                     }
                 ) {
@@ -329,7 +353,8 @@ fun DialerScreen(
                         .background(Color(0xFF00C853), CircleShape)
                         .clickable(enabled = phoneNumber.isNotEmpty()) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            checkSimsAndCall()
+                            // [!code ++] Use new logic
+                            initiateCall()
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -361,64 +386,77 @@ fun DialerScreen(
         }
     }
 
-    // ---------------- SIM BOTTOM SHEET ----------------
+    // ---------------- SIM BOTTOM SHEET (UPDATED) ----------------
     if (showSimSheet) {
         ModalBottomSheet(
             onDismissRequest = { showSimSheet = false },
             sheetState = simSheetState,
-            containerColor = Color(0xFF242424)
+            containerColor = Color(0xFF1E293B), // Dark background matching other screens
+            contentColor = Color.White
         ) {
-            Column(modifier = Modifier.padding(bottom = 32.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
 
                 Text(
-                    "Select SIM",
+                    "Select SIM to Call",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(vertical = 16.dp)
                 )
 
-                // SIM 1
+                // [!code ++] Side-by-side Buttons Logic
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // SIM 1 Button
+                    Button(
+                        onClick = {
                             scope.launch { simSheetState.hide() }.invokeOnCompletion {
                                 showSimSheet = false
-                                onCallClick(phoneNumber, false)
+                                onCallClick(phoneNumber, 0) // Slot 0
                             }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.SimCard, null, tint = Color(0xFF00C853))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text("Personal", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("SIM 1", color = Color.Gray, fontSize = 12.sp)
                     }
-                }
 
-                Divider(color = Color.White.copy(alpha = 0.08f))
-
-                // SIM 2
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
+                    // SIM 2 Button
+                    Button(
+                        onClick = {
                             scope.launch { simSheetState.hide() }.invokeOnCompletion {
                                 showSimSheet = false
-                                onCallClick(phoneNumber, true)
+                                onCallClick(phoneNumber, 1) // Slot 1
                             }
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.SimCard, null, tint = Color(0xFF3B82F6))
-                    Spacer(Modifier.width(16.dp))
-                    Column {
-                        Text("Work", color = Color.White, fontWeight = FontWeight.Bold)
-                        Text("SIM 2", color = Color.Gray, fontSize = 12.sp)
                     }
                 }
             }

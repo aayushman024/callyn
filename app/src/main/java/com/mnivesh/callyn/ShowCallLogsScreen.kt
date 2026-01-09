@@ -55,7 +55,11 @@ fun ShowCallLogsScreen(
 
     // State
     var selectedUser by remember { mutableStateOf("") }
-    var selectedDate by remember { mutableStateOf("") }
+    var selectedDate by remember {
+        val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        mutableStateOf(format.format(Date()))
+    }
+
     var showUserDropdown by remember { mutableStateOf(false) }
 
     // Date Picker Logic

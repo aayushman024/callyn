@@ -1,15 +1,30 @@
 package com.mnivesh.callyn
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
+import android.os.VibrationEffect
+import androidx.annotation.RequiresPermission
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,27 +34,37 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 // --- Theme Constants ---
 private val PersonalGradient = Brush.verticalGradient(
@@ -303,7 +328,7 @@ fun CallDurationTimer(connectTimeMillis: Long, color: Color) {
     }
     Text(
         text = timeText,
-        fontSize = 18.ssp(),
+        fontSize = 14.ssp(),
         fontWeight = FontWeight.SemiBold,
         color = color,
         modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
@@ -350,9 +375,33 @@ private fun CallerInfo(currentState: CallState) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .padding(top = 20.sdp())
+            .padding(top = 18.sdp())
             .verticalScroll(rememberScrollState())
     ) {
+    //call status and duration
+        Surface(
+            color = Color.White.copy(alpha = 0.1f),
+            shape = RoundedCornerShape(50),
+        ) {
+            if (currentState.status.equals("Active", ignoreCase = true) && currentState.connectTimeMillis > 0) {
+                CallDurationTimer(
+                    connectTimeMillis = currentState.connectTimeMillis,
+                    color = TextSecondary
+                )
+            } else {
+                Text(
+                    text = currentState.status.uppercase(),
+                    fontSize = 10.ssp(),
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
+                    //  letterSpacing = 1.5.ssp()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.sdp()))
+
         // 1. Avatar
         Box(
             modifier = Modifier
@@ -423,46 +472,222 @@ private fun CallerInfo(currentState: CallState) {
                 letterSpacing = 1.ssp()
             )
         }
-
-        // 5. Status / Timer
-        Spacer(modifier = Modifier.height(26.sdp()))
-        Surface(
-            color = Color.White.copy(alpha = 0.1f),
-            shape = RoundedCornerShape(50),
-        ) {
-            if (currentState.status.equals("Active", ignoreCase = true) && currentState.connectTimeMillis > 0) {
-                CallDurationTimer(
-                    connectTimeMillis = currentState.connectTimeMillis,
-                    color = TextSecondary
-                )
-            } else {
-                Text(
-                    text = currentState.status.uppercase(),
-                    fontSize = 12.ssp(),
-                    fontWeight = FontWeight.Bold,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
-                  //  letterSpacing = 1.5.ssp()
-                )
-            }
-        }
         Spacer(modifier = Modifier.height(16.sdp()))
+
     }
+}
+
+// -------------------------------------------------------------
+// REPLACED: RingingControls with Swipeable Implementation
+// -------------------------------------------------------------
+@Composable
+private fun RingingControls(onAnswer: () -> Unit, onReject: () -> Unit) {
+    SwipeableCallControl(
+        onSwipeLeft = onReject,
+        onSwipeRight = onAnswer
+    )
 }
 
 @Composable
-private fun RingingControls(onAnswer: () -> Unit, onReject: () -> Unit) {
-    Row(
+private fun SwipeableCallControl(
+    onSwipeLeft: () -> Unit,
+    onSwipeRight: () -> Unit
+) {
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+
+    val vibrator = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = context.getSystemService(android.os.VibratorManager::class.java)
+            manager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as android.os.Vibrator
+        }
+    }
+
+    fun vibrate(ms: Long = 25L) {
+        vibrator?.vibrate(
+            VibrationEffect.createOneShot(
+                ms,
+                VibrationEffect.DEFAULT_AMPLITUDE
+            )
+        )
+    }
+
+    // 1. Defined Sizes
+    val trackHeight = 86.sdp()
+    val thumbSize = 76.sdp()
+
+    // 2. State
+    val offsetX = remember { Animatable(0f) }
+    var trackWidth by remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
+
+    // 3. New Math Calculation
+    val thumbPx = with(density) { thumbSize.toPx() }
+
+    // Calculate the actual physical limit the thumb can move from center
+    val maxTravelDistance = ((trackWidth - thumbPx) / 2).coerceAtLeast(0f)
+
+    // Trigger Threshold: 50% of the actual travel distance
+    val triggerThreshold = if (maxTravelDistance > 0) maxTravelDistance * 0.5f else trackWidth * 0.25f
+
+    val targetColor = when {
+        offsetX.value < -triggerThreshold -> HangupRed.copy(alpha = 0.35f)
+        offsetX.value > triggerThreshold -> AnswerGreen.copy(alpha = 0.35f)
+        else -> Color.White.copy(alpha = 0.10f)
+    }
+
+    val backgroundColor by animateColorAsState(
+        targetValue = targetColor,
+        animationSpec = tween(300),
+        label = "bg"
+    )
+
+    val leftIconAlpha = (1f - (offsetX.value / -triggerThreshold)).coerceIn(0f, 1f)
+    val rightIconAlpha = (1f - (offsetX.value / triggerThreshold)).coerceIn(0f, 1f)
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 48.sdp()),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically
+            .padding(bottom = 52.sdp())
+            .height(trackHeight)
+            .padding(horizontal = 20.sdp())
+            .onSizeChanged { trackWidth = it.width.toFloat() }
+            .clip(RoundedCornerShape(60))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(
+                        HangupRed.copy(alpha = 0.18f),
+                        backgroundColor,
+                        AnswerGreen.copy(alpha = 0.18f)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        CallActionButton(Icons.Default.CallEnd, HangupRed, 72.sdp(), onReject)
-        CallActionButton(Icons.Default.Call, AnswerGreen, 72.sdp(), onAnswer)
+
+        // Static Text Layer
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.sdp()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.alpha(leftIconAlpha)
+            ) {
+                Icon(Icons.Default.CallEnd, null, tint = HangupRed, modifier = Modifier.size(22.sdp()))
+                Spacer(Modifier.width(6.sdp()))
+                Text("Reject", color = HangupRed, fontWeight = FontWeight.Bold, fontSize = 13.ssp())
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.alpha(rightIconAlpha)
+            ) {
+                Text("Accept", color = AnswerGreen, fontWeight = FontWeight.Bold, fontSize = 13.ssp())
+                Spacer(Modifier.width(6.sdp()))
+                Icon(Icons.Default.Call, null, tint = AnswerGreen, modifier = Modifier.size(22.sdp()))
+            }
+        }
+
+        // Draggable Thumb
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .size(thumbSize)
+                .clip(CircleShape)
+                .background(Color.White)
+                .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        scope.launch {
+                            val newOffset = (offsetX.value + delta).coerceIn(-maxTravelDistance, maxTravelDistance)
+                            offsetX.snapTo(newOffset)
+
+                            // Haptic feedback when crossing threshold
+                            if (abs(newOffset) > triggerThreshold * 0.9f && abs(newOffset) < triggerThreshold * 1.1f) {
+                                haptic.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
+                                )
+                            }
+                        }
+                    },
+                    onDragStopped = {
+                        val x = offsetX.value
+
+                        when {
+                            // --- ACCEPT CALL ---
+                            x > triggerThreshold -> {
+                                haptic.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                                )
+                                vibrate(40)
+
+                                // 1. Execute Action IMMEDIATELY
+                                onSwipeRight()
+
+                                // 2. Run Animation in Separate Scope (Non-blocking)
+                                scope.launch {
+                                    offsetX.animateTo(maxTravelDistance, spring(stiffness = Spring.StiffnessLow))
+                                }
+                            }
+
+                            // --- REJECT CALL ---
+                            x < -triggerThreshold -> {
+                                haptic.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress
+                                )
+                                vibrate(40)
+
+                                // 1. Execute Action IMMEDIATELY
+                                onSwipeLeft()
+
+                                // 2. Run Animation in Separate Scope (Non-blocking)
+                                scope.launch {
+                                    offsetX.animateTo(-maxTravelDistance, spring(stiffness = Spring.StiffnessLow))
+                                }
+                            }
+
+                            // --- RESET (Not triggered) ---
+                            else -> {
+                                scope.launch {
+                                    offsetX.animateTo(
+                                        0f,
+                                        spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            val icon = when {
+                offsetX.value < -10f -> Icons.Default.CallEnd
+                offsetX.value > 10f -> Icons.Default.Call
+                else -> Icons.Default.Call
+            }
+
+            val tint = when {
+                offsetX.value < -10f -> HangupRed
+                offsetX.value > 10f -> AnswerGreen
+                else -> Color.Black
+            }
+
+            Icon(icon, null, tint = tint, modifier = Modifier.size(30.sdp()))
+        }
     }
 }
+
+
+
 
 @Composable
 private fun ActiveCallControls(

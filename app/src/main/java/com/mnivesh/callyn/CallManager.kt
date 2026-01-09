@@ -60,7 +60,7 @@ object CallManager {
     private val _callState = MutableStateFlow<CallState?>(null)
     val callState = _callState.asStateFlow()
 
-    // ✅ NEW: Track all calls to handle multi-call logic properly
+    // NEW: Track all calls to handle multi-call logic properly
     private val registeredCalls = mutableListOf<Call>()
 
     private var repository: ContactRepository? = null
@@ -75,7 +75,7 @@ object CallManager {
 
     private fun normalizeNumber(number: String): String {
         val digitsOnly = number.filter { it.isDigit() }
-        return digitsOnly.takeLast(10)
+        return if (digitsOnly.length > 10) digitsOnly.takeLast(10) else digitsOnly
     }
 
     @SuppressLint("MissingPermission")
@@ -84,7 +84,6 @@ object CallManager {
             registeredCalls.add(call)
             registerCallCallback(call)
         }
-        // Instead of blindly updating, we recalculate the whole picture
         recalculateGlobalState()
     }
 
@@ -92,7 +91,7 @@ object CallManager {
     fun onCallRemoved(call: Call) {
         registeredCalls.remove(call)
 
-        // 1. Handle Logging (Existing logic)
+        // 1. Handle Logging
         handleCallLogging(call)
 
         // 2. Update UI
@@ -107,28 +106,20 @@ object CallManager {
     private fun recalculateGlobalState() {
         if (registeredCalls.isEmpty()) return
 
-        // 1. Identify the "Primary" call (Active > Dialing > Ringing > Holding)
-        // If we are in a conference, the conference parent is primary
         val conferenceCall = registeredCalls.find { it.details.hasProperty(Call.Details.PROPERTY_CONFERENCE) }
 
         var primaryCall: Call = conferenceCall
             ?: registeredCalls.find { it.state == Call.STATE_ACTIVE }
             ?: registeredCalls.find { it.state == Call.STATE_DIALING }
-            ?: registeredCalls.find { it.state == Call.STATE_RINGING } // Only if it's the ONLY call
+            ?: registeredCalls.find { it.state == Call.STATE_RINGING }
             ?: registeredCalls.first()
 
-        // 2. Identify "Secondary" call (Waiting or Held)
-        // It's any call that isn't the primary one
         val secondaryCall = registeredCalls.find { it != primaryCall }
 
-        // 3. Determine if we have a "Waiting" call (Ringing while another is Active)
         var waitingCall: Call? = null
         if (primaryCall.state == Call.STATE_ACTIVE || primaryCall.state == Call.STATE_HOLDING) {
             waitingCall = registeredCalls.find { it.state == Call.STATE_RINGING }
         }
-
-        // If we have a waiting call, we stay on the Active call but show the popup info
-        // If we swapped calls, 'primaryCall' is now the new active one.
 
         updateStateForPrimary(primaryCall, waitingCall ?: secondaryCall)
     }
@@ -140,7 +131,6 @@ object CallManager {
 
         val children = primary.children ?: emptyList()
 
-        // Name & Number Resolution
         var displayNumber = ""
         var finalName = ""
 
@@ -153,28 +143,24 @@ object CallManager {
             finalName = displayNumber
         }
 
-        // Check if we need to resolve name
         val currentState = _callState.value
         if (!isConference && displayNumber.isNotEmpty()) {
             if (currentState?.number == displayNumber && currentState.name != displayNumber) {
-                finalName = currentState.name // Keep existing name if already resolved
+                finalName = currentState.name
             } else {
-                resolveContactInfo(displayNumber) // Trigger resolution
+                resolveContactInfo(displayNumber)
             }
         }
 
-        // Status String
         val status = primary.getStateString()
         val isIncoming = (primary.state == Call.STATE_RINGING)
 
-        // Capabilities
         val canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
                 (registeredCalls.size > 1 && registeredCalls.none { it.state == Call.STATE_RINGING })
 
         val canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
                 (registeredCalls.size > 1 && secondary?.state == Call.STATE_HOLDING)
 
-        // Prepare Secondary Info (For Popup)
         var secName: String? = null
         var secNumber: String? = null
         val isSecondRinging = secondary?.state == Call.STATE_RINGING
@@ -182,8 +168,6 @@ object CallManager {
         if (secondary != null) {
             val rawSec = secondary.details.handle?.schemeSpecificPart ?: ""
             secNumber = rawSec
-            // We'll let the UI or a coroutine resolve this name if needed,
-            // for now pass number or existing state name
             secName = if (currentState?.secondCallerNumber == rawSec) currentState.secondCallerName else rawSec
 
             if (isSecondRinging && secName == rawSec) {
@@ -210,8 +194,6 @@ object CallManager {
             familyHead = currentState?.familyHead,
             rshipManager = currentState?.rshipManager,
             connectTimeMillis = details.connectTimeMillis,
-
-            // ✅ Second Call Data
             secondIncomingCall = if (isSecondRinging) secondary else null,
             secondCallerName = secName,
             secondCallerNumber = secNumber
@@ -225,8 +207,6 @@ object CallManager {
     fun acceptCallWaiting() {
         val waiting = _callState.value?.secondIncomingCall ?: return
         waiting.answer(0)
-        // System automatically holds the active call.
-        // Our 'recalculateGlobalState' will catch the state change and update UI.
     }
 
     fun rejectCallWaiting() {
@@ -235,7 +215,6 @@ object CallManager {
     }
 
     fun mergeCalls() {
-        // Try generic merge
         val primary = _callState.value?.call ?: return
         val secondary = registeredCalls.find { it != primary }
 
@@ -247,14 +226,12 @@ object CallManager {
     }
 
     fun swapCalls() {
-        // Robust Swap: If generic fails, do manual hold/unhold
         val primary = _callState.value?.call ?: return
         val secondary = registeredCalls.find { it != primary } ?: return
 
         if (primary.details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE != 0) {
             primary.swapConference()
         } else {
-            // Manual Swap
             if (primary.state == Call.STATE_ACTIVE) {
                 primary.hold()
                 secondary.unhold()
@@ -270,6 +247,10 @@ object CallManager {
     private fun resolveSecondaryContactInfo(number: String) {
         if (number.isBlank()) return
         val normalized = normalizeNumber(number)
+
+        // [!code ++] Check length to prevent short code mismatches
+        if (normalized.length < 7) return
+
         coroutineScope.launch {
             var name = findPersonalContactName(normalized)
             if (name == null) {
@@ -285,10 +266,10 @@ object CallManager {
         }
     }
 
-    // ... (resolveContactInfo for primary call remains unchanged from previous) ...
     private fun resolveContactInfo(number: String) {
         if (number.isBlank()) return
         val normalized = normalizeNumber(number)
+
         coroutineScope.launch {
             val personalName = findPersonalContactName(normalized)
             if (personalName != null) {
@@ -296,7 +277,8 @@ object CallManager {
                     _callState.value = _callState.value?.copy(name = personalName, type = "personal")
                 }
             } else {
-                if (normalized.length > 9) {
+                // [!code ++] IMPORTANT: Ensure number is long enough before DB lookup
+                if (normalized.length > 6) { // Changed from 9 to >6 to cover landlines, but filter short codes
                     val workContact = repository?.findWorkContactByNumber(normalized)
                     if (workContact != null) {
                         if (_callState.value?.number == number) {
@@ -314,23 +296,25 @@ object CallManager {
         }
     }
 
-    // --- Logging & Deletion (Preserved) ---
+    // --- Logging & Deletion ---
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun handleCallLogging(call: Call) {
-        val lastState = _callState.value ?: return // Only log if we had a state
-        // Use the call details directly, as lastState might be pointing to the OTHER call
+        val lastState = _callState.value ?: return
         val rawNumber = call.details.handle?.schemeSpecificPart ?: ""
 
         coroutineScope.launch {
-            // Re-check work status for safety
             var isWork = false
             var name = ""
+
             if (rawNumber.isNotEmpty()) {
                 val normalized = normalizeNumber(rawNumber)
-                val workContact = repository?.findWorkContactByNumber(normalized)
-                if (workContact != null) {
-                    isWork = true
-                    name = workContact.name
+                // [!code ++] Strict length check here too
+                if (normalized.length > 6) {
+                    val workContact = repository?.findWorkContactByNumber(normalized)
+                    if (workContact != null) {
+                        isWork = true
+                        name = workContact.name
+                    }
                 }
             }
 
@@ -360,7 +344,6 @@ object CallManager {
                     )
                 )
 
-                // [!code ++] Check department before deleting logs
                 val context = appContext
                 val department = if (context != null) AuthManager(context).getDepartment() else null
 
@@ -368,7 +351,6 @@ object CallManager {
                     setupLogDeletionObserver(rawNumber)
                 }
 
-                // Sync
                 if (appContext != null) {
                     val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadWorker>()
                         .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -379,7 +361,7 @@ object CallManager {
         }
     }
 
-    // --- Boilerplate (Callbacks, Audio, etc - Unchanged) ---
+    // --- Boilerplate (Unchanged) ---
     private fun registerCallCallback(call: Call) {
         call.registerCallback(object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) { recalculateGlobalState() }
