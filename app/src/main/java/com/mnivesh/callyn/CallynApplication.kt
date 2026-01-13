@@ -7,7 +7,6 @@ import com.mnivesh.callyn.db.ContactDatabase
 
 class CallynApplication : Application() {
 
-    // Easiest Approach: Hardcoded secure key
     private val passphrase = "8KqF*Z9!b@E#H&MbQeThWmadag4eadc!zC&F)J@NcRfUjXn2r5u8x/A?D*G-KaPdSs".toByteArray()
 
     private val database by lazy {

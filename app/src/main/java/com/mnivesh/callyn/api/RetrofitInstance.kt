@@ -7,6 +7,7 @@ object RetrofitInstance {
 
     // !! IMPORTANT !!
     private const val BASE_URL = "https://callyn-backend-avh8cae5dpdnckg8.centralindia-01.azurewebsites.net/"
+   // private const val BASE_URL = "http://localhost:5000/"
 
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()

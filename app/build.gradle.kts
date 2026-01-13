@@ -85,7 +85,7 @@ dependencies {
 
     // Icons
     implementation(libs.androidx.compose.material.icons.extended)
-
+    implementation(libs.lottie.compose)
     // --- THIS IS THE FIX (Incorrect aliases) ---
     // Networking
     implementation(libs.retrofit)

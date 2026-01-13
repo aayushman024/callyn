@@ -1,9 +1,10 @@
 package com.mnivesh.callyn
-//after conflict push
+
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.role.RoleManager
 import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -11,7 +12,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.CallLog
-import android.provider.Settings // [!code ++] Added missing import
+import android.provider.ContactsContract
+import android.provider.Settings
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.SubscriptionManager
@@ -19,52 +21,25 @@ import android.util.Log
 import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.Dialpad
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Warning // [!code ++] Added missing import
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card // [!code ++] Fixed import (was Wear Card)
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -89,16 +64,26 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieCompositionSpec
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.compose.rememberLottieComposition
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.VersionResponse
 import com.mnivesh.callyn.api.version
+import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.ui.UpdateDialog
 import com.mnivesh.callyn.ui.ZohoLoginScreen
 import com.mnivesh.callyn.ui.theme.CallynTheme
 import com.mnivesh.callyn.utils.VersionManager
 import com.mnivesh.callyn.workers.SyncUserDetailsWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 private const val TAG = "MainActivity"
@@ -114,6 +99,12 @@ sealed class MainActivityUiState {
     object Loading : MainActivityUiState()
     object LoggedOut : MainActivityUiState()
     data class LoggedIn(val userName: String) : MainActivityUiState()
+    data class Preparing(val userName: String) : MainActivityUiState()
+    data class ResolvingConflicts(
+        val userName: String,
+        val conflicts: List<DeviceContact>,
+        val workContacts: List<AppContact> // Added workContacts to state
+    ) : MainActivityUiState()
 }
 
 class MainActivity : ComponentActivity() {
@@ -147,6 +138,14 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) {
         Log.d(TAG, "Dialer callback received.")
+    }
+
+    // Launcher for Conflict Resolution (Write Contacts)
+    private val writeContactPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            // Just toast, user will press button again
+            Toast.makeText(this, "Permission granted. Tap Continue again.", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -185,6 +184,32 @@ class MainActivity : ComponentActivity() {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 CircularProgressIndicator()
                             }
+                        }
+
+                        is MainActivityUiState.Preparing -> {
+                            LoadingDetailsScreen(
+                                userName = state.userName,
+                                onFinished = {
+                                    uiState = MainActivityUiState.LoggedIn(state.userName)
+                                },
+                                onConflictsFound = { conflicts, workContacts ->
+                                    uiState = MainActivityUiState.ResolvingConflicts(state.userName, conflicts, workContacts)
+                                }
+                            )
+                        }
+
+                        is MainActivityUiState.ResolvingConflicts -> {
+                            ConflictResolutionScreen(
+                                initialConflicts = state.conflicts,
+                                workContacts = state.workContacts,
+                                userName = state.userName,
+                                onFinished = {
+                                    uiState = MainActivityUiState.LoggedIn(state.userName)
+                                },
+                                onDeletePermissionRequest = {
+                                    writeContactPermissionLauncher.launch(Manifest.permission.WRITE_CONTACTS)
+                                }
+                            )
                         }
 
                         is MainActivityUiState.LoggedIn -> {
@@ -289,19 +314,14 @@ class MainActivity : ComponentActivity() {
 
 
     internal fun syncDeviceDetails() {
-        // 1. Define constraints (run only when internet is available)
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        // 2. Create the work request
         val syncRequest = OneTimeWorkRequestBuilder<SyncUserDetailsWorker>()
             .setConstraints(constraints)
             .build()
 
-        // 3. Enqueue Unique Work
-        // "KEEP" means: If a sync is already running or queued, don't start a new one.
-        // This prevents spamming the API on screen rotations.
         WorkManager.getInstance(this).enqueueUniqueWork(
             "SyncUserDetailsWork",
             ExistingWorkPolicy.KEEP,
@@ -340,18 +360,16 @@ class MainActivity : ComponentActivity() {
                 if (department != null) {
                     authManager.saveDepartment(department)
                     authManager.saveUserEmail(email)
-                    Log.d(TAG, "Department saved from deep link: $department")
-                    Log.d(TAG, "Email saved from deep link: $email")
                 }
 
-                fetchUserName("Bearer $token")
+                fetchUserName("Bearer $token", isFreshLogin = true)
                 return true
             }
         }
         return false
     }
 
-    private fun fetchUserName(token: String) {
+    private fun fetchUserName(token: String, isFreshLogin: Boolean = false) {
         lifecycleScope.launch {
             uiState = MainActivityUiState.Loading
             try {
@@ -359,7 +377,11 @@ class MainActivity : ComponentActivity() {
                 if (response.isSuccessful && response.body() != null) {
                     val name = response.body()!!.name
                     authManager.saveUserName(name)
-                    uiState = MainActivityUiState.LoggedIn(name)
+                    if (isFreshLogin) {
+                        uiState = MainActivityUiState.Preparing(name)
+                    } else {
+                        uiState = MainActivityUiState.LoggedIn(name)
+                    }
                 } else {
                     authManager.logout()
                     uiState = MainActivityUiState.LoggedOut
@@ -399,25 +421,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // --- UPDATED: Offer Call Screening Role + Dialer Role ---
     fun offerDefaultDialer() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
 
-            // 1. Default Dialer
             if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER) && !isDefaultDialer()) {
                 val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
                 defaultDialerLauncher.launch(intent)
             }
 
-            // 2. Call Screening (Required for blocking system logs effectively)
             val roleScreening = RoleManager.ROLE_CALL_SCREENING
             if (roleManager.isRoleAvailable(roleScreening) && !roleManager.isRoleHeld(roleScreening)) {
                 val intent = roleManager.createRequestRoleIntent(roleScreening)
                 defaultDialerLauncher.launch(intent)
             }
         } else {
-            // Pre-Android 10
             if (!isDefaultDialer()) {
                 try {
                     val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
@@ -474,7 +492,6 @@ class MainActivity : ComponentActivity() {
     // --- LOGIC: Smart Dialing (Sim 1 vs Sim 2) ---
 
     @SuppressLint("MissingPermission")
-//    fun dialSmart(number: String, isWorkCall: Boolean) {
     fun dialSmart(number: String, specificSlot: Int?) {
         if (!isDefaultDialer()) {
             offerDefaultDialer(); return
@@ -499,22 +516,14 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-//            val targetSlotIndex = if (isWorkCall) 1 else 0
-//            val selectedSim = activeSims.find { it.simSlotIndex == targetSlotIndex }
-//                ?: activeSims.first()
-
             val selectedSim = if (specificSlot != null) {
                 activeSims.find { it.simSlotIndex == specificSlot } ?: activeSims.first()
             } else {
-                // If no slot specified (single sim device or simple call), use default
                 activeSims.first()
             }
 
             val simName = selectedSim.displayName ?: "SIM ${selectedSim.simSlotIndex + 1}"
-//            val type = if (isWorkCall) "Work" else "Personal"
-//            Toast.makeText(this, "Dialing $type call via $simName", Toast.LENGTH_SHORT).show()
-
-            Toast.makeText(this, "Dialing via $simName", Toast.LENGTH_SHORT).show() // [!code ++]
+            Toast.makeText(this, "Dialing via $simName", Toast.LENGTH_SHORT).show()
 
             val uri = Uri.fromParts("tel", numberToDial, null)
             val intent = Intent(Intent.ACTION_CALL, uri)
@@ -540,14 +549,482 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- COMPOSABLE HELPERS ---
+// --- LOADING SCREEN WITH CONFLICT CHECK ---
+
+@Composable
+fun LoadingDetailsScreen(
+    userName: String,
+    onFinished: () -> Unit,
+    onConflictsFound: (List<DeviceContact>, List<AppContact>) -> Unit
+) {
+    val context = LocalContext.current
+    val app = context.applicationContext as CallynApplication
+
+    // [!code ++] Initialize AuthManager to get department
+    val authManager = remember { AuthManager(context) }
+
+    val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.loading))
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = LottieConstants.IterateForever
+    )
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        // [!code ++] Get the department
+        val department = authManager.getDepartment()
+
+        // 1. Check/Ask Permissions (Only if NOT Management/IT, otherwise we don't strictly need it yet)
+        if (department != "Management" && department != "IT Desk") {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_PHONE_STATE))
+                delay(3000)
+            }
+        }
+
+        val token = authManager.getToken()
+        if (token != null) {
+            val minDelay = async { delay(3000) }
+            val syncData = async(Dispatchers.IO) {
+                app.repository.syncInitialData(token, userName)
+            }
+            minDelay.await()
+            syncData.await()
+
+            // 3. Perform Conflict Check - ONLY if NOT Management or IT Desk
+            // [!code change] Added the department check here
+            if (department != "Management" && department != "IT Desk") {
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                    val workContacts = withContext(Dispatchers.IO) { app.repository.allContacts.first() }
+                    val deviceContacts = loadDeviceContacts(context)
+                    val conflicts = findConflicts(deviceContacts, workContacts)
+
+                    if (conflicts.isNotEmpty()) {
+                        onConflictsFound(conflicts, workContacts)
+                        return@LaunchedEffect
+                    }
+                }
+            }
+        }
+        onFinished()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(ComposeColor(0xFF1E293B), ComposeColor(0xFF0F172A)))),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        LottieAnimation(
+            composition = composition,
+            progress = { progress },
+            modifier = Modifier.size(200.dp)
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Loading your details...",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = ComposeColor.White
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Please wait while we set things up.",
+            fontSize = 14.sp,
+            color = ComposeColor.White.copy(alpha = 0.6f)
+        )
+    }
+}
+
+// --- CONFLICT RESOLUTION SCREEN ---
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ConflictResolutionScreen(
+    initialConflicts: List<DeviceContact>,
+    workContacts: List<AppContact>,
+    userName: String,
+    onFinished: () -> Unit,
+    onDeletePermissionRequest: () -> Unit
+) {
+    val context = LocalContext.current
+    val app = context.applicationContext as CallynApplication
+    val authManager = remember { AuthManager(context) }
+    val scope = rememberCoroutineScope()
+
+    // 1. FAILSAFE: Ensure we have a valid user name
+    val effectiveUserName = remember { authManager.getUserName() ?: "" }
+
+    var conflicts by remember { mutableStateOf(initialConflicts) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isDeleting by remember { mutableStateOf(false) }
+
+    // Track which IDs have successfully sent requests
+    val sentRequestIds = remember { mutableStateListOf<String>() }
+
+    // Dialog States
+    var showRequestDialog by remember { mutableStateOf(false) }
+    var contactNameForRequest by remember { mutableStateOf<String?>(null) }
+    var contactIdForRequest by remember { mutableStateOf<String?>(null) }
+    var requestReason by remember { mutableStateOf("") }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    val writePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) showDeleteConfirm = true
+        else Toast.makeText(context, "Permission needed to clear conflicts", Toast.LENGTH_SHORT).show()
+    }
+
+    val filteredConflicts = remember(searchQuery, conflicts) {
+        if (searchQuery.isBlank()) conflicts
+        else conflicts.filter {
+            it.name.contains(searchQuery, true) ||
+                    it.numbers.any { n -> n.number.contains(searchQuery) }
+        }
+    }
+
+    Scaffold(
+        containerColor = ComposeColor(0xFF0F172A),
+        topBar = {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .background(ComposeColor(0xFF0F172A))
+                .systemBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 26.dp)
+            ) {
+                Text("Resolve Conflicts", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "We found ${conflicts.size} contacts that are already assigned by your company. Please delete the duplicates from your device.",
+                    fontSize = 14.sp,
+                    color = ComposeColor.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
+                    placeholder = { Text("Search conflicts...", color = ComposeColor.White.copy(alpha = 0.5f)) },
+                    leadingIcon = { Icon(Icons.Default.Search, "Search", tint = ComposeColor.White.copy(alpha = 0.6f)) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = ComposeColor.White.copy(alpha = 0.6f)) }
+                        }
+                    },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedTextColor = ComposeColor.White, unfocusedTextColor = ComposeColor.White,
+                        focusedContainerColor = ComposeColor.White.copy(alpha = 0.1f),
+                        unfocusedContainerColor = ComposeColor.White.copy(alpha = 0.08f),
+                        focusedIndicatorColor = ComposeColor.Transparent, unfocusedIndicatorColor = ComposeColor.Transparent,
+                        cursorColor = ComposeColor.White
+                    )
+                )
+            }
+        },
+        bottomBar = {
+            Column(modifier = Modifier.background(ComposeColor(0xFF0F172A)).padding(24.dp)) {
+                Button(
+                    onClick = {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                            showDeleteConfirm = true
+                        } else {
+                            writePermissionLauncher.launch(Manifest.permission.WRITE_CONTACTS)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFFEF4444))
+                ) {
+                    if (isDeleting) CircularProgressIndicator(color = ComposeColor.White, modifier = Modifier.size(24.dp))
+                    else Text("Delete All (${conflicts.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.padding(padding).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+        ) {
+            items(filteredConflicts) { contact ->
+                ModernConflictItem(
+                    contact = contact,
+                    isRequestSent = sentRequestIds.contains(contact.id),
+                    onRequestClick = {
+                        // Work Match Logic
+                        val workMatch = workContacts.firstOrNull { work ->
+                            contact.numbers.any { numObj -> sanitizePhoneNumber(work.number) == sanitizePhoneNumber(numObj.number) }
+                        }
+
+                        contactNameForRequest = workMatch?.name ?: contact.name
+                        contactIdForRequest = contact.id
+                        showRequestDialog = true
+                    }
+                )
+            }
+            if (filteredConflicts.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                        Text("No conflicts found", color = ComposeColor.White.copy(alpha = 0.5f))
+                    }
+                }
+            }
+        }
+
+        if (showDeleteConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                containerColor = ComposeColor(0xFF1E293B),
+                title = { Text("Confirm Deletion", color = ComposeColor.White, fontWeight = FontWeight.Bold) },
+                text = { Text("Are you sure you want to delete these ${conflicts.size} contacts? This ensures your Work contacts are synced correctly.", color = ComposeColor.White.copy(alpha = 0.8f)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirm = false
+                            isDeleting = true
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    conflicts.forEach { contact ->
+                                        val uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contact.id)
+                                        context.contentResolver.delete(uri, null, null)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Cleaned up contacts", Toast.LENGTH_SHORT).show()
+                                        onFinished()
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) { isDeleting = false }
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFFEF4444))
+                    ) { Text("Delete", fontWeight = FontWeight.Bold) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel", color = ComposeColor.White.copy(alpha = 0.6f)) }
+                }
+            )
+        }
+
+        if (showRequestDialog) {
+            AlertDialog(
+                onDismissRequest = { showRequestDialog = false },
+                containerColor = ComposeColor(0xFF1E293B),
+                title = { Text("Mark as Personal", color = ComposeColor.White, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text(
+                            "Why should ${contactNameForRequest ?: "this contact"} remain on your device as Personal?",
+                            color = ComposeColor.White.copy(alpha = 0.8f),
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                        OutlinedTextField(
+                            value = requestReason,
+                            onValueChange = { requestReason = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("Reason (e.g. Relative, Friend)", color = ComposeColor.Gray) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = ComposeColor(0xFF3B82F6),
+                                unfocusedBorderColor = ComposeColor.White.copy(alpha = 0.2f),
+                                focusedTextColor = ComposeColor.White,
+                                unfocusedTextColor = ComposeColor.White,
+                                cursorColor = ComposeColor(0xFF3B82F6),
+                                focusedContainerColor = ComposeColor.White.copy(alpha = 0.05f),
+                                unfocusedContainerColor = ComposeColor.White.copy(alpha = 0.05f)
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            minLines = 3,
+                            maxLines = 5
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val reasonToSend = requestReason
+                            val contactToSend = contactNameForRequest
+                            val idToSend = contactIdForRequest
+                            val token = authManager.getToken()
+
+                            if (reasonToSend.isNotBlank() && contactToSend != null && token != null && effectiveUserName.isNotBlank()) {
+                                scope.launch(Dispatchers.IO) {
+                                    val success = app.repository.submitPersonalRequest(
+                                        token = token,
+                                        contactName = contactToSend,
+                                        userName = effectiveUserName,
+                                        reason = reasonToSend
+                                    )
+                                    withContext(Dispatchers.Main) {
+                                        if (success && idToSend != null) {
+                                            sentRequestIds.add(idToSend)
+                                            Toast.makeText(context, "Request Submitted", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed to submit request", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                                showRequestDialog = false
+                                requestReason = ""
+                            } else {
+                                Toast.makeText(context, "Please enter a reason", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
+                    ) { Text("Submit") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showRequestDialog = false }) { Text("Cancel", color = ComposeColor.White.copy(alpha = 0.6f)) }
+                }
+            )
+        }
+    }
+}
+
+// --- HELPER FUNCTIONS ---
+
+suspend fun loadDeviceContacts(context: Context): List<DeviceContact> = withContext(Dispatchers.IO) {
+    val contactsMap = mutableMapOf<String, DeviceContact>()
+    val cursor = context.contentResolver.query(
+        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+        arrayOf(
+            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.STARRED,
+            ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY
+        ),
+        null, null, null
+    )
+
+    cursor?.use {
+        val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+        val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+        val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+        val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED)
+        val defaultIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
+
+        while (it.moveToNext()) {
+            val id = it.getString(idIndex)
+            val name = it.getString(nameIndex) ?: "Unknown"
+            val rawNumber = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
+            val isStarred = it.getInt(starredIndex) == 1
+            val isDefault = it.getInt(defaultIndex) > 0
+
+            if (rawNumber.isNotEmpty()) {
+                val numberObj = DeviceNumber(rawNumber, isDefault)
+                if (contactsMap.containsKey(id)) {
+                    val existing = contactsMap[id]!!
+                    if (existing.numbers.none { n -> n.number == rawNumber }) {
+                        contactsMap[id] = existing.copy(numbers = existing.numbers + numberObj)
+                    }
+                } else {
+                    contactsMap[id] = DeviceContact(id, name, listOf(numberObj), isStarred)
+                }
+            }
+        }
+    }
+    contactsMap.values.toList()
+}
+
+fun findConflicts(deviceContacts: List<DeviceContact>, workContacts: List<com.mnivesh.callyn.db.AppContact>): List<DeviceContact> {
+    return deviceContacts.filter { device ->
+        device.numbers.any { numObj ->
+            val deviceNum = sanitizePhoneNumber(numObj.number)
+            if (deviceNum.length < 5) false
+            else workContacts.any { work -> sanitizePhoneNumber(work.number) == deviceNum }
+        }
+    }
+}
+
+private fun sanitizePhoneNumber(number: String): String {
+    val digits = number.filter { it.isDigit() }
+    return if (digits.length > 10) digits.takeLast(10) else digits
+}
+
+@Composable
+fun ModernConflictItem(
+    contact: DeviceContact,
+    isRequestSent: Boolean,
+    onRequestClick: () -> Unit
+) {
+    val palette = listOf(
+        ComposeColor(0xFF6366F1), ComposeColor(0xFFEC4899), ComposeColor(0xFF8B5CF6),
+        ComposeColor(0xFF10B981), ComposeColor(0xFFF59E0B), ComposeColor(0xFFEF4444),
+        ComposeColor(0xFF3B82F6), ComposeColor(0xFF14B8A6), ComposeColor(0xFFF97316)
+    )
+    val avatarColor = palette[kotlin.math.abs(contact.name.hashCode()) % palette.size]
+
+    val initials = contact.name.split(" ")
+        .mapNotNull { word -> word.firstOrNull { it.isLetter() }?.uppercaseChar() }
+        .take(2)
+        .joinToString("")
+        .ifEmpty { contact.name.firstOrNull { it.isLetter() }?.uppercase() ?: "" }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = ComposeColor.White.copy(alpha = 0.08f))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(initials, color = ComposeColor.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(contact.name, color = ComposeColor.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text(
+                    contact.numbers.firstOrNull()?.number ?: "",
+                    color = ComposeColor.White.copy(alpha = 0.6f),
+                    fontSize = 13.sp
+                )
+            }
+
+            if (isRequestSent) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Sent",
+                    tint = ComposeColor(0xFF10B981),
+                    modifier = Modifier.size(28.dp).padding(end = 8.dp)
+                )
+            } else {
+                OutlinedButton(
+                    onClick = onRequestClick,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFF60A5FA)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ComposeColor(0xFF60A5FA)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text("Mark Personal", fontSize = 11.sp)
+                }
+            }
+        }
+    }
+}
+
+// --- COMPOSABLE HELPERS (MainScreenWithDialerLogic, etc.) ---
 
 @Composable
 fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Unit) {
-
-//    androidx.compose.runtime.LaunchedEffect(Unit) {
-//        syncDeviceDetails()
-//    }
 
     var hasAllPermissions by remember { mutableStateOf(checkAllPermissions()) }
     var isDefaultDialer by remember { mutableStateOf(isDefaultDialer()) }
@@ -578,8 +1055,7 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
         missedCallCount = missedCallCount,
         onRequestPermissions = { requestPermissions() },
         onRequestDefaultDialer = { offerDefaultDialer() },
-//        onSmartDial = { number, slot -> this.dialSmart(number, slot) }, // [!code ++]
-        onSmartDial = { number, slot -> this.dialSmart(number, slot) }, // [!code ++]
+        onSmartDial = { number, slot -> this.dialSmart(number, slot) },
         onResetMissedCount = {
             missedCallCount = 0
             markMissedCallsAsRead()
@@ -606,7 +1082,6 @@ fun MainScreen(
     missedCallCount: Int,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
-//    onSmartDial: (String, Boolean) -> Unit,
     onSmartDial: (String, Int?) -> Unit,
     onResetMissedCount: () -> Unit,
     onLogout: () -> Unit
@@ -636,8 +1111,7 @@ fun MainScreen(
 @Composable
 fun MainScreenContent(
     userName: String,
-//    onSmartDial: (String, Boolean) -> Unit,
-    onSmartDial: (String, Int?) -> Unit, // [!code ++]
+    onSmartDial: (String, Int?) -> Unit,
     onLogout: () -> Unit,
     missedCallCount: Int,
     onResetMissedCount: () -> Unit
@@ -658,16 +1132,12 @@ fun MainScreenContent(
         ) {
             composable(Screen.Recents.route) {
                 RecentCallsScreen(
-//           onCallClick = { num, isWork -> onSmartDial(num, isWork) },
-                    onCallClick = { num, slot -> onSmartDial(num, slot) }, // [!code ++] Temporary fix for recents
+                    onCallClick = { num, slot -> onSmartDial(num, slot) },
                     onScreenEntry = onResetMissedCount
                 )
             }
             composable(Screen.Contacts.route) {
                 ContactsScreen(
-//                    onContactClick = { number, isWorkCall ->
-//                        onSmartDial(number, isWorkCall)
-//                    },
                     onContactClick = { number, slot -> onSmartDial(number, slot) },
                     onLogout = onLogout,
                     onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
@@ -677,7 +1147,7 @@ fun MainScreenContent(
             }
             composable(Screen.Dialer.route) {
                 DialerScreen(
-                    onCallClick = { num, slot -> onSmartDial(num, slot) }, // [!code ++] Temporary fix for dialer
+                    onCallClick = { num, slot -> onSmartDial(num, slot) },
                 )
             }
             composable(Screen.Requests.route) {
@@ -795,7 +1265,6 @@ private fun SetupScreen(
             Spacer(modifier = Modifier.height(32.dp))
 
             if (!isDefaultDialer) {
-                // 1. Main Action Card
                 SetupCard(
                     "Set as Default",
                     "Required to make and receive calls.",
@@ -803,13 +1272,12 @@ private fun SetupScreen(
                     onRequestDefaultDialer
                 )
 
-                // 2. Android 13+ Restricted Settings Warning Box
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFFF59E0B).copy(alpha = 0.15f)), // Orange/Warning Tint
+                        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFFF59E0B).copy(alpha = 0.15f)),
                         shape = RoundedCornerShape(16.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFFF59E0B).copy(alpha = 0.5f))
                     ) {

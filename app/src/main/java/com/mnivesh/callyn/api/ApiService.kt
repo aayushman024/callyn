@@ -1,5 +1,6 @@
 package com.mnivesh.callyn.api
 
+import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -76,8 +77,13 @@ data class CallLogListResponse(
 
 //request as personal contact
 data class PersonalRequestData(
+    @SerializedName("requestedContact")
     val requestedContact: String,
-    val requestedBy: String, // The logged-in user's name
+
+    @SerializedName("requestedBy")
+    val requestedBy: String,
+
+    @SerializedName("reason")
     val reason: String
 )
 
@@ -129,36 +135,29 @@ data class UserDetailsResponse(
 // --- API SERVICE INTERFACE ---
 
 interface ApiService {
-    /**
-     * Calls your backend to get the Zoho OAuth URL.
-     */
+
+     // Calls your backend to get the Zoho OAuth URL.
+
     @GET("auth/zoho")
     suspend fun getZohoAuthUrl(): Response<AuthResponse>
 
-    /**
-     * Handles the callback from Zoho, exchanging the code for a token.
-     */
+    //Handles the callback from Zoho, exchanging the code for a token.
     @GET("auth/callback")
     suspend fun handleCallback(@Query("code") code: String): Response<LoginResponse>
 
-    /**
-     * Calls your backend to get the logged-in user's name.
-     */
+    //Calls your backend to get the logged-in user's name.
     @GET("auth/me")
     suspend fun getMe(@Header("Authorization") token: String): Response<UserResponse>
 
-    /**
-     * Calls your backend to get the contacts for a specific manager.
-     */
+     //Calls your backend to get the contacts for a specific manager.
     @GET("getLegacyData")
     suspend fun getContacts(
         @Header("Authorization") token: String,
         @Query("manager") managerName: String
     ): Response<List<ContactResponse>>
 
-    /**
-     * Uploads a call log to the backend.
-     */
+
+     // Uploads a call log to the backend.
     @POST("uploadCallLog")
     suspend fun uploadCallLog(
         @Header("Authorization") token: String,

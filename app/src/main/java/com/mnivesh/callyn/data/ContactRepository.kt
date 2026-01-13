@@ -12,6 +12,7 @@ import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.db.WorkCallLogDao
 import kotlinx.coroutines.flow.Flow
 import java.net.UnknownHostException
+import java.time.Instant
 
 class ContactRepository(
     private val contactDao: ContactDao,
@@ -56,6 +57,48 @@ class ContactRepository(
         }
     }
 
+    suspend fun syncInitialData(token: String, managerName: String) {
+        try {
+            // 1. Refresh Contacts (Pre-load)
+            refreshContacts(token, managerName)
+
+            // 2. Fetch Call Logs from API
+            val response = apiService.getCallLogs("Bearer $token", null, managerName)
+
+            if (response.isSuccessful && response.body() != null) {
+                val logs = response.body()!!.data
+
+                // 3. Map and Insert Logs
+                logs.forEach { log ->
+                    // Find contact to get number
+                    val contact = contactDao.getContactByName(log.callerName)
+                    if (contact != null) {
+                        // Parse Timestamp (API returns ISO string, DB needs Long)
+                        val timestampLong = try {
+                            Instant.parse(log.timestamp).toEpochMilli()
+                        } catch (e: Exception) {
+                            System.currentTimeMillis()
+                        }
+
+                        val workLog = WorkCallLog(
+                            name = log.callerName,
+                            number = contact.number, // Mapped from DB
+                            duration = log.duration,
+                            timestamp = timestampLong,
+                            type = "work",
+                            direction = log.type, // "incoming", "outgoing", "missed"
+                            isSynced = true // Fetched from server, so it is synced
+                        )
+                        workCallLogDao.insert(workLog)
+                    }
+                }
+                Log.d(TAG, "Initial data sync completed successfully.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to sync initial data", e)
+        }
+    }
+
     suspend fun findWorkContactByNumber(normalizedNumber: String): AppContact? {
         return contactDao.getContactByNumber(normalizedNumber)
     }
@@ -78,6 +121,8 @@ class ContactRepository(
     }
 
     // --- NEW FUNCTION: Request Personal Contact ---
+    // Inside com.mnivesh.callyn.data.ContactRepository
+
     suspend fun submitPersonalRequest(token: String, contactName: String, userName: String, reason: String): Boolean {
         return try {
             val requestBody = PersonalRequestData(
@@ -85,14 +130,16 @@ class ContactRepository(
                 requestedBy = userName,
                 reason = reason
             )
-            // Call the API endpoint
+
             val response = apiService.requestAsPersonal("Bearer $token", requestBody)
 
             if (response.isSuccessful) {
                 Log.d(TAG, "Personal request submitted successfully.")
                 true
             } else {
-                Log.e(TAG, "Personal request failed: ${response.code()}")
+                // --- UPDATED LOGGING HERE ---
+                val errorMsg = response.errorBody()?.string()
+                Log.e(TAG, "Personal request failed: ${response.code()} - Body: $errorMsg")
                 false
             }
         } catch (e: Exception) {
