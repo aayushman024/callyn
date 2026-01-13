@@ -7,7 +7,7 @@ import androidx.work.WorkerParameters
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.CallLogRequest
 
-class UploadWorker(
+class UploadCallLogWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
@@ -41,7 +41,9 @@ class UploadWorker(
                     rshipManagerName = rmName,
                     type = log.direction,
                     timestamp = log.timestamp,
-                    duration = log.duration
+                    duration = log.duration,
+                    simSlot = log.simSlot,
+                    isWork = true
                 )
 
                 val response = RetrofitInstance.api.uploadCallLog("Bearer $token", request)

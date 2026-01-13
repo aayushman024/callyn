@@ -12,8 +12,7 @@ data class WorkCallLog(
     val timestamp: Long,
     val type: String,          // "work"
     //val recordingPath: String? = null,
-
-    // --- NEW FIELDS ---
     val direction: String = "", // "incoming" or "outgoing"
+    val simSlot: String? = null,
     val isSynced: Boolean = false       // true = uploaded
 )

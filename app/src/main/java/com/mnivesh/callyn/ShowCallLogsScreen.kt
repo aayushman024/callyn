@@ -1,6 +1,7 @@
 package com.mnivesh.callyn
 
 import android.app.DatePickerDialog
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,10 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -39,9 +40,14 @@ val PrimaryColor = Color(0xFF3B82F6)
 val SuccessColor = Color(0xFF10B981)
 val ErrorColor = Color(0xFFEF4444)
 val SubtextColor = Color(0xFF94A3B8)
-// New colors for RM Pill
-val RolePillBg = Color(0xFF6366F1).copy(alpha = 0.2f) // Indigo with opacity
-val RolePillText = Color(0xFFC7D2FE) // Light Indigo
+
+// RM Pill Colors
+val RolePillBg = Color(0xFF6366F1).copy(alpha = 0.2f)
+val RolePillText = Color(0xFFC7D2FE)
+
+// Personal Card Colors (Subtle)
+val PersonalSubtleBg = Color(0xFF132522)
+val PersonalBorder = Color(0xFF10B981)
 
 // 1. MAIN SCREEN (Stateful)
 @Composable
@@ -123,8 +129,12 @@ fun CallLogsContent(
     // 2. Filter Logic
     val filteredLogs = remember(uiState, selectedTypeFilter) {
         if (uiState is CallLogsUiState.Success) {
-            if (selectedTypeFilter == "All") uiState.logs
-            else uiState.logs.filter { it.type.equals(selectedTypeFilter, ignoreCase = true) }
+            when (selectedTypeFilter) {
+                "All" -> uiState.logs
+                // isWork == false is strictly Personal. Null or True is Work.
+                "Personal" -> uiState.logs.filter { it.isWork == false }
+                else -> uiState.logs.filter { it.type.equals(selectedTypeFilter, ignoreCase = true) }
+            }
         } else emptyList()
     }
 
@@ -150,7 +160,7 @@ fun CallLogsContent(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 100.dp) // Nav bar padding
+            contentPadding = PaddingValues(bottom = 100.dp)
         ) {
             // Section 1: Main Search Filters
             item {
@@ -168,7 +178,7 @@ fun CallLogsContent(
                 )
             }
 
-            // Section 2: Quick Type Filters (Visible only when we have results or success state)
+            // Section 2: Quick Type Filters (Icon Only)
             if (uiState is CallLogsUiState.Success) {
                 item {
                     QuickFilterRow(
@@ -189,7 +199,7 @@ fun CallLogsContent(
                 is CallLogsUiState.Error -> item { EmptyStateMessage("Error: ${uiState.message}", isError = true) }
                 is CallLogsUiState.Success -> {
                     if (filteredLogs.isEmpty()) {
-                        item { EmptyStateMessage("No ${selectedTypeFilter.lowercase()} logs found.") }
+                        item { EmptyStateMessage("No logs found.") }
                     } else {
                         item {
                             Text(
@@ -199,7 +209,6 @@ fun CallLogsContent(
                                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
                             )
                         }
-                        // 3. Use filteredLogs here instead of uiState.logs
                         items(filteredLogs) { log ->
                             CallLogCard(log)
                         }
@@ -319,7 +328,14 @@ fun FilterSection(
 
 @Composable
 fun CallLogCard(log: CallLogResponse) {
-    // Determine Type Styling
+    // LOGIC: Treat null as Work. Only explicitly false is Personal.
+    val isPersonal = (log.isWork == false)
+
+    // Colors & Styling
+    val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
+    val cardBorder = if (isPersonal) BorderStroke(1.dp, PersonalBorder.copy(alpha = 0.3f)) else null
+
+    // Icons
     val (typeIcon, typeColor, typeBg) = when (log.type.lowercase()) {
         "incoming" -> Triple(Icons.Rounded.CallReceived, PrimaryColor, PrimaryColor.copy(alpha = 0.15f))
         "outgoing" -> Triple(Icons.Rounded.CallMade, SuccessColor, SuccessColor.copy(alpha = 0.15f))
@@ -334,12 +350,13 @@ fun CallLogCard(log: CallLogResponse) {
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = CardColor),
+        colors = CardDefaults.cardColors(containerColor = cardBackground),
+        border = cardBorder,
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 1. Icon Avatar (Visual direction)
+                // 1. Icon Avatar
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -354,23 +371,33 @@ fun CallLogCard(log: CallLogResponse) {
 
                 // 2. Names & Details
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = log.callerName.ifBlank { "Unknown Caller" },
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Metadata Row - Colored RM Pill
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ContainerPill(
-                            text = "RM: ${log.rshipManagerName ?: "-"}",
-                            color = RolePillText, // Changed to Light Indigo
-                            bgColor = RolePillBg  // Changed to Indigo bg
+                    if (isPersonal) {
+                        // --- PERSONAL LAYOUT (Clean) ---
+                        // Just one text, no redundant tags/pills
+                        Text(
+                            text = "Personal Call",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
                         )
+                    } else {
+                        // --- WORK LAYOUT ---
+                        Text(
+                            text = log.callerName.ifBlank { "Unknown Caller" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ContainerPill(
+                                text = "RM: ${log.rshipManagerName ?: "-"}",
+                                color = RolePillText,
+                                bgColor = RolePillBg
+                            )
+                        }
                     }
                 }
 
@@ -405,11 +432,23 @@ fun CallLogCard(log: CallLogResponse) {
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 140.dp)
+                        modifier = Modifier.widthIn(max = 100.dp)
                     )
                 }
 
-                // Right: Duration (Always shown, no pill, plain text)
+                // Middle: SIM SLOT
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SimCard, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = log.simslot ?: "SIM ?",
+                        color = SubtextColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Right: Duration
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Rounded.Schedule, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -433,7 +472,7 @@ fun ContainerPill(text: String, color: Color, bgColor: Color) {
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
             .background(bgColor)
-            .padding(horizontal = 8.dp, vertical = 3.dp) // Slightly more padding
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(text = text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
     }
@@ -494,7 +533,6 @@ private fun formatPrettyDate(timestamp: String): String {
     } catch (e: Exception) { timestamp }
 }
 
-
 @Composable
 fun QuickFilterRow(
     selectedFilter: String,
@@ -504,28 +542,39 @@ fun QuickFilterRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
+        // All Logs
         FilterChip(
-            label = "All",
+            icon = Icons.Default.AllInbox,
             isSelected = selectedFilter == "All",
             selectedColor = PrimaryColor,
             onClick = { onFilterSelected("All") }
         )
+        // Personal (Green)
         FilterChip(
-            label = "Incoming",
+            icon = Icons.Default.Person,
+            isSelected = selectedFilter == "Personal",
+            selectedColor = PersonalBorder,
+            onClick = { onFilterSelected("Personal") }
+        )
+        // Incoming
+        FilterChip(
+            icon = Icons.Rounded.CallReceived,
             isSelected = selectedFilter == "Incoming",
             selectedColor = PrimaryColor,
             onClick = { onFilterSelected("Incoming") }
         )
+        // Outgoing
         FilterChip(
-            label = "Outgoing",
+            icon = Icons.Rounded.CallMade,
             isSelected = selectedFilter == "Outgoing",
             selectedColor = SuccessColor,
             onClick = { onFilterSelected("Outgoing") }
         )
+        // Missed
         FilterChip(
-            label = "Missed",
+            icon = Icons.Rounded.CallMissed,
             isSelected = selectedFilter == "Missed",
             selectedColor = ErrorColor,
             onClick = { onFilterSelected("Missed") }
@@ -535,29 +584,31 @@ fun QuickFilterRow(
 
 @Composable
 fun FilterChip(
-    label: String,
+    icon: ImageVector,
     isSelected: Boolean,
     selectedColor: Color,
     onClick: () -> Unit
 ) {
+    // 1. Logic for colors
     val backgroundColor = if (isSelected) selectedColor.copy(alpha = 0.2f) else CardColor
     val borderColor = if (isSelected) selectedColor else Color.Transparent
-    val textColor = if (isSelected) selectedColor else SubtextColor
+    val contentColor = if (isSelected) selectedColor else SubtextColor
 
+    // 2. Icon Only Box
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(CircleShape)
             .background(backgroundColor)
-            .border(1.dp, borderColor, RoundedCornerShape(50))
+            .border(1.dp, borderColor, CircleShape)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            color = textColor,
-            fontSize = 13.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(24.dp)
         )
     }
 }

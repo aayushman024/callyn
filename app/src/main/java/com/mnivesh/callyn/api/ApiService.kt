@@ -56,7 +56,9 @@ data class CallLogRequest(
     val rshipManagerName: String?,
     val type: String,
     val timestamp: Long,
-    val duration: Long
+    val duration: Long,
+    val simSlot: String? = null,
+    val isWork: Boolean
 )
 
 data class CallLogResponse(
@@ -67,6 +69,8 @@ data class CallLogResponse(
     val timestamp: String,
     val duration: Long,
     val uploadedBy: String?,
+    val simslot: String?,
+    val isWork: Boolean,
     val uploadedAt: String?
 )
 

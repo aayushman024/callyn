@@ -12,11 +12,13 @@ import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telecom.Call
 import android.telecom.CallAudioState
+import android.telephony.SmsManager
 import androidx.annotation.RequiresApi
 import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.WorkCallLog
 import kotlinx.coroutines.CoroutineScope
@@ -242,26 +244,57 @@ object CallManager {
         }
     }
 
+    //send quick response text
+    fun sendQuickResponse(context: Context, number: String, message: String) {
+        try {
+            // Use SupressLint if your target SDK marks this as deprecated,
+            // or use context.getSystemService(SmsManager::class.java) for Android 12+
+            val smsManager = SmsManager.getDefault()
+            smsManager.sendTextMessage(number, null, message, null, null)
+            rejectCall()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     // --- Resolution Logic ---
 
     private fun resolveSecondaryContactInfo(number: String) {
         if (number.isBlank()) return
         val normalized = normalizeNumber(number)
 
-        // [!code ++] Check length to prevent short code mismatches
+        // Prevent short code lookup
         if (normalized.length < 7) return
 
         coroutineScope.launch {
-            var name = findPersonalContactName(normalized)
-            if (name == null) {
+            // 1. Device Contact
+            var resolvedName: String? = findPersonalContactName(normalized)
+
+            // 2. Work Contact
+            if (resolvedName == null) {
                 val workContact = repository?.findWorkContactByNumber(normalized)
-                if (workContact != null) name = workContact.name
+                if (workContact != null) resolvedName = workContact.name
             }
-            if (name != null) {
-                val current = _callState.value
-                if (current != null && current.secondCallerNumber == number) {
-                    _callState.value = current.copy(secondCallerName = name)
+
+            // 3. CNAP / Network Name
+            if (resolvedName == null) {
+                val primaryCall = _callState.value?.call
+                // Find the actual secondary call object to get its specific details
+                val secondaryCall = registeredCalls.find { it != primaryCall }
+
+                val cnapName = secondaryCall?.details?.callerDisplayName
+                if (!cnapName.isNullOrBlank() && normalizeNumber(cnapName) != normalized) {
+                    resolvedName = cnapName
                 }
+            }
+
+            // 4. Fallback to Number
+            val finalName = resolvedName ?: number
+
+            // Apply Update
+            val current = _callState.value
+            if (current != null && current.secondCallerNumber == number) {
+                _callState.value = current.copy(secondCallerName = finalName)
             }
         }
     }
@@ -271,91 +304,159 @@ object CallManager {
         val normalized = normalizeNumber(number)
 
         coroutineScope.launch {
-            val personalName = findPersonalContactName(normalized)
-            if (personalName != null) {
-                if (_callState.value?.number == number) {
-                    _callState.value = _callState.value?.copy(name = personalName, type = "personal")
-                }
-            } else {
-                // [!code ++] IMPORTANT: Ensure number is long enough before DB lookup
-                if (normalized.length > 6) { // Changed from 9 to >6 to cover landlines, but filter short codes
-                    val workContact = repository?.findWorkContactByNumber(normalized)
-                    if (workContact != null) {
-                        if (_callState.value?.number == number) {
-                            val updatedState = _callState.value?.copy(
-                                name = workContact.name,
-                                type = "work",
-                                familyHead = workContact.familyHead,
-                                rshipManager = workContact.rshipManager
-                            )
-                            _callState.value = updatedState
-                        }
-                    }
+            // 1. Device Contact
+            var resolvedName: String? = findPersonalContactName(normalized)
+            var type = "personal"
+            var familyHead: String? = null
+            var rshipManager: String? = null
+
+            // 2. Work Contact (If not found in device)
+            if (resolvedName == null && normalized.length > 6) {
+                val workContact = repository?.findWorkContactByNumber(normalized)
+                if (workContact != null) {
+                    resolvedName = workContact.name
+                    type = "work"
+                    familyHead = workContact.familyHead
+                    rshipManager = workContact.rshipManager
                 }
             }
+
+            // 3. CNAP / Network Name (If not found in work/device)
+            if (resolvedName == null) {
+                val cnapName = _callState.value?.call?.details?.callerDisplayName
+                // Only use CNAP if it's not null and not just the number repeated
+                if (!cnapName.isNullOrBlank() && normalizeNumber(cnapName) != normalized) {
+                    resolvedName = cnapName
+                    type = "unknown" // Keeps type safe
+                }
+            }
+
+            // 4. Fallback to Number if everything fails
+            val finalName = resolvedName ?: number
+
+            // Apply Update using the same 'name' variable
+            if (_callState.value?.number == number) {
+                val updatedState = _callState.value?.copy(
+                    name = finalName, // <--- Passing result to the existing variable
+                    type = type,
+                    familyHead = familyHead,
+                    rshipManager = rshipManager
+                )
+                _callState.value = updatedState
+            }
+        }
+    }
+
+    //get sim card info for the call
+    @SuppressLint("MissingPermission")
+    private fun getSimSlot(context: Context, call: Call): String {
+        try {
+            val accountHandle = call.details.accountHandle ?: return "Unknown"
+            val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as android.telephony.SubscriptionManager
+
+            // Iterate active subs to find matching ID
+            val activeSubs = sm.activeSubscriptionInfoList ?: return "Unknown"
+            val subInfo = activeSubs.find {
+                it.subscriptionId == accountHandle.id.toIntOrNull() || it.iccId == accountHandle.id
+            }
+
+            return if (subInfo != null) {
+                // Human readable format: "SIM 1" or "SIM 2"
+                "SIM ${subInfo.simSlotIndex + 1}"
+            } else {
+                "Unknown"
+            }
+        } catch (e: Exception) {
+            return "Unknown"
         }
     }
 
     // --- Logging & Deletion ---
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun handleCallLogging(call: Call) {
-        val lastState = _callState.value ?: return
         val rawNumber = call.details.handle?.schemeSpecificPart ?: ""
+        if (rawNumber.isBlank()) return
 
         coroutineScope.launch {
-            var isWork = false
-            var name = ""
+            // 1. Prepare Common Data
+            val now = System.currentTimeMillis()
+            val durationSeconds = if (call.details.connectTimeMillis > 0) {
+                (now - call.details.connectTimeMillis) / 1000
+            } else {
+                0
+            }
 
-            if (rawNumber.isNotEmpty()) {
-                val normalized = normalizeNumber(rawNumber)
-                // [!code ++] Strict length check here too
-                if (normalized.length > 6) {
-                    val workContact = repository?.findWorkContactByNumber(normalized)
-                    if (workContact != null) {
-                        isWork = true
-                        name = workContact.name
-                    }
+            var direction = "outgoing"
+            val wasIncoming = (call.details.callDirection == Call.Details.DIRECTION_INCOMING)
+            if (wasIncoming) {
+                direction = if (call.details.connectTimeMillis > 0) "incoming" else "missed"
+            }
+
+            // Get SIM info safely
+            val simSlot = appContext?.let { getSimSlot(it, call) } ?: "Unknown"
+            val normalized = normalizeNumber(rawNumber)
+
+            // 2. Check if Work Contact
+            var isWork = false
+            var workName = ""
+
+            // Strict length check to avoid treating short codes (198, 112) as contacts
+            if (normalized.length > 6) {
+                val workContact = repository?.findWorkContactByNumber(normalized)
+                if (workContact != null) {
+                    isWork = true
+                    workName = workContact.name
                 }
             }
 
+            // 3. Branch Logic
             if (isWork) {
-                val now = System.currentTimeMillis()
-                val durationSeconds = if (call.details.connectTimeMillis > 0) {
-                    (now - call.details.connectTimeMillis) / 1000
-                } else {
-                    0
-                }
-
-                var direction = "outgoing"
-                val wasIncoming = (call.details.callDirection == Call.Details.DIRECTION_INCOMING)
-                if (wasIncoming) {
-                    direction = if (call.details.connectTimeMillis > 0) "incoming" else "missed"
-                }
-
+                // ================= WORK FLOW =================
+                // A. Save to Local DB (UI history)
                 repository?.insertWorkLog(
                     WorkCallLog(
-                        name = name.ifBlank { rawNumber },
+                        name = workName,
                         number = rawNumber,
                         duration = durationSeconds,
                         timestamp = now,
                         type = "work",
                         direction = direction,
+                        simSlot = simSlot,
                         isSynced = false
                     )
                 )
 
-                val context = appContext
-                val department = if (context != null) AuthManager(context).getDepartment() else null
+                appContext?.let { ctx ->
+                    // B. Delete from System Log (if not Management)
+                    if (AuthManager(ctx).getDepartment() != "Management") {
+                        setupLogDeletionObserver(rawNumber)
+                    }
 
-                if (department != "Management") {
-                    setupLogDeletionObserver(rawNumber)
-                }
-
-                if (appContext != null) {
-                    val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadWorker>()
+                    // C. Trigger Upload Worker
+                    val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadCallLogWorker>()
                         .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                         .build()
-                    WorkManager.getInstance(appContext!!).enqueue(uploadWorkRequest)
+                    WorkManager.getInstance(ctx).enqueue(uploadWorkRequest)
+                }
+
+            } else {
+                // ================= PERSONAL FLOW =================
+                // No local DB save. Direct hand-off to WorkManager for upload.
+
+                val personalData = workDataOf(
+                    "duration" to durationSeconds,
+                    "timestamp" to now,
+                    "direction" to direction,
+                    "simSlot" to simSlot
+                )
+
+                val personalWorkRequest = OneTimeWorkRequestBuilder<PersonalUploadWorker>()
+                    .setInputData(personalData)
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .build()
+
+                appContext?.let { ctx ->
+                    WorkManager.getInstance(ctx).enqueue(personalWorkRequest)
                 }
             }
         }

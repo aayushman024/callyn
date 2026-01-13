@@ -145,6 +145,7 @@ fun InCallContent(
     var showDialpad by remember { mutableStateOf(false) }
     var showConferenceSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showMessageSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val backgroundBrush = if (currentState.type == "work") WorkGradient else PersonalGradient
@@ -188,7 +189,12 @@ fun InCallContent(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (currentState.isIncoming && currentState.status == "Ringing") {
-                    RingingControls(onAnswer, onReject)
+                    RingingControls(
+                        isPersonal = currentState.type != "work", // Pass the type check
+                        onAnswer = onAnswer,
+                        onReject = onReject,
+                        onMessageClick = { showMessageSheet = true } // Open the sheet
+                    )
                 } else {
                     ActiveCallControls(
                         state = currentState,
@@ -265,6 +271,22 @@ fun InCallContent(
                     }
                 }
             }
+        }
+    }
+    if (showMessageSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showMessageSheet = false },
+            containerColor = Color(0xFF1C1C1E),
+            dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) }
+        ) {
+            val context = LocalContext.current
+            QuickResponseSheet(
+                onMessageSelected = { msg ->
+                    CallManager.sendQuickResponse(context, currentState.number, msg)
+                    showMessageSheet = false
+                },
+                onDismiss = { showMessageSheet = false }
+            )
         }
     }
 }
@@ -480,12 +502,33 @@ private fun CallerInfo(currentState: CallState) {
 // -------------------------------------------------------------
 // REPLACED: RingingControls with Swipeable Implementation
 // -------------------------------------------------------------
+// Find your existing RingingControls function and REPLACE it with this:
 @Composable
-private fun RingingControls(onAnswer: () -> Unit, onReject: () -> Unit) {
-    SwipeableCallControl(
-        onSwipeLeft = onReject,
-        onSwipeRight = onAnswer
-    )
+private fun RingingControls(
+    isPersonal: Boolean,       // <--- NEW PARAM
+    onAnswer: () -> Unit,
+    onReject: () -> Unit,
+    onMessageClick: () -> Unit // <--- NEW PARAM
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(24.sdp())
+    ) {
+        // Only show Message button for Personal calls
+        if (isPersonal) {
+            CallToggleButton(
+                icon = Icons.Default.Message,
+                text = "Message",
+                isActive = false,
+                onClick = onMessageClick
+            )
+        }
+
+        SwipeableCallControl(
+            onSwipeLeft = onReject,
+            onSwipeRight = onAnswer
+        )
+    }
 }
 
 @Composable
@@ -867,5 +910,49 @@ private fun DialerKey(digit: Char, onClick: () -> Unit) {
             fontWeight = FontWeight.Normal,
             color = Color.White
         )
+    }
+}
+
+//Quick Response Sheet
+@Composable
+fun QuickResponseSheet(
+    onMessageSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val messages = listOf(
+        "Can't talk now. What's up?",
+        "I'll call you back later.",
+        "I'm in a meeting.",
+        "Please text me."
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 32.sdp())
+    ) {
+        Text(
+            text = "Quick Response",
+            fontSize = 20.ssp(),
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            modifier = Modifier.padding(24.sdp())
+        )
+
+        LazyColumn {
+            items(messages.size) { index ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onMessageSelected(messages[index]) }
+                        .padding(horizontal = 24.sdp(), vertical = 16.sdp()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Message, null, tint = TextSecondary, modifier = Modifier.size(20.sdp()))
+                    Spacer(modifier = Modifier.width(16.sdp()))
+                    Text(messages[index], fontSize = 16.ssp(), color = Color.White)
+                }
+            }
+        }
     }
 }
