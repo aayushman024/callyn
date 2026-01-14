@@ -4,6 +4,7 @@ import android.app.Application
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.ContactDatabase
+import com.mnivesh.callyn.managers.CallManager
 
 class CallynApplication : Application() {
 

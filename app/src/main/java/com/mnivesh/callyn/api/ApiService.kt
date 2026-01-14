@@ -79,6 +79,14 @@ data class CallLogListResponse(
     val data: List<CallLogResponse>
 )
 
+//internal employee directory
+data class EmployeeDirectory(
+    val name: String,
+    val email: String,
+    val phone: String,
+    val department: String,
+)
+
 //request as personal contact
 data class PersonalRequestData(
     @SerializedName("requestedContact")
@@ -204,8 +212,14 @@ interface ApiService {
     @GET("getCallLogs")
     suspend fun getCallLogs(
         @Header("Authorization") token: String,
-        @Query("date") date: String? = null, // Format: YYYY-MM-DD
+        @Query("date") date: String? = null,
         @Query("uploadedBy") uploadedBy: String? = null
     ): Response<CallLogListResponse>
+
+    @GET("getEmployeePhoneDetails")
+    suspend fun getEmployeePhoneDetails(
+        @Header("Authorization") token: String,
+    ): Response<List<EmployeeDirectory>>
+
 }
 

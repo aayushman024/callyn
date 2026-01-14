@@ -3,6 +3,7 @@ package com.mnivesh.callyn.data
 import android.util.Log
 import com.mnivesh.callyn.api.RetrofitInstance.api
 import com.mnivesh.callyn.api.ApiService
+import com.mnivesh.callyn.api.EmployeeDirectory
 import com.mnivesh.callyn.api.PendingRequest
 import com.mnivesh.callyn.api.PersonalRequestData // <--- NEW IMPORT
 import com.mnivesh.callyn.api.UpdateRequestStatusBody
@@ -24,13 +25,51 @@ class ContactRepository(
     val allContacts: Flow<List<AppContact>> = contactDao.getAllContacts()
     val allWorkLogs: Flow<List<WorkCallLog>> = workCallLogDao.getAllWorkLogs()
 
+    private var cachedEmployees: List<EmployeeDirectory>? = null
+
+    // [!code change] Updated getEmployees function
+    suspend fun getEmployees(token: String, forceRefresh: Boolean = false): Result<List<EmployeeDirectory>> {
+        if (!forceRefresh && cachedEmployees != null) {
+            return Result.success(cachedEmployees!!)
+        }
+
+        return try {
+            val response = apiService.getEmployeePhoneDetails("Bearer $token")
+            if (response.isSuccessful && response.body() != null) {
+                cachedEmployees = response.body()
+
+                // 1. Map Employees to AppContact Entity
+                val employeeContacts = cachedEmployees!!.map { employee ->
+                    AppContact(
+                        name = employee.name,
+                        number = employee.phone,
+                        type = "work",
+                        pan = employee.email,
+                        familyHead = employee.department,
+                        rshipManager = "Employee"
+                    )
+                }
+
+                // 2. Save to Database
+                // Note: insertAll uses OnConflictStrategy.REPLACE
+                contactDao.insertAll(employeeContacts)
+                Log.d(TAG, "Saved ${employeeContacts.size} employees to local database.")
+
+                Result.success(cachedEmployees!!)
+            } else {
+                Result.failure(Exception("Failed to fetch employees: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // [!code change] Return Boolean instead of Unit
     suspend fun refreshContacts(token: String, managerName: String): Boolean {
         try {
             val response = apiService.getContacts("Bearer $token", managerName)
 
             if (response.isSuccessful && response.body() != null) {
-                // ... (your existing database logic) ...
                 val networkContacts = response.body()!!
                 val dbContacts = networkContacts.map {
                     AppContact(
@@ -45,6 +84,11 @@ class ContactRepository(
                 contactDao.deleteAll()
                 contactDao.insertAll(dbContacts)
                 Log.d(TAG, "Successfully refreshed local database.")
+
+                //insert employees data
+                getEmployees(token, forceRefresh = true)
+
+                Log.d(TAG, "Successfully refreshed employee database.")
 
                 return true // [!code ++] Return Success
             } else {

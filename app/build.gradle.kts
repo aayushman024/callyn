@@ -17,7 +17,7 @@ android {
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0.3"
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.compose.material.core)
     implementation(libs.androidx.compose.animation.core)
+    implementation(libs.androidx.compose.ui.text)
     ksp(libs.androidx.room.compiler)
     // -----------------------
 

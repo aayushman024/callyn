@@ -26,7 +26,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -73,13 +72,22 @@ import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.VersionResponse
 import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.db.AppContact
+import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.ui.EmployeeDirectoryScreen
 import com.mnivesh.callyn.ui.UpdateDialog
 import com.mnivesh.callyn.ui.ZohoLoginScreen
 import com.mnivesh.callyn.ui.theme.CallynTheme
-import com.mnivesh.callyn.utils.VersionManager
+import com.mnivesh.callyn.managers.VersionManager
+import com.mnivesh.callyn.screens.ContactsScreen
+import com.mnivesh.callyn.screens.DeviceContact
+import com.mnivesh.callyn.screens.DeviceNumber
+import com.mnivesh.callyn.screens.DialerScreen
+import com.mnivesh.callyn.screens.PersonalRequestsScreen
+import com.mnivesh.callyn.screens.RecentCallsScreen
+import com.mnivesh.callyn.screens.ShowCallLogsScreen
+import com.mnivesh.callyn.screens.UserDetailsScreen
 import com.mnivesh.callyn.workers.SyncUserDetailsWorker
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -120,6 +128,7 @@ class MainActivity : ComponentActivity() {
     private val permissionsToRequest = mutableListOf(
         Manifest.permission.CALL_PHONE,
         Manifest.permission.READ_CONTACTS,
+        Manifest.permission.WRITE_CONTACTS,
         Manifest.permission.READ_PHONE_STATE,
         Manifest.permission.READ_CALL_LOG,
         Manifest.permission.WRITE_CALL_LOG,
@@ -131,8 +140,18 @@ class MainActivity : ComponentActivity() {
     }.toTypedArray()
 
     private val multiplePermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            Log.d(TAG, "Permissions callback received.")
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            isPermissionRequestInProgress = false
+            // Check if ALL required were granted
+            val allGranted = results.values.all { it }
+            if (allGranted) {
+                // Retry login now that we have permissions
+                checkLoginState()
+            } else {
+                // OPTIONAL: If denied, force logout or show a Toast explanation
+                Toast.makeText(this, "Contacts permission is required to continue.", Toast.LENGTH_LONG).show()
+                // We leave them on 'Loading' or you can set uiState = LoggedOut
+            }
         }
     private val defaultDialerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -230,6 +249,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (!isPermissionRequestInProgress && (uiState is MainActivityUiState.Loading || uiState is MainActivityUiState.LoggedOut)) {
+            checkLoginState()
+        }
         checkForUpdates()
         syncDeviceDetails()
     }
@@ -329,20 +351,39 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private var isPermissionRequestInProgress = false
 
     private fun checkLoginState() {
-        val token = authManager.getToken()
-        val savedName = authManager.getUserName()
+        lifecycleScope.launch {
+            val token = authManager.getToken()
+            val userName = authManager.getUserName()
+            val department = authManager.getDepartment() // [!code ++] Get Department
 
-        if (token != null) {
-            if (savedName != null) {
-                uiState = MainActivityUiState.LoggedIn(savedName)
-                verifyTokenInBackground("Bearer $token")
+            if (!token.isNullOrBlank() && !userName.isNullOrBlank()) {
+
+                // [!code ++] Skip check for Management/IT Desk
+                if (department != "Management" && department != "IT Desk") {
+                    val hasRead = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                    val hasWrite = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+
+                    if (!hasRead || !hasWrite) {
+                        if (!isPermissionRequestInProgress) {
+                            isPermissionRequestInProgress = true
+                            multiplePermissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS))
+                        }
+                        // Stop here. Wait for callback or onResume.
+                        return@launch
+                    }
+                }
+
+                // Permissions granted (or not needed), proceed.
+              //uiState = MainActivityUiState.Preparing(userName)
+
+                uiState = MainActivityUiState.LoggedIn(userName) // Add this: Go directly to home
+
             } else {
-                fetchUserName("Bearer $token")
+                uiState = MainActivityUiState.LoggedOut
             }
-        } else {
-            uiState = MainActivityUiState.LoggedOut
         }
     }
 
@@ -559,58 +600,103 @@ fun LoadingDetailsScreen(
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as CallynApplication
-
-    // [!code ++] Initialize AuthManager to get department
     val authManager = remember { AuthManager(context) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.loading))
-    val progress by animateLottieCompositionAsState(
-        composition = composition,
-        iterations = LottieConstants.IterateForever
-    )
+    // 1. State to track if we are ready to load data
+    var arePermissionsGranted by remember { mutableStateOf(false) }
+    var shouldCheckPermissions by remember { mutableStateOf(true) }
 
+    // 2. Permission Launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ -> }
+    ) { _ ->
+        // We don't rely solely on callback, OnResume handles the check cleanly
+    }
 
-    LaunchedEffect(Unit) {
-        // [!code ++] Get the department
-        val department = authManager.getDepartment()
+    // 3. Lifecycle Observer: Re-check permissions whenever user returns to app
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val dept = authManager.getDepartment() ?: ""
 
-        // 1. Check/Ask Permissions (Only if NOT Management/IT, otherwise we don't strictly need it yet)
-        if (department != "Management" && department != "IT Desk") {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-                permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_PHONE_STATE))
-                delay(3000)
+                // If Management/IT, we treat permissions as "granted" (not needed)
+                if (dept == "Management") {
+                    arePermissionsGranted = true
+                    shouldCheckPermissions = false
+                } else {
+                    // For others, check actual Android permissions
+                    val hasRead = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                    val hasWrite = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+
+                    if (hasRead && hasWrite) {
+                        arePermissionsGranted = true
+                    }
+                }
             }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
+    // 4. Initial Trigger: Request Permissions if missing
+    LaunchedEffect(Unit) {
+        val dept = authManager.getDepartment() ?: ""
+        if (dept != "Management") {
+            val hasRead = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+            val hasWrite = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+
+            if (!hasRead || !hasWrite) {
+                permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_PHONE_STATE))
+            } else {
+                arePermissionsGranted = true
+            }
+        } else {
+            arePermissionsGranted = true
+        }
+    }
+
+    // 5. Main Logic: Runs ONLY when arePermissionsGranted becomes true
+    LaunchedEffect(arePermissionsGranted) {
+        if (!arePermissionsGranted) return@LaunchedEffect
+
+        // --- START LOADING DATA ---
         val token = authManager.getToken()
         if (token != null) {
-            val minDelay = async { delay(3000) }
-            val syncData = async(Dispatchers.IO) {
+            // Sync Data
+            withContext(Dispatchers.IO) {
                 app.repository.syncInitialData(token, userName)
             }
-            minDelay.await()
-            syncData.await()
+            // Small delay for UX/Animation
+            delay(1500)
 
-            // 3. Perform Conflict Check - ONLY if NOT Management or IT Desk
-            // [!code change] Added the department check here
-            if (department != "Management" && department != "IT Desk") {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
-                    val workContacts = withContext(Dispatchers.IO) { app.repository.allContacts.first() }
-                    val deviceContacts = loadDeviceContacts(context)
-                    val conflicts = findConflicts(deviceContacts, workContacts)
+            // Conflict Check
+            val dept = authManager.getDepartment()
+            if (dept != "Management" && dept != "IT Desk") {
+                // We know permissions are granted now because of the check above
+                val workContacts = withContext(Dispatchers.IO) {
+                    app.repository.allContacts.first()
+                        // Ensure we don't flag "Employee" contacts as conflicts
+                        .filter { !(it.rshipManager ?: "").equals("Employee", ignoreCase = true) }
+                }
 
-                    if (conflicts.isNotEmpty()) {
-                        onConflictsFound(conflicts, workContacts)
-                        return@LaunchedEffect
-                    }
+                val deviceContacts = loadDeviceContacts(context)
+
+                // Use the updated findConflicts function (ensure it's the one that handles nulls/formatting)
+                val conflicts = findConflicts(deviceContacts, workContacts)
+
+                if (conflicts.isNotEmpty()) {
+                    onConflictsFound(conflicts, workContacts)
+                    return@LaunchedEffect // Stop! Don't call onFinished
                 }
             }
         }
         onFinished()
     }
+
+    // --- UI ---
+    val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.loading))
+    val progress by animateLottieCompositionAsState(composition = composition, iterations = LottieConstants.IterateForever)
 
     Column(
         modifier = Modifier
@@ -619,25 +705,14 @@ fun LoadingDetailsScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        LottieAnimation(
-            composition = composition,
-            progress = { progress },
-            modifier = Modifier.size(200.dp)
-        )
-
+        LottieAnimation(composition = composition, progress = { progress }, modifier = Modifier.size(200.dp))
         Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            text = "Loading your details...",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium,
-            color = ComposeColor.White
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Please wait while we set things up.",
-            fontSize = 14.sp,
-            color = ComposeColor.White.copy(alpha = 0.6f)
-        )
+        Text("Loading your details...", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = ComposeColor.White)
+
+        if (!arePermissionsGranted) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Waiting for permissions...", fontSize = 14.sp, color = ComposeColor(0xFFF59E0B))
+        }
     }
 }
 
@@ -730,7 +805,7 @@ fun ConflictResolutionScreen(
             }
         },
         bottomBar = {
-            Column(modifier = Modifier.background(ComposeColor(0xFF0F172A)).padding(24.dp)) {
+            Column(modifier = Modifier.background(ComposeColor(0xFF0F172A)).padding(44.dp)) {
                 Button(
                     onClick = {
                         if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
@@ -752,7 +827,7 @@ fun ConflictResolutionScreen(
         LazyColumn(
             modifier = Modifier.padding(padding).padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+            contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
         ) {
             items(filteredConflicts) { contact ->
                 ModernConflictItem(
@@ -935,12 +1010,17 @@ suspend fun loadDeviceContacts(context: Context): List<DeviceContact> = withCont
     contactsMap.values.toList()
 }
 
-fun findConflicts(deviceContacts: List<DeviceContact>, workContacts: List<com.mnivesh.callyn.db.AppContact>): List<DeviceContact> {
+fun findConflicts(deviceContacts: List<DeviceContact>, workContacts: List<AppContact>): List<DeviceContact> {
     return deviceContacts.filter { device ->
         device.numbers.any { numObj ->
             val deviceNum = sanitizePhoneNumber(numObj.number)
             if (deviceNum.length < 5) false
-            else workContacts.any { work -> sanitizePhoneNumber(work.number) == deviceNum }
+            else workContacts.any { work ->
+                // [!code ++]
+                !work.rshipManager.equals("Employee", ignoreCase = true) &&
+                        // [!code --]
+                        sanitizePhoneNumber(work.number) == deviceNum
+            }
         }
     }
 }
@@ -992,11 +1072,11 @@ fun ModernConflictItem(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(contact.name, color = ComposeColor.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Text(
-                    contact.numbers.firstOrNull()?.number ?: "",
-                    color = ComposeColor.White.copy(alpha = 0.6f),
-                    fontSize = 13.sp
-                )
+//                Text(
+//                    contact.numbers.firstOrNull()?.number ?: "",
+//                    color = ComposeColor.White.copy(alpha = 0.6f),
+//                    fontSize = 13.sp
+//                )
             }
 
             if (isRequestSent) {
@@ -1071,6 +1151,7 @@ sealed class Screen(val route: String) {
     object Requests : Screen("requests")
     object UserDetails : Screen("user_details")
     object ShowCallLogs : Screen("show_call_logs")
+    object EmployeeDirectory : Screen("employee_directory")
 }
 
 @Composable
@@ -1142,7 +1223,8 @@ fun MainScreenContent(
                     onLogout = onLogout,
                     onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
                     onShowCallLogs = { navController.navigate(Screen.ShowCallLogs.route) },
-                    onShowRequests = { navController.navigate(Screen.Requests.route) }
+                    onShowRequests = { navController.navigate(Screen.Requests.route) },
+                    onShowDirectory = { navController.navigate(Screen.EmployeeDirectory.route) }
                 )
             }
             composable(Screen.Dialer.route) {
@@ -1158,6 +1240,14 @@ fun MainScreenContent(
             composable(Screen.UserDetails.route) {
                 UserDetailsScreen(
                     onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable(Screen.EmployeeDirectory.route) {
+                EmployeeDirectoryScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onCallClick = { number, slot ->
+                        onSmartDial(number, slot)
+                    }
                 )
             }
             composable(Screen.ShowCallLogs.route) {

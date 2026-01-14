@@ -5,7 +5,6 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 object RetrofitInstance {
 
-    // !! IMPORTANT !!
     //
     private const val BASE_URL_PROD = "https://callyn-backend-avh8cae5dpdnckg8.centralindia-01.azurewebsites.net/"
     private const val BASE_URL_LOCAL = "http://localhost:5000/"
