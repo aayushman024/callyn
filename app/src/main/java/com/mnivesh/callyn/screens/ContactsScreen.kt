@@ -18,6 +18,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,8 +43,10 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1222,6 +1225,34 @@ private fun ModernBottomSheet(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
+                            val context = LocalContext.current
+                            val haptics = LocalHapticFeedback.current
+
+                            if(department == "Management"){
+                            Box(
+                                modifier = Modifier
+                                    .combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            // 1. Provide tactile feedback
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+
+                                            // 2. Perform Clipboard Logic
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("Phone Number", contact.number.takeLast(10))
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                            ) {
+                                ModernDetailRow(
+                                    Icons.Default.Phone,
+                                    "Phone Number",
+                                    contact.number.takeLast(10),
+                                    Color(0xFF10B981)
+                                )
+                            }
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = textSecondary.copy(alpha = 0.1f))}
                             ModernDetailRow(Icons.Default.CreditCard, "PAN Number", contact.pan, warningColor)
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = textSecondary.copy(alpha = 0.1f))
                             ModernDetailRow(Icons.Default.FamilyRestroom, "Family Head", contact.familyHead, Color(0xFF81C784))

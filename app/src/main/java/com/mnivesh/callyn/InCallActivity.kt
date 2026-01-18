@@ -1,5 +1,8 @@
 package com.mnivesh.callyn
 
+import android.app.KeyguardManager
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -12,24 +15,22 @@ class InCallActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // --- Critical for Lock Screen ---
-        // These flags allow the activity to show over the lock screen
+        // 1. Handle Lock Screen Visibility
         setShowWhenLocked(true)
         setTurnScreenOn(true)
 
-        // Deprecated in API 30, but good for < 30
-        @Suppress("DEPRECATION")
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON
-        )
-        // ---------------------------------
+        // 2. Request Keyguard Dismissal (Optional but smoother for incoming calls)
+        // This allows the user to interact without swiping the lock screen away first
+        val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        keyguardManager.requestDismissKeyguard(this, null)
 
-        // Make the app edge-to-edge (draw behind status/nav bars)
+        // 3. Keep Screen On
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // 4. Edge-to-Edge UI
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         setContent {
-            // Set the Compose UI
             InCallScreen()
         }
     }

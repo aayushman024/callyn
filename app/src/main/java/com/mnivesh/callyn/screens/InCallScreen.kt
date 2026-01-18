@@ -310,9 +310,9 @@ fun CallWaitingPopup(name: String, number: String, onAccept: () -> Unit, onDecli
             Column(modifier = Modifier.weight(1f)) {
                 Text("Incoming Call", color = Color(0xFF30D158), fontSize = 12.ssp(), fontWeight = FontWeight.Bold)
                 Text(name, color = Color.White, fontSize = 16.ssp(), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (number.isNotEmpty() && name != number) {
-                    Text(number, color = Color.Gray, fontSize = 14.ssp())
-                }
+//                if (number.isNotEmpty() && name != number) {
+//                    Text(number, color = Color.Gray, fontSize = 14.ssp())
+//                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.sdp())) {
                 // Reject
