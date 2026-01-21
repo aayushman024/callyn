@@ -3,145 +3,119 @@ package com.mnivesh.callyn
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import android.media.MediaRecorder
-import android.media.ToneGenerator
+import android.os.Build
+import android.os.Environment
 import android.util.Log
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class CallRecorder(private val context: Context) {
 
     private var mediaRecorder: MediaRecorder? = null
-    private var currentFile: File? = null
-    private val TAG = "CallRecorder"
+    private var isRecording = false
+    var currentFile: File? = null
+        private set
 
-    suspend fun startRecording(fileName: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            Log.d(TAG, ">>> Request to start recording: $fileName")
+    fun startRecording(phoneNumber: String): Boolean {
+        if (isRecording) return false
 
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-                != PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "FAILURE: RECORD_AUDIO permission missing.")
-                return@withContext false
+        // 1. Permission Check
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            Log.e("CallRecorder", "RECORD_AUDIO permission DENIED. Aborting.")
+            return false
+        }
+
+        // 2. File Setup
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        // Changed extension to .3gp (Standard for AMR)
+        val fileName = "WorkCall_${phoneNumber}_$timeStamp.3gp"
+        val storageDir = File(context.getExternalFilesDir(Environment.DIRECTORY_MUSIC), "CallRecordings")
+        if (!storageDir.exists()) storageDir.mkdirs()
+
+        val file = File(storageDir, fileName)
+
+        // 3. NEW SOURCE PRIORITY (To fix White Noise)
+        // VOICE_RECOGNITION (6): Often bypasses 'Call Privacy' noise injection
+        // MIC (1): Fallback
+        val sourcesToTry = listOf(
+            MediaRecorder.AudioSource.VOICE_RECOGNITION, // #1 Best for avoiding white noise
+            MediaRecorder.AudioSource.MIC,                 // #2 Raw fallback
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION  // #3 Tuned for VoIP
+        )
+
+        for (source in sourcesToTry) {
+            if (initRecorder(source, file)) {
+                isRecording = true
+                currentFile = file
+                Log.d("CallRecorder", "Started recording with source: $source")
+                return true
+            }
+        }
+
+        Log.e("CallRecorder", "Failed to start recording with ANY source.")
+        return false
+    }
+
+    private fun initRecorder(source: Int, file: File): Boolean {
+        return try {
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                MediaRecorder()
             }
 
-            // 2-second delay to let audio path settle
-            delay(2000)
-            playStartTone()
+            mediaRecorder?.apply {
+                setAudioSource(source)
 
-            val dir = context.getExternalFilesDir("WorkCallRecordings")
-            if (dir != null && !dir.exists()) dir.mkdirs()
+                // --- CRITICAL CHANGES FOR "WHITE NOISE" FIX ---
+                // Use THREE_GPP container (Standard for calls)
+                setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
 
-            // Changed extension to .m4a (MPEG-4) for better compatibility
-            val safeFileName = fileName.replace(Regex("[^a-zA-Z0-9_]"), "_")
-            val finalName = "${safeFileName}.m4a"
-            val file = File(dir, finalName)
-            currentFile = file
+                // Use AMR_NB (Narrowband) encoder.
+                // It is designed for 8kHz voice and matches hardware modem lock.
+                setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
 
-            var recorder: MediaRecorder? = null
+                // FORCE 8kHz sampling. 44.1kHz often causes static during calls.
+                setAudioSamplingRate(8000)
+                setAudioEncodingBitRate(12200) // Standard AMR bitrate
+                // ----------------------------------------------
+
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+            true
+        } catch (e: Exception) {
+            Log.w("CallRecorder", "Source $source failed to init: ${e.message}")
             try {
-                recorder = MediaRecorder()
-                this@CallRecorder.mediaRecorder = recorder
-
-                // --- STRATEGY A: VOICE_CALL (Best, but often blocked) ---
-                try {
-                    Log.d(TAG, "Strategy A: VOICE_CALL + AAC")
-                    recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_CALL)
-                    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4) // Better format
-                    recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)    // Better encoder
-                    recorder.setAudioEncodingBitRate(128000)
-                    recorder.setAudioSamplingRate(44100)
-                    recorder.setOutputFile(file.absolutePath)
-                    recorder.prepare()
-                    recorder.start()
-                    Log.d(TAG, "SUCCESS: Recording with VOICE_CALL")
-                    return@withContext true
-                } catch (e: Exception) {
-                    Log.w(TAG, "Strategy A failed. Resetting... Error: ${e.message}")
-                    recorder.reset()
-                    delay(500)
-                }
-
-                // --- STRATEGY B: VOICE_COMMUNICATION (Best Fallback) ---
-                // Tuned for VoIP, often bypasses the mute restriction better than MIC
-                try {
-                    Log.d(TAG, "Strategy B: VOICE_COMMUNICATION + AAC")
-                    recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-                    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    recorder.setAudioEncodingBitRate(128000)
-                    recorder.setAudioSamplingRate(44100)
-                    recorder.setOutputFile(file.absolutePath)
-                    recorder.prepare()
-                    recorder.start()
-                    Log.d(TAG, "SUCCESS: Recording with VOICE_COMMUNICATION")
-                    return@withContext true
-                } catch (e: Exception) {
-                    Log.e(TAG, "Strategy B failed: ${e.message}")
-                    recorder.reset()
-                    delay(500)
-                }
-
-                // --- STRATEGY C: MIC (Last Resort) ---
-                try {
-                    Log.d(TAG, "Strategy C: MIC + AAC")
-                    recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-                    recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    recorder.setAudioEncodingBitRate(64000) // Lower bitrate for safety
-                    recorder.setAudioSamplingRate(16000)    // Lower sample rate for safety
-                    recorder.setOutputFile(file.absolutePath)
-                    recorder.prepare()
-                    recorder.start()
-                    Log.d(TAG, "SUCCESS: Recording with MIC")
-                    return@withContext true
-                } catch (e: Exception) {
-                    Log.e(TAG, "Strategy C failed: ${e.message}")
-                }
-
-                cleanup()
-                return@withContext false
-
-            } catch (e: Exception) {
-                Log.e(TAG, "Critical recorder error", e)
-                cleanup()
-                return@withContext false
-            }
+                mediaRecorder?.reset()
+                mediaRecorder?.release()
+            } catch (cleanupEx: Exception) { /* Ignored */ }
+            mediaRecorder = null
+            false
         }
     }
 
-    suspend fun stopRecording(): String? {
-        return withContext(Dispatchers.IO) {
-            if (mediaRecorder == null) return@withContext null
+    fun stopRecording() {
+        if (!isRecording) return
 
-            try {
-                delay(500)
-                mediaRecorder?.stop()
-                Log.d(TAG, "Recording stopped.")
-                currentFile?.absolutePath
-            } catch (e: RuntimeException) {
-                Log.e(TAG, "Stop failed", e)
-                try { currentFile?.delete() } catch (x: Exception) {}
-                null
-            } finally {
-                cleanup()
-            }
-        }
-    }
-
-    private fun cleanup() {
-        try { mediaRecorder?.release() } catch (e: Exception) {}
-        mediaRecorder = null
-    }
-
-    private fun playStartTone() {
         try {
-            val toneGen = ToneGenerator(AudioManager.STREAM_VOICE_CALL, 80)
-            toneGen.startTone(ToneGenerator.TONE_SUP_PIP, 150)
-        } catch (e: Exception) { }
+            mediaRecorder?.apply {
+                stop()
+                reset()
+                release()
+            }
+            Log.d("CallRecorder", "Recording saved: ${currentFile?.absolutePath}")
+        } catch (e: Exception) {
+            Log.e("CallRecorder", "Error stopping recording", e)
+            currentFile?.delete()
+        } finally {
+            mediaRecorder = null
+            isRecording = false
+        }
     }
 }

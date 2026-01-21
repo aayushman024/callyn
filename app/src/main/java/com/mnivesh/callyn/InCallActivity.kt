@@ -24,8 +24,7 @@ class InCallActivity : ComponentActivity() {
         val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         keyguardManager.requestDismissKeyguard(this, null)
 
-        // 3. Keep Screen On
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // 4. Edge-to-Edge UI
         WindowCompat.setDecorFitsSystemWindows(window, false)

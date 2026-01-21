@@ -5,13 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Person
-import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.PowerManager // REQUIRED IMPORT
 import android.telecom.Call
 import android.telecom.CallAudioState
 import android.telecom.InCallService
@@ -24,7 +25,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import android.content.BroadcastReceiver
 
 @RequiresApi(Build.VERSION_CODES.N)
 class MyInCallService : InCallService() {
@@ -37,18 +37,29 @@ class MyInCallService : InCallService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // --- PROXIMITY WAKELOCK VARIABLE ---
+    private var wakeLock: PowerManager.WakeLock? = null
+
     override fun onCreate() {
         super.onCreate()
         instance = this
         createNotificationChannel()
         startStateObserver()
+
+        // 1. INITIALIZE WAKELOCK
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Callyn:Proximity")
     }
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
         CallManager.onCallAdded(call)
 
-        // Immediate notification update to ensure chip appears ASAP
+        // 2. ACTIVATE SENSOR ON CALL START
+        if (wakeLock?.isHeld == false) {
+            wakeLock?.acquire()
+        }
+
         showNotification()
 
         val intent = Intent(this, InCallActivity::class.java).apply {
@@ -63,6 +74,10 @@ class MyInCallService : InCallService() {
         CallManager.onCallRemoved(call)
 
         if (calls.isEmpty()) {
+            // 3. RELEASE SENSOR ON CALL END
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
             stopForegroundService()
             instance = null
         } else {
@@ -78,10 +93,21 @@ class MyInCallService : InCallService() {
             isBluetoothOn = audioState.route == CallAudioState.ROUTE_BLUETOOTH,
             availableRoutes = audioState.supportedRouteMask
         )
+
+        // 4. SMART LOGIC: Disable sensor if on Speaker/Bluetooth
+        if (audioState.route == CallAudioState.ROUTE_SPEAKER || audioState.route == CallAudioState.ROUTE_BLUETOOTH) {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } else {
+            // Re-enable if back to Earpiece
+            if (wakeLock?.isHeld == false && !calls.isEmpty()) wakeLock?.acquire()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        if (wakeLock?.isHeld == true) {
+            wakeLock?.release()
+        }
         stopForegroundService()
         serviceScope.cancel()
         instance = null
@@ -100,7 +126,7 @@ class MyInCallService : InCallService() {
     private fun createNotificationChannel() {
         val name = "Ongoing Calls"
         val descriptionText = "Active call status"
-        val importance = NotificationManager.IMPORTANCE_DEFAULT // Default allows visual chip
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
         val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
             description = descriptionText
             setSound(null, null)
@@ -113,7 +139,6 @@ class MyInCallService : InCallService() {
     private fun showNotification() {
         val currentState = CallManager.callState.value ?: return
 
-        // 1. Prepare Data
         val callerName = if (currentState.name.isNotBlank() && currentState.name != "Unknown") {
             currentState.name
         } else {
@@ -122,7 +147,6 @@ class MyInCallService : InCallService() {
 
         val callStatus = currentState.status
 
-        // 2. Prepare Intent (Tapping notification/chip goes to Activity)
         val activityIntent = Intent(this, InCallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -131,7 +155,6 @@ class MyInCallService : InCallService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // 3. Prepare End Call Action
         val endCallIntent = PendingIntent.getBroadcast(
             this, 1,
             Intent(this, NotificationActionReceiver::class.java).apply { action = "END_CALL" },
@@ -141,7 +164,6 @@ class MyInCallService : InCallService() {
         val notificationBuilder: android.app.Notification.Builder?
         val notificationCompatBuilder: NotificationCompat.Builder?
 
-        // --- ANDROID 12+ (API 31) NATIVE CHIP LOGIC ---
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val person = Person.Builder()
                 .setName(callerName)
@@ -149,7 +171,6 @@ class MyInCallService : InCallService() {
                 .setImportant(true)
                 .build()
 
-            // CallStyle is REQUIRED for the system green chip
             val callStyle = Notification.CallStyle.forOngoingCall(
                 person,
                 endCallIntent
@@ -164,14 +185,12 @@ class MyInCallService : InCallService() {
                 .setCategory(Notification.CATEGORY_CALL)
                 .setColor(getColor(android.R.color.holo_green_dark))
                 .setContentIntent(pendingIntent)
-                // Critical for timer in status bar:
                 .setUsesChronometer(true)
                 .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: System.currentTimeMillis())
 
             startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
 
         } else {
-            // --- ANDROID 11 AND BELOW FALLBACK ---
             notificationCompatBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_call)
                 .setContentTitle(callerName)
@@ -202,7 +221,7 @@ class MyInCallService : InCallService() {
 class NotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (intent?.action == "END_CALL") {
-            CallManager.rejectCall() // This calls disconnect() in your manager
+            CallManager.rejectCall()
         }
     }
 }

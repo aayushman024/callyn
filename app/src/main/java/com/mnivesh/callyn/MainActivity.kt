@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.Bundle
 import android.provider.CallLog
 import android.provider.ContactsContract
@@ -252,6 +253,7 @@ class MainActivity : ComponentActivity() {
         if (!isPermissionRequestInProgress && (uiState is MainActivityUiState.Loading || uiState is MainActivityUiState.LoggedOut)) {
             checkLoginState()
         }
+        checkStoragePermission()
         checkForUpdates()
         syncDeviceDetails()
     }
@@ -259,6 +261,22 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    //check storage permission
+    private fun checkStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                    intent.data = Uri.parse("package:$packageName")
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    startActivity(intent)
+                }
+            }
+        }
     }
 
     // --- LOGIC: Updates ---

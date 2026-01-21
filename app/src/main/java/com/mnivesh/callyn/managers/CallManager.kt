@@ -53,7 +53,7 @@ data class CallState(
     val familyHead: String? = null,
     val rshipManager: String? = null,
     val connectTimeMillis: Long = 0,
-    internal val call: Call? = null, // The "Primary" call shown on screen
+    internal val call: Call? = null,
 
     // Call Waiting / Background Call
     val secondCallerName: String? = null,

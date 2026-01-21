@@ -219,7 +219,7 @@ fun AppDrawer(
                     }
                 ) { onShowDirectory() }
 
-                if (department == "Management" || department == "IT Desk") {
+                if (department == "Management" || department == "IT Desk")
                     drawerItem(
                         "User Status",
                         {
@@ -232,17 +232,19 @@ fun AppDrawer(
                         }
                     ) { onShowUserDetails() }
 
-                    drawerItem(
-                        "View Call Logs",
-                        {
-                            Icon(
-                                Icons.Default.List,
-                                null,
-                                Modifier.size(22.dp),
-                                tint = Color(0xFF34D399)
-                            )
-                        }
-                    ) { onShowCallLogs() }
+                    if(department == "Management" || email == "aayushman@niveshonline.com" || email == "ishika@niveshonline.com" || email == "sagar@niveshonline.com" || email == "ved@niveshonline.com") {
+                        drawerItem(
+                            "View Call Logs",
+                            {
+                                Icon(
+                                    Icons.Default.List,
+                                    null,
+                                    Modifier.size(22.dp),
+                                    tint = Color(0xFF34D399)
+                                )
+                            }
+                        ) { onShowCallLogs() }
+                    }
 
                     drawerItem(
                         "Personal Contact Requests",
@@ -282,7 +284,7 @@ fun AppDrawer(
                         .padding(top = 10.dp)
                         .fillMaxWidth()
                 )
-            }
+
 
             // VERSION PILL (Fixed at bottom)
             Surface(
