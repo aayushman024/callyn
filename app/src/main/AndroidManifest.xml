@@ -117,7 +117,7 @@
             tools:ignore="LockedOrientationActivity" />
 
         <service
-            android:name="com.mnivesh.callyn.MyInCallService"
+            android:name="com.mnivesh.callyn.services.MyInCallService"
             android:exported="true"
             android:permission="android.permission.BIND_INCALL_SERVICE"
             android:foregroundServiceType="phoneCall"
@@ -130,7 +130,7 @@
             </intent-filter>
         </service>
 
-        <receiver android:name=".NotificationActionReceiver" />
+        <receiver android:name=".services.NotificationActionReceiver" />
 
     </application>
 </manifest>

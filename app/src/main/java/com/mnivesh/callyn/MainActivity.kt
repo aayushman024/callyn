@@ -94,6 +94,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
+import com.mnivesh.callyn.components.AppDrawer
 
 private const val TAG = "MainActivity"
 
@@ -411,6 +415,7 @@ class MainActivity : ComponentActivity() {
             val token = data.getQueryParameter("token")
             val department = data.getQueryParameter("department")
             val email = data.getQueryParameter("email")
+            val workPhone = data.getQueryParameter("work_phone")
 
             if (!token.isNullOrEmpty()) {
                 authManager.saveToken(token)
@@ -419,7 +424,10 @@ class MainActivity : ComponentActivity() {
                 if (department != null) {
                     authManager.saveDepartment(department)
                     authManager.saveUserEmail(email)
+                    authManager.saveWorkPhone(workPhone)
                 }
+
+                Log.d(TAG, "Saved details: Dept=$department, Email=$email, Phone=$workPhone")
 
                 fetchUserName("Bearer $token", isFreshLogin = true)
                 return true
@@ -690,7 +698,8 @@ fun LoadingDetailsScreen(
 
             // Conflict Check
             val dept = authManager.getDepartment()
-            if (dept != "Management" && dept != "IT Desk") {
+//            if (dept != "Management" && dept != "IT Desk") {
+            if (dept == "ConflictCheckPaused") {
                 // We know permissions are granted now because of the check above
                 val workContacts = withContext(Dispatchers.IO) {
                     app.repository.allContacts.first()
@@ -1216,62 +1225,114 @@ fun MainScreenContent(
     onResetMissedCount: () -> Unit
 ) {
     val navController = rememberNavController()
-    Scaffold(
-        containerColor = ComposeColor(0xFF0F172A),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = { BottomNavigationBar(navController, missedCallCount) }
-    ) { padding ->
-        NavHost(
-            navController,
-            startDestination = Screen.Contacts.route,
-            enterTransition = { EnterTransition.None },
-            exitTransition = { ExitTransition.None },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None }
-        ) {
-            composable(Screen.Recents.route) {
-                RecentCallsScreen(
-                    onCallClick = { num, slot -> onSmartDial(num, slot) },
-                    onScreenEntry = onResetMissedCount
-                )
-            }
-            composable(Screen.Contacts.route) {
-                ContactsScreen(
-                    onContactClick = { number, slot -> onSmartDial(number, slot) },
-                    onLogout = onLogout,
-                    onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
-                    onShowCallLogs = { navController.navigate(Screen.ShowCallLogs.route) },
-                    onShowRequests = { navController.navigate(Screen.Requests.route) },
-                    onShowDirectory = { navController.navigate(Screen.EmployeeDirectory.route) }
-                )
-            }
-            composable(Screen.Dialer.route) {
-                DialerScreen(
-                    onCallClick = { num, slot -> onSmartDial(num, slot) },
-                )
-            }
-            composable(Screen.Requests.route) {
-                PersonalRequestsScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            composable(Screen.UserDetails.route) {
-                UserDetailsScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
-            }
-            composable(Screen.EmployeeDirectory.route) {
-                EmployeeDirectoryScreen(
-                    onNavigateBack = { navController.popBackStack() },
-                    onCallClick = { number, slot ->
-                        onSmartDial(number, slot)
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    // Move Drawer to the Root
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawer(
+                userName = userName,
+                onSync = {
+                    scope.launch {
+                        val token = AuthManager(context).getToken()
+                        if (token != null) {
+                            Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
+                            val app = context.applicationContext as CallynApplication
+                            // Use repository to sync contacts
+                            val isSuccess = app.repository.refreshContacts(token, userName)
+
+                            if (isSuccess) {
+                                Toast.makeText(context, "Sync Successful!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Sync Failed. Check Internet.", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(context, "Authentication Error", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                )
-            }
-            composable(Screen.ShowCallLogs.route) {
-                ShowCallLogsScreen(
-                    onNavigateBack = { navController.popBackStack() }
-                )
+                },
+                onLogout = onLogout,
+                onClose = { scope.launch { drawerState.close() } },
+                onShowRequests = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Screen.Requests.route)
+                },
+                onShowUserDetails = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Screen.UserDetails.route)
+                },
+                onShowDirectory = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Screen.EmployeeDirectory.route)
+                },
+                onShowCallLogs = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Screen.ShowCallLogs.route)
+                }
+            )
+        }
+    ) {
+        Scaffold(
+            containerColor = ComposeColor(0xFF0F172A),
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            bottomBar = { BottomNavigationBar(navController, missedCallCount) }
+        ) { padding ->
+            NavHost(
+                navController,
+                startDestination = Screen.Contacts.route,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None }
+            ) {
+                composable(Screen.Recents.route) {
+                    RecentCallsScreen(
+                        onCallClick = { num, slot -> onSmartDial(num, slot) },
+                        onScreenEntry = onResetMissedCount
+                    )
+                }
+                composable(Screen.Contacts.route) {
+                    ContactsScreen(
+                        onContactClick = { number, slot -> onSmartDial(number, slot) },
+//                        onLogout = onLogout,
+//                        onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
+//                        onShowCallLogs = { navController.navigate(Screen.ShowCallLogs.route) },
+//                        onShowRequests = { navController.navigate(Screen.Requests.route) },
+//                        onShowDirectory = { navController.navigate(Screen.EmployeeDirectory.route) },
+                        onOpenDrawer = { scope.launch { drawerState.open() } }
+                    )
+                }
+                composable(Screen.Dialer.route) {
+                    DialerScreen(
+                        onCallClick = { num, slot -> onSmartDial(num, slot) },
+                    )
+                }
+                composable(Screen.Requests.route) {
+                    PersonalRequestsScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.UserDetails.route) {
+                    UserDetailsScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.EmployeeDirectory.route) {
+                    EmployeeDirectoryScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onCallClick = { number, slot ->
+                            onSmartDial(number, slot)
+                        }
+                    )
+                }
+                composable(Screen.ShowCallLogs.route) {
+                    ShowCallLogsScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }

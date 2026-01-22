@@ -46,10 +46,8 @@ fun AppDrawer(
     val department = remember { AuthManager(context).getDepartment() }
     val email = remember { AuthManager(context).getUserEmail() }
 
-    // RESPONSIVE: Get screen width to calculate dynamic drawer width
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
-    // Drawer takes 85% of screen width, but caps at 320dp for larger screens
     val drawerWidth = min(320.dp, screenWidth * 0.85f)
     val scrollState = rememberScrollState()
 
@@ -58,21 +56,16 @@ fun AppDrawer(
         drawerContentColor = Color.White,
         modifier = Modifier.width(drawerWidth)
     ) {
-        // Use a Column with fillMaxSize to manage vertical spacing properly
         Column(
             modifier = Modifier.fillMaxSize()
         ) {
-            // HEADER (Fixed at top)
+            // --- HEADER (Fixed) ---
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.verticalGradient(
-                            listOf(
-                                Color(0xFF020617),
-                                Color(0xFF0B1220),
-                                Color(0xFF111827)
-                            )
+                            listOf(Color(0xFF020617), Color(0xFF0B1220), Color(0xFF111827))
                         )
                     )
                     .padding(top = 44.dp, bottom = 28.dp, start = 24.dp, end = 24.dp)
@@ -105,7 +98,6 @@ fun AppDrawer(
                     color = Color(0xFFF1F5F9)
                 )
 
-                // EMAIL TEXT
                 if (!email.isNullOrBlank() && email != "N/A") {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -149,13 +141,11 @@ fun AppDrawer(
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
 
-            // CONTENT (Flexible height + Scrollable)
-            // This takes up all available remaining space. If content is too long, it scrolls.
-            // If content is short, it pushes the footer to the bottom.
+            // --- SCROLLABLE CONTENT (Takes available space) ---
             Column(
                 modifier = Modifier
-                    .weight(1f) // RESPONSIVE: Takes available space
-                    .verticalScroll(scrollState) // RESPONSIVE: Handles small height screens
+                    .weight(1f)
+                    .verticalScroll(scrollState)
                     .padding(vertical = 14.dp, horizontal = 14.dp)
             ) {
 
@@ -167,11 +157,7 @@ fun AppDrawer(
                 ) {
                     NavigationDrawerItem(
                         label = {
-                            Text(
-                                text = label,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Text(text = label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                         },
                         icon = icon,
                         selected = false,
@@ -197,8 +183,8 @@ fun AppDrawer(
                     icon = {
                         Icon(
                             Icons.Default.Refresh,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
+                            null,
+                            Modifier.size(22.dp),
                             tint = Color(0xFF38BDF8)
                         )
                     }
@@ -212,14 +198,14 @@ fun AppDrawer(
                     icon = {
                         Icon(
                             Icons.Default.Badge,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp),
+                            null,
+                            Modifier.size(22.dp),
                             tint = Color(0xFFF472B6)
                         )
                     }
                 ) { onShowDirectory() }
 
-                if (department == "Management" || department == "IT Desk")
+                if (department == "Management" || department == "IT Desk") {
                     drawerItem(
                         "User Status",
                         {
@@ -231,91 +217,115 @@ fun AppDrawer(
                             )
                         }
                     ) { onShowUserDetails() }
-
-                    if(department == "Management" || email == "aayushman@niveshonline.com" || email == "ishika@niveshonline.com" || email == "sagar@niveshonline.com" || email == "ved@niveshonline.com") {
-                        drawerItem(
-                            "View Call Logs",
-                            {
-                                Icon(
-                                    Icons.Default.List,
-                                    null,
-                                    Modifier.size(22.dp),
-                                    tint = Color(0xFF34D399)
-                                )
-                            }
-                        ) { onShowCallLogs() }
-                    }
-
-                    drawerItem(
-                        "Personal Contact Requests",
-                        {
-                            Icon(
-                                Icons.Default.AssignmentInd,
-                                null,
-                                Modifier.size(22.dp),
-                                tint = Color(0xFFFACC15)
-                            )
-                        }
-                    ) { onShowRequests() }
                 }
 
-                NavigationDrawerItem(
-                    label = { Text("Logout", fontSize = 15.sp, fontWeight = FontWeight.Medium) },
-                    icon = {
+                if (department == "Management" || email == "aayushman@niveshonline.com" || email == "ishika@niveshonline.com" || email == "sagar@niveshonline.com" || email == "ved@niveshonline.com") {
+                    drawerItem(
+                        "View Call Logs",
+                        {
+                            Icon(
+                                Icons.Default.List,
+                                null,
+                                Modifier.size(22.dp),
+                                tint = Color(0xFF34D399)
+                            )
+                        }
+                    ) { onShowCallLogs() }
+                }
+
+                drawerItem(
+                    "Personal Contact Requests",
+                    {
                         Icon(
-                            Icons.AutoMirrored.Filled.Logout,
+                            Icons.Default.AssignmentInd,
                             null,
                             Modifier.size(22.dp),
-                            tint = Color(0xFFF87171)
+                            tint = Color(0xFFFACC15)
                         )
-                    },
-                    selected = false,
+                    }
+                ) { onShowRequests() }
+
+            }
+
+            // --- BOTTOM SECTION (Fixed) ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp)
+                    .padding(bottom = 20.dp)
+            ) {
+                HorizontalDivider(
+                    color = Color.White.copy(alpha = 0.08f),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+
+                // Logout Button - Prominent placement
+                Surface(
                     onClick = {
                         onClose()
                         onLogout()
                     },
                     shape = RoundedCornerShape(18.dp),
-                    colors = NavigationDrawerItemDefaults.colors(
-                        unselectedContainerColor = Color.White.copy(alpha = 0.03f),
-                        unselectedTextColor = Color(0xFFF87171),
-                        unselectedIconColor = Color(0xFFF87171)
-                    ),
+                    color = Color(0xFF1F2937),
+                    border = BorderStroke(1.dp, Color(0xFFF44336).copy(alpha = 0.3f)),
                     modifier = Modifier
-                        .padding(top = 10.dp)
                         .fillMaxWidth()
-                )
-
-
-            // VERSION PILL (Fixed at bottom)
-            Surface(
-                onClick = { (context as? MainActivity)?.manualUpdateCheck() },
-                shape = RoundedCornerShape(30),
-                color = Color.White.copy(alpha = 0.06f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = 80.sdp()) // Kept your sdp usage
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(vertical = 8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.SystemUpdate,
-                        contentDescription = null,
-                        tint = Color(0xFF93C5FD),
-                        modifier = Modifier.size(14.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Logout,
+                            contentDescription = null,
+                            tint = Color(0xFFF44336),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Logout",
+                            fontSize = 15.sp,
+                            color = Color(0xFFF44336),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
 
-                    Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(
-                        text = "Callyn v$version",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.8f),
-                        letterSpacing = 0.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                // Version info
+                Surface(
+                    onClick = { (context as? MainActivity)?.manualUpdateCheck() },
+                    shape = RoundedCornerShape(30),
+                    color = Color.White.copy(alpha = 0.06f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 80.sdp())
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = Color(0xFF93C5FD),
+                            modifier = Modifier.size(14.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text(
+                            text = "Callyn v$version",
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.8f),
+                            letterSpacing = 0.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }

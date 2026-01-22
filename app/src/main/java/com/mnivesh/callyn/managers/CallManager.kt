@@ -1,3 +1,5 @@
+// [!code display_name:CallManager.kt]
+// [!code file_path:aayushman024/callyn/callyn-b3dc429adcee543cca5d11b2c13564d35d3c1f65/app/src/main/java/com/mnivesh/callyn/managers/CallManager.kt]
 package com.mnivesh.callyn.managers
 
 import android.annotation.SuppressLint
@@ -20,7 +22,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
-import com.mnivesh.callyn.MyInCallService
+import com.mnivesh.callyn.services.MyInCallService
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.workers.PersonalUploadWorker
@@ -382,6 +384,10 @@ object CallManager {
         if (rawNumber.isBlank()) return
 
         coroutineScope.launch {
+            // 0. Get User Department
+            val dept = appContext?.let { AuthManager(it).getDepartment() } ?: "N/A"
+            val isManagement = dept == "Management"
+
             // 1. Prepare Common Data
             val now = System.currentTimeMillis()
             val durationSeconds = if (call.details.connectTimeMillis > 0) {
@@ -400,23 +406,32 @@ object CallManager {
             val simSlot = appContext?.let { getSimSlot(it, call) } ?: "Unknown"
             val normalized = normalizeNumber(rawNumber)
 
-            // 2. Check if Work Contact
+            // 2. Identify Call Type (Duplication Logic Check)
             var isWork = false
             var workName = ""
 
-            // Strict length check to avoid treating short codes (198, 112) as contacts
             if (normalized.length > 6) {
+                // Check Work DB
                 val workContact = repository?.findWorkContactByNumber(normalized)
-                if (workContact != null && !workContact.rshipManager.equals("Employee", ignoreCase = true)) {
+                val inWorkDb = workContact != null
+
+                if (inWorkDb) {
+                    // It is definitely Work
                     isWork = true
-                    workName = workContact.name
+                    workName = workContact?.name ?: ""
+                } else {
+                    // Only check device contacts if NOT in work DB
+                    val deviceName = findPersonalContactName(normalized)
+                    if (deviceName != null) {
+                        isWork = false // It's purely personal
+                    }
                 }
             }
 
             // 3. Branch Logic
             if (isWork) {
                 // ================= WORK FLOW =================
-                // A. Save to Local DB (UI history)
+                // A. Save to Local DB (Always for Work calls, even for Management)
                 repository?.insertWorkLog(
                     WorkCallLog(
                         name = workName,
@@ -431,36 +446,39 @@ object CallManager {
                 )
 
                 appContext?.let { ctx ->
-                    // B. Delete from System Log (if not Management)
-                    if (AuthManager(ctx).getDepartment() != "Management") {
+                    if (!isManagement) {
+                        // B. Delete from System Log (Only for Non-Management)
                         setupLogDeletionObserver(rawNumber)
-                    }
 
-                    // C. Trigger Upload Worker
-                    val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadCallLogWorker>()
-                        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                        .build()
-                    WorkManager.getInstance(ctx).enqueue(uploadWorkRequest)
+                        // C. Trigger Upload Worker (Only for Non-Management)
+                        val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadCallLogWorker>()
+                            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                            .build()
+                        WorkManager.getInstance(ctx).enqueue(uploadWorkRequest)
+                    }
                 }
 
             } else {
                 // ================= PERSONAL FLOW =================
-                // No local DB save. Direct hand-off to WorkManager for upload.
+                // No local app DB for personal calls (they stay in system log).
 
-                val personalData = workDataOf(
-                    "duration" to durationSeconds,
-                    "timestamp" to now,
-                    "direction" to direction,
-                    "simSlot" to simSlot
-                )
+                // Only upload if NOT Management
+                if (!isManagement) {
+                    val personalData = workDataOf(
+                        "duration" to durationSeconds,
+                        "timestamp" to now,
+                        "direction" to direction,
+                        "simSlot" to simSlot
+                    )
 
-                val personalWorkRequest = OneTimeWorkRequestBuilder<PersonalUploadWorker>()
-                    .setInputData(personalData)
-                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                    .build()
+                    val personalWorkRequest = OneTimeWorkRequestBuilder<PersonalUploadWorker>()
+                        .setInputData(personalData)
+                        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                        .build()
 
-                appContext?.let { ctx ->
-                    WorkManager.getInstance(ctx).enqueue(personalWorkRequest)
+                    appContext?.let { ctx ->
+                        WorkManager.getInstance(ctx).enqueue(personalWorkRequest)
+                    }
                 }
             }
         }

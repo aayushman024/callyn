@@ -1,5 +1,6 @@
-package com.mnivesh.callyn
+package com.mnivesh.callyn.services
 
+import android.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -18,6 +19,7 @@ import android.telecom.CallAudioState
 import android.telecom.InCallService
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import com.mnivesh.callyn.InCallActivity
 import com.mnivesh.callyn.managers.CallManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +49,7 @@ class MyInCallService : InCallService() {
         startStateObserver()
 
         // 1. INITIALIZE WAKELOCK
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "Callyn:Proximity")
     }
 
@@ -161,13 +163,13 @@ class MyInCallService : InCallService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notificationBuilder: android.app.Notification.Builder?
+        val notificationBuilder: Notification.Builder?
         val notificationCompatBuilder: NotificationCompat.Builder?
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val person = Person.Builder()
                 .setName(callerName)
-                .setIcon(Icon.createWithResource(this, android.R.drawable.ic_menu_call))
+                .setIcon(Icon.createWithResource(this, R.drawable.ic_menu_call))
                 .setImportant(true)
                 .build()
 
@@ -178,12 +180,12 @@ class MyInCallService : InCallService() {
 
             notificationBuilder = Notification.Builder(this, CHANNEL_ID)
                 .setStyle(callStyle)
-                .setSmallIcon(android.R.drawable.ic_menu_call)
+                .setSmallIcon(R.drawable.ic_menu_call)
                 .setContentTitle(callerName)
                 .setContentText(callStatus)
                 .setOngoing(true)
                 .setCategory(Notification.CATEGORY_CALL)
-                .setColor(getColor(android.R.color.holo_green_dark))
+                .setColor(getColor(R.color.holo_green_dark))
                 .setContentIntent(pendingIntent)
                 .setUsesChronometer(true)
                 .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: System.currentTimeMillis())
@@ -192,7 +194,7 @@ class MyInCallService : InCallService() {
 
         } else {
             notificationCompatBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_menu_call)
+                .setSmallIcon(R.drawable.ic_menu_call)
                 .setContentTitle(callerName)
                 .setContentText(callStatus)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -201,7 +203,7 @@ class MyInCallService : InCallService() {
                 .setColor(Color.parseColor("#4CAF50"))
                 .setColorized(true)
                 .setContentIntent(pendingIntent)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "End", endCallIntent)
+                .addAction(R.drawable.ic_menu_close_clear_cancel, "End", endCallIntent)
                 .setUsesChronometer(true)
                 .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: System.currentTimeMillis())
 

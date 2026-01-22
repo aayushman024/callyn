@@ -13,6 +13,7 @@ class AuthManager(context: Context) {
     private val USER_EMAIL = "UserEmail"
 
     private val KEY_DEPARTMENT = "user_department"
+    private val WORK_PHONE = "work_phone"
 
     fun isLoggedIn(): Boolean = prefs.contains(AUTH_TOKEN)
 
@@ -31,6 +32,13 @@ class AuthManager(context: Context) {
     }
     fun getDepartment(): String? {
         return prefs.getString(KEY_DEPARTMENT, null)
+    }
+
+    fun saveWorkPhone(workPhone: String?) {
+        prefs.edit().putString(WORK_PHONE, workPhone).apply()
+    }
+    fun getWorkPhone(): String? {
+        return prefs.getString(WORK_PHONE, null)
     }
     // Clears all saved data (token and username)
     fun logout() = prefs.edit().clear().apply()

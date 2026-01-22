@@ -1,6 +1,7 @@
 package com.mnivesh.callyn.screens
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -15,12 +16,17 @@ import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,12 +48,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -66,11 +75,17 @@ import kotlinx.coroutines.withContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.zIndex
 import com.mnivesh.callyn.components.AppDrawer
 import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.ViewLimitManager
 import kotlin.math.abs
+import com.mnivesh.callyn.db.uniqueCode
+import kotlinx.coroutines.delay
 
 // --- Data Classes ---
 
@@ -113,16 +128,36 @@ private fun sanitizePhoneNumber(number: String): String {
     return if (digits.length > 10) digits.takeLast(10) else digits
 }
 
+// [!code ++] ADD AT BOTTOM OF FILE
+@Composable
+fun getHighlightedText(text: String, query: String): AnnotatedString {
+    if (query.isBlank()) return AnnotatedString(text)
+
+    val startIndex = text.indexOf(query, ignoreCase = true)
+    if (startIndex == -1) return AnnotatedString(text)
+
+    val spanStyles = listOf(
+        AnnotatedString.Range(
+            SpanStyle(color = Color(0xFFCB9C00), fontWeight = FontWeight.ExtraBold),
+            start = startIndex,
+            end = startIndex + query.length
+        )
+    )
+    return AnnotatedString(text, spanStyles = spanStyles)
+}
+
 // --- Main Contact Screen Composable ---
+@SuppressLint("SuspiciousIndentation")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ContactsScreen(
     onContactClick: (String, Int?) -> Unit, // Changed to accept Slot Index (Int?)
-    onShowRequests: () -> Unit,
-    onShowUserDetails: () -> Unit,
-    onShowCallLogs: () -> Unit,
-    onShowDirectory: () -> Unit,
-    onLogout: () -> Unit
+//    onShowRequests: () -> Unit,
+//    onShowUserDetails: () -> Unit,
+//    onShowCallLogs: () -> Unit,
+//    onShowDirectory: () -> Unit,
+    onOpenDrawer: () -> Unit,
+//    onLogout: () -> Unit
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as? CallynApplication
@@ -142,6 +177,7 @@ fun ContactsScreen(
     val authManager = remember { AuthManager(context) }
     val token by remember(authManager) { mutableStateOf(authManager.getToken()) }
     val userName by remember(authManager) { mutableStateOf(authManager.getUserName() ?: "") }
+    val userEmail by remember(authManager) { mutableStateOf(authManager.getUserEmail() ?: "") }
     val department by remember(authManager) { mutableStateOf(authManager.getDepartment()) }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -149,6 +185,8 @@ fun ContactsScreen(
     val personalListState = rememberLazyListState()
 
     var isRefreshing by remember { mutableStateOf(false) }
+    var showFullSearch by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, token, userName) {
@@ -239,7 +277,7 @@ fun ContactsScreen(
             }
 
             // 2. Department Logic
-            if (department == "Management" || department == "IT Desk") {
+            if (department == "Management" || department == "IT Desk" || department == "Operations Dept" || userEmail == "arbind@niveshonline.com") {
                 true // Show all (except the ones excluded above)
             } else {
                 // Show only if assigned to this specific user
@@ -254,7 +292,8 @@ fun ContactsScreen(
     var hasCheckedConflicts by remember { mutableStateOf(false) }
 
     LaunchedEffect(workContacts, deviceContacts) {
-        if (department != "Management" && department != "IT Desk"  && !hasCheckedConflicts && workContacts.isNotEmpty() && deviceContacts.isNotEmpty()) {
+//        if (department != "Management" && department != "IT Desk"  && !hasCheckedConflicts && workContacts.isNotEmpty() && deviceContacts.isNotEmpty()) {
+        if (department == "ConflictContactPaused" && !hasCheckedConflicts && workContacts.isNotEmpty() && deviceContacts.isNotEmpty()) {
             withContext(Dispatchers.IO) {
                 val conflicts = deviceContacts.filter { device ->
                     device.numbers.any { numObj ->
@@ -281,12 +320,19 @@ fun ContactsScreen(
 
     val filteredWorkContacts = remember(searchQuery, workContacts, myContacts, department) {
         if (searchQuery.isBlank()) myContacts else {
+            // Check if the query is potentially a code (6 characters)
+            val isCodeSearch = searchQuery.length == 6
             workContacts.filter {
                 it.name.contains(searchQuery, true) ||
                         it.familyHead.contains(searchQuery, true) ||
                         it.pan.contains(searchQuery, true) ||
-                        (department == "Management" && it.number.contains(searchQuery))
-            }.sortedBy { !it.name.startsWith(searchQuery, true) }
+                        (department == "Management" && it.number.contains(searchQuery)) ||
+                        // Add Code Search Logic
+                        (isCodeSearch && it.uniqueCode.equals(searchQuery, ignoreCase = true))
+            }.sortedBy {
+                // Prioritize exact code match at the very top, then sort by name
+                if (isCodeSearch && it.uniqueCode.equals(searchQuery, ignoreCase = true)) 0 else 1
+            }
         }
     }
 
@@ -306,8 +352,9 @@ fun ContactsScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedWorkContact by remember { mutableStateOf<AppContact?>(null) }
     var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
-
+    var selectedEmployeeContact by remember { mutableStateOf<AppContact?>(null) }
     var showGlobalRequestDialog by remember { mutableStateOf(false) }
+    var showShareCodeDialog by remember { mutableStateOf(false) }
     var globalRequestReason by remember { mutableStateOf("") }
     var contactForRequest by remember { mutableStateOf<String?>(null) }
 
@@ -319,32 +366,32 @@ fun ContactsScreen(
     )
 
     // --- MAIN UI ---
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            AppDrawer(
-                userName = userName,
-                onSync = {
-                    token?.let { t ->
-                        scope.launch {
-                            val isSuccess = viewModel.refreshContactsAwait(t, userName)
-                            if (isSuccess) Toast.makeText(context, "Sync Successful!", Toast.LENGTH_SHORT).show()
-                            else Toast.makeText(context, "Sync Failed. Check Internet.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-                onLogout = { authManager.logout(); onLogout() },
-                onShowRequests = onShowRequests,
-                onShowUserDetails = onShowUserDetails,
-                onShowCallLogs = onShowCallLogs,
-                onShowDirectory = {
-                    scope.launch { drawerState.close() }
-                    onShowDirectory()
-                },
-                onClose = { scope.launch { drawerState.close() } }
-            )
-        }
-    ) {
+//    ModalNavigationDrawer(
+//        drawerState = drawerState,
+//        drawerContent = {
+//            AppDrawer(
+//                userName = userName,
+//                onSync = {
+//                    token?.let { t ->
+//                        scope.launch {
+//                            val isSuccess = viewModel.refreshContactsAwait(t, userName)
+//                            if (isSuccess) Toast.makeText(context, "Sync Successful!", Toast.LENGTH_SHORT).show()
+//                            else Toast.makeText(context, "Sync Failed. Check Internet.", Toast.LENGTH_SHORT).show()
+//                        }
+//                    }
+//                },
+//                onLogout = { authManager.logout(); onLogout() },
+//                onShowRequests = onShowRequests,
+//                onShowUserDetails = onShowUserDetails,
+//                onShowCallLogs = onShowCallLogs,
+//                onShowDirectory = {
+//                    scope.launch { drawerState.close() }
+//                    onShowDirectory()
+//                },
+//                onClose = { scope.launch { drawerState.close() } }
+//            )
+//        }
+//    ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
                 modifier = Modifier
@@ -382,7 +429,7 @@ fun ContactsScreen(
                             }
                         },
                         navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            IconButton(onClick = onOpenDrawer) {
                                 Icon(Icons.Default.Menu, "Menu", tint = Color.White)
                             }
                         },
@@ -442,28 +489,45 @@ fun ContactsScreen(
                                     .fillMaxWidth()
                                     .padding(16.dp, 15.dp, 16.dp, 10.dp)
                             ) {
-                                TextField(
-                                    value = searchQuery,
-                                    onValueChange = { searchQuery = it },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.dp)),
-                                    placeholder = { Text("Search contacts...", color = Color.White.copy(alpha = 0.5f)) },
-                                    leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.White.copy(alpha = 0.6f)) },
-                                    trailingIcon = {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f)) }
-                                        }
-                                    },
-                                    singleLine = true,
-                                    colors = TextFieldDefaults.colors(
-                                        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                                        focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                        unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
-                                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                                        cursorColor = Color.White
+                                // [!code ++] ADD THIS BOX WRAPPER
+                                Box {
+                                    TextField(
+                                        value = searchQuery, // Visual only
+                                        onValueChange = { }, // Disabled
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp)),
+                                        placeholder = { Text("Search contacts...", color = Color.White.copy(alpha = 0.5f)) },
+                                        leadingIcon = { Icon(Icons.Default.Search, "Search", tint = Color.White.copy(alpha = 0.6f)) },
+                                        trailingIcon = {
+                                            if (searchQuery.isNotEmpty()) {
+                                                IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f)) }
+                                            }
+                                        },
+                                        singleLine = true,
+                                        enabled = false, // IMPORTANT: Disable interaction here
+                                        colors = TextFieldDefaults.colors(
+                                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                            focusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                            unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
+                                            disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                                            disabledTextColor = Color.White,
+                                            disabledPlaceholderColor = Color.White.copy(alpha = 0.5f),
+                                            disabledLeadingIconColor = Color.White.copy(alpha = 0.6f),
+                                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                                            disabledIndicatorColor = Color.Transparent,
+                                            cursorColor = Color.White
+                                        )
                                     )
-                                )
+
+                                    // [!code ++] ADD THIS INVISIBLE OVERLAY
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable { showFullSearch = true }
+                                    )
+                                }
                             }
 
                             HorizontalPager(
@@ -490,7 +554,9 @@ fun ContactsScreen(
                                             LazyColumn(state = personalListState, contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                                 if (favoriteContacts.isNotEmpty()) {
                                                     item {
-                                                        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                                                        Column(modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(bottom = 12.dp)) {
                                                             Text(
                                                                 text = "Favourites",
                                                                 color = Color(0xFFF59E0B),
@@ -615,6 +681,21 @@ fun ContactsScreen(
                 )
             }
 
+            if (selectedEmployeeContact != null) {
+                EmployeeBottomSheet(
+                    contact = selectedEmployeeContact!!,
+                    sheetState = sheetState,
+                    isDualSim = isDualSim,
+                    onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedEmployeeContact = null } },
+                    onCall = { slotIndex ->
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            onContactClick(selectedEmployeeContact!!.number, slotIndex)
+                            selectedEmployeeContact = null
+                        }
+                    }
+                )
+            }
+
             if (showConflictSheet) {
                 ModalBottomSheet(
                     onDismissRequest = {},
@@ -679,7 +760,10 @@ fun ContactsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                        .background(
+                                            Color.White.copy(alpha = 0.05f),
+                                            RoundedCornerShape(12.dp)
+                                        )
                                         .padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -766,9 +850,350 @@ fun ContactsScreen(
                     }
                 )
             }
+            // ... (Your existing Scaffold closing brace is above this)
+
+            // [!code ++] PASTE THIS NEW UPDATED BLOCK HERE (OUTSIDE SCAFFOLD)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showFullSearch,
+                enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(300)) + fadeIn(tween(300)),
+                exit = shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(300)) + fadeOut(tween(300)),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(999f) // Max Z-Index to cover everything
+            ) {
+                // Search & Filter State
+                var internalQuery by remember { mutableStateOf("") }
+                var debouncedQuery by remember { mutableStateOf("") }
+                var searchHistory by remember { mutableStateOf(SearchHistoryManager.getHistory(context)) }
+                var selectedFilter by remember { mutableStateOf("All") } // Options: All, Personal, Work, Employee
+                val focusManager = LocalFocusManager.current
+                val keyboardController = LocalSoftwareKeyboardController.current
+
+                // Debounce Logic
+                LaunchedEffect(internalQuery) {
+                    if (internalQuery.isBlank()) {
+                        debouncedQuery = ""
+                    } else {
+                        kotlinx.coroutines.delay(300)
+                        debouncedQuery = internalQuery
+                    }
+                }
+
+                // Auto-Focus
+                LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
+
+                // --- 1. Enhanced Filtering Logic ---
+                val combinedResults = remember(debouncedQuery, selectedFilter, myContacts, deviceContacts, workContacts, department) {
+                    if (debouncedQuery.isBlank()) emptyList<Any>() else {
+                        val isCodeSearch = debouncedQuery.length == 6
+                        val results = mutableListOf<Any>()
+
+                        // Helper for text matching
+                        fun AppContact.matches(): Boolean {
+                            return name.contains(debouncedQuery, true) ||
+                                    familyHead.contains(debouncedQuery, true) ||
+                                    pan.contains(debouncedQuery, true) ||
+                                    (department == "Management" && number.contains(debouncedQuery)) ||
+                                    (isCodeSearch && uniqueCode.equals(debouncedQuery, ignoreCase = true))
+                        }
+
+                        // A. Personal Contacts (Source: deviceContacts)
+                        if (selectedFilter == "All" || selectedFilter == "Personal") {
+                            results.addAll(deviceContacts.filter { contact ->
+                                contact.name.contains(debouncedQuery, true) ||
+                                        contact.numbers.any { it.number.contains(debouncedQuery) }
+                            })
+                        }
+
+                        // B. Work Contacts (Source: myContacts - already filters out Employees)
+                        if (selectedFilter == "All" || selectedFilter == "Work") {
+                            results.addAll(myContacts.filter { it.matches() })
+                        }
+
+                        // C. Employee Contacts (Source: workContacts - specifically where rship is Employee)
+                        if (selectedFilter == "All" || selectedFilter == "Employee") {
+                            results.addAll(workContacts.filter {
+                                it.rshipManager.equals("Employee", ignoreCase = true) && it.matches()
+                            })
+                        }
+
+                        // [!code change] UPDATED SORTING LOGIC
+                        results.sortedWith(
+                            compareBy<Any> { item ->
+                                // LEVEL 0: If searching by Number, Personal Contacts go TOP
+                                val isNumericSearch = debouncedQuery.all { it.isDigit() }
+                                if (isNumericSearch) {
+                                    if (item is DeviceContact) 0 else 1
+                                } else {
+                                    // Default behavior for text: Text matches rely on subsequent filters
+                                    0
+                                }
+                            }.thenBy { item ->
+                                // LEVEL 1: "My Work Contacts" (Assigned to me) go to TOP
+                                // Only prioritize if NOT a numeric search (or treat equally)
+                                if (item is AppContact && item.rshipManager.equals(userName, ignoreCase = true)) 0 else 1
+                            }.thenBy { item ->
+                                // LEVEL 2: Exact Code Match (if query is 6 chars)
+                                if (isCodeSearch && item is AppContact && item.uniqueCode.equals(debouncedQuery, ignoreCase = true)) 0 else 1
+                            }.thenBy { item ->
+                                // LEVEL 3: Alphabetical Name
+                                when (item) {
+                                    is AppContact -> item.name.lowercase()
+                                    is DeviceContact -> item.name.lowercase()
+                                    else -> ""
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // --- 2. Full Screen UI ---
+                androidx.activity.compose.BackHandler { showFullSearch = false }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0F172A))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            // Catch clicks to prevent them passing through to the screen behind
+                        }
+                ) {
+
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Header
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF1E293B))
+                                .statusBarsPadding()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            // Search Row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 8.dp, start = 8.dp, end = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(onClick = { showFullSearch = false }) {
+                                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                                }
+                                TextField(
+                                    value = internalQuery,
+                                    onValueChange = { internalQuery = it },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .focusRequester(searchFocusRequester)
+                                        .clip(RoundedCornerShape(16.dp)),
+                                    placeholder = { Text("Search...", color = Color.White.copy(alpha = 0.5f)) },
+                                    singleLine = true,
+                                    colors = TextFieldDefaults.colors(
+                                        focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                        focusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                        unfocusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                                        cursorColor = Color(0xFF3B82F6)
+                                    ),
+                                    trailingIcon = {
+                                        if (internalQuery.isNotEmpty()) {
+                                            IconButton(onClick = { internalQuery = "" }) {
+                                                Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f))
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // [!code ++] Filter Chips Row
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(listOf("All", "Personal", "Work", "Employee")) { filter ->
+                                    val isSelected = selectedFilter == filter
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedFilter = filter },
+                                        label = { Text(filter) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF3B82F6),
+                                            selectedLabelColor = Color.White,
+                                            containerColor = Color.White.copy(alpha = 0.05f),
+                                            labelColor = Color.White.copy(alpha = 0.7f)
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            borderColor = Color.Transparent,
+                                            enabled = true,
+                                            selected = isSelected
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                        // Results
+                        Box (
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ){
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize(),
+                                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // [!code ++] HISTORY SECTION (Show when query is blank)
+                                if (internalQuery.isBlank()) {
+                                    if (searchHistory.isNotEmpty()) {
+                                        item {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    "Recent Searches",
+                                                    color = Color.White.copy(alpha = 0.5f),
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    "Clear All",
+                                                    color = Color(0xFF60A5FA),
+                                                    fontSize = 12.sp,
+                                                    modifier = Modifier.clickable {
+                                                        SearchHistoryManager.clearHistory(context)
+                                                        searchHistory = emptyList()
+                                                    }
+                                                )
+                                            }
+                                        }
+                                        items(searchHistory) { historyItem ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        internalQuery = historyItem
+                                                    } // Click to search
+                                                    .padding(vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.History,
+                                                    null,
+                                                    tint = Color.White.copy(alpha = 0.4f),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(16.dp))
+                                                Text(
+                                                    historyItem,
+                                                    color = Color.White.copy(alpha = 0.9f),
+                                                    fontSize = 16.sp,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Icon(
+                                                    Icons.Default.NorthWest,
+                                                    null,
+                                                    tint = Color.White.copy(alpha = 0.2f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // [!code ++] RESULTS SECTION (Show when query exists)
+                                    if (combinedResults.isEmpty() && debouncedQuery.isNotEmpty()) {
+                                        item {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(top = 50.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    "No matching contacts",
+                                                    color = Color.White.copy(alpha = 0.5f)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    items(combinedResults) { item ->
+                                        // Helper to save history on click
+                                        val onResultClick: () -> Unit = {
+                                            // 1. Save History
+                                            SearchHistoryManager.addSearch(context, debouncedQuery)
+                                            searchHistory = SearchHistoryManager.getHistory(context)
+
+                                            // 2. Clear Focus & Hide Keyboard Explicitly
+                                            keyboardController?.hide()
+                                            focusManager.clearFocus()
+
+                                            // 3. Launch Sheet with a tiny delay
+                                            // This prevents the keyboard closing animation from "eating" the sheet animation
+                                            scope.launch {
+                                                delay(100)
+                                                sheetState.show()
+                                            }
+                                        }
+
+                                        when (item) {
+                                            is AppContact -> {
+                                                if (item.rshipManager.equals(
+                                                        "Employee",
+                                                        ignoreCase = true
+                                                    )
+                                                ) {
+                                                    ModernEmployeeCard(
+                                                        contact = item,
+                                                        highlightQuery = debouncedQuery, // [!code ++] Pass Query
+                                                        onClick = {
+                                                            selectedEmployeeContact = item
+                                                            onResultClick()
+                                                        }
+                                                    )
+                                                } else {
+                                                    ModernWorkContactCard(
+                                                        contact = item,
+                                                        highlightQuery = debouncedQuery, // [!code ++] Pass Query
+                                                        onClick = {
+                                                            selectedWorkContact = item
+                                                            onResultClick()
+                                                        }
+                                                    )
+                                                }
+                                            }
+
+                                            is DeviceContact -> {
+                                                ModernDeviceContactCard(
+                                                    contact = item,
+                                                    highlightQuery = debouncedQuery, // [!code ++] Pass Query
+                                                    onClick = {
+                                                        selectedDeviceContact = item
+                                                        onResultClick()
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
-}
+//}
 
 // ---------------------------------------------
 // HELPER COMPOSABLES
@@ -787,7 +1212,14 @@ fun FavoriteContactItem(contact: DeviceContact, onClick: () -> Unit) {
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                .background(
+                    Brush.linearGradient(
+                        listOf(
+                            avatarColor,
+                            avatarColor.copy(alpha = 0.7f)
+                        )
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
             Text(getInitials(contact.name), color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -814,7 +1246,7 @@ fun CustomTabContent(text: String, icon: ImageVector, count: Int, isSelected: Bo
 }
 
 @Composable
-private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
+private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit, highlightQuery: String = "") {
     val avatarColor = getColorForName(contact.name)
     Card(
         modifier = Modifier
@@ -831,18 +1263,34 @@ private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                avatarColor,
+                                avatarColor.copy(alpha = 0.7f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(getInitials(contact.name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(contact.name.lowercase().split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    text = getHighlightedText(contact.name, highlightQuery), // Use helper
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     Icon(Icons.Default.FamilyRestroom, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(contact.familyHead.lowercase().split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }, fontSize = 13.sp, color = Color(0xFF60A5FA), fontWeight = FontWeight.Medium)
+                    Text(
+                        text = getHighlightedText(contact.familyHead, highlightQuery), // Use helper
+                        fontSize = 13.sp, color = Color(0xFF60A5FA), fontWeight = FontWeight.Medium)
                 }
             }
             Box(
@@ -859,8 +1307,254 @@ private fun ModernWorkContactCard(contact: AppContact, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit) {
+fun EmployeeBottomSheet(
+    contact: AppContact, // Changed from EmployeeDirectory to AppContact to match your list
+    sheetState: SheetState,
+    isDualSim: Boolean,
+    onDismiss: () -> Unit,
+    onCall: (Int?) -> Unit
+) {
+    val context = LocalContext.current
+
+    // Theme Colors
+    val backgroundColor = Color(0xFF0F172A)
+    val surfaceColor = Color(0xFF1E293B)
+    val primaryColor = Color(0xFF10B981)
+    val secondaryColor = Color(0xFF60A5FA)
+    val textPrimary = Color.White
+    val textSecondary = Color.White.copy(alpha = 0.6f)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = backgroundColor,
+        contentColor = textPrimary,
+        scrimColor = Color.Black.copy(alpha = 0.6f),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 16.dp)
+                    .width(48.dp)
+                    .height(6.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.2f))
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header: Avatar
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .border(4.dp, backgroundColor, CircleShape)
+                    .padding(4.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                getColorForName(contact.name),
+                                getColorForName(contact.name).copy(alpha = 0.6f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    getInitials(contact.name),
+                    color = Color.White,
+                    fontSize = 40.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Name
+            Text(
+                text = contact.name,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Pill
+            Surface(
+                color = secondaryColor.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.height(32.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Badge,
+                        null,
+                        tint = secondaryColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Employee",
+                        fontSize = 13.sp,
+                        color = secondaryColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Details Card
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "CONTACT DETAILS",
+                    color = textSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+                )
+
+                Surface(
+                    color = surfaceColor,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        // Phone Row
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(primaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Phone, null, tint = primaryColor, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Mobile", fontSize = 11.sp, color = textSecondary, fontWeight = FontWeight.Medium)
+                                Text(contact.number, fontSize = 16.sp, color = textPrimary, fontWeight = FontWeight.Medium)
+                            }
+                            IconButton(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Phone", contact.number)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(Icons.Default.ContentCopy, null, tint = textSecondary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = textSecondary.copy(alpha = 0.1f))
+
+                        // Department Row (Using familyHead as Department per schema)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF8B5CF6).copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Apartment, null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text("Department", fontSize = 11.sp, color = textSecondary, fontWeight = FontWeight.Medium)
+                                Text(if(contact.familyHead.isNotBlank()) contact.familyHead else "N/A", fontSize = 16.sp, color = textPrimary, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Call Buttons
+            if (isDualSim) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // SIM 1
+                    Button(
+                        onClick = { onCall(0) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(
+                                8.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = Color(0xFF3B82F6),
+                                spotColor = Color(0xFF3B82F6)
+                            ),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, null)
+                            Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    // SIM 2
+                    Button(
+                        onClick = { onCall(1) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(
+                                8.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = Color(0xFF10B981),
+                                spotColor = Color(0xFF10B981)
+                            ),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, null)
+                            Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                Button(
+                    onClick = { onCall(null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .shadow(
+                            12.dp,
+                            RoundedCornerShape(20.dp),
+                            ambientColor = primaryColor,
+                            spotColor = primaryColor
+                        ),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(text = "Call", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit, highlightQuery: String = "") {
     val avatarColor = getColorForName(contact.name)
     val displayNumber = contact.numbers.firstOrNull()?.number ?: "No Number"
     val count = contact.numbers.size
@@ -880,14 +1574,28 @@ private fun ModernDeviceContactCard(contact: DeviceContact, onClick: () -> Unit)
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                avatarColor,
+                                avatarColor.copy(alpha = 0.7f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(getInitials(contact.name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(contact.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = getHighlightedText(contact.name, highlightQuery), // Use helper
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                     Text(displayNumber, fontSize = 13.sp, color = Color.White.copy(alpha = 0.6f))
                     if (count > 1) {
@@ -1017,6 +1725,80 @@ private fun ContactDetailRow(icon: ImageVector, label: String, value: String, la
     }
 }
 
+// [!code ++] ADD THIS FUNCTION AT THE BOTTOM OF THE FILE
+@Composable
+fun ModernEmployeeCard(contact: AppContact, onClick: () -> Unit, highlightQuery: String = "") {
+    // Reuse your existing helper
+    val avatarColor = getColorForName(contact.name)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                avatarColor,
+                                avatarColor.copy(alpha = 0.7f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                // Reuse your existing helper
+                Text(getInitials(contact.name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = getHighlightedText(contact.name, highlightQuery), // Use helper
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    Icon(Icons.Default.Business, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    // Mapping familyHead to Department as per common schema, or fallback
+                    Text(
+                        if(contact.familyHead.isNotBlank()) contact.familyHead else "Employee",
+                        fontSize = 13.sp,
+                        color = Color(0xFF60A5FA),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669))))
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Call, "Call", tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+        }
+    }
+}
+
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModernBottomSheet(
@@ -1030,6 +1812,7 @@ private fun ModernBottomSheet(
     onRequestSubmit: (String) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showShareCodeDialog by remember { mutableStateOf(false) }
     var showRequestDialog by remember { mutableStateOf(false) }
     var requestReason by remember { mutableStateOf("") }
     val context = LocalContext.current
@@ -1082,17 +1865,33 @@ private fun ModernBottomSheet(
             Box(modifier = Modifier.fillMaxWidth()) {
                 // Top Right Menu Button
                 Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                    IconButton(
-                        onClick = { showMenu = true },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = surfaceColor,
-                            contentColor = textSecondary
-                        ),
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                    ) {
-                        Icon(Icons.Default.MoreVert, "Options", modifier = Modifier.size(20.dp))
+                    Row {
+                        IconButton(
+                            onClick = { showShareCodeDialog = true },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
+                                contentColor = textSecondary
+                            ),
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                        ) {
+                            Icon(Icons.Default.Share, "Share Code", modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        IconButton(
+                            onClick = { showMenu = true },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
+                                contentColor = textSecondary
+                            ),
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                        ) {
+                            Icon(Icons.Default.MoreVert, "Options", modifier = Modifier.size(20.dp))
+                        }
                     }
 
                     // Custom Dropdown
@@ -1232,7 +2031,9 @@ private fun ModernBottomSheet(
                                 // 2. MASKED STATE (Hidden with Button)
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     // Masked Info
@@ -1347,7 +2148,12 @@ private fun ModernBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .height(64.dp)
-                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            .shadow(
+                                8.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = Color(0xFF3B82F6),
+                                spotColor = Color(0xFF3B82F6)
+                            ),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
@@ -1364,7 +2170,12 @@ private fun ModernBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .height(64.dp)
-                            .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            .shadow(
+                                8.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = Color(0xFF10B981),
+                                spotColor = Color(0xFF10B981)
+                            ),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
@@ -1382,7 +2193,12 @@ private fun ModernBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp)
-                        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
+                        .shadow(
+                            12.dp,
+                            RoundedCornerShape(20.dp),
+                            ambientColor = primaryColor,
+                            spotColor = primaryColor
+                        ),
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
@@ -1422,7 +2238,9 @@ private fun ModernBottomSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         color = textSecondary,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(bottom = 20.dp).fillMaxWidth()
+                        modifier = Modifier
+                            .padding(bottom = 20.dp)
+                            .fillMaxWidth()
                     )
 
                     OutlinedTextField(
@@ -1459,7 +2277,9 @@ private fun ModernBottomSheet(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text("Submit Request", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -1468,9 +2288,89 @@ private fun ModernBottomSheet(
             dismissButton = {
                 TextButton(
                     onClick = { showRequestDialog = false },
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp)
                 ) {
                     Text("Cancel", color = textSecondary, fontWeight = FontWeight.Medium)
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
+    //hex code dialog
+    // ... existing showRequestDialog logic ...
+
+    // [!code ++] Add Share Code Dialog
+    if (showShareCodeDialog) {
+        AlertDialog(
+            onDismissRequest = { showShareCodeDialog = false },
+            containerColor = surfaceColor,
+            icon = {
+                Icon(Icons.Default.QrCode, null, tint = primaryColor, modifier = Modifier.size(28.dp))
+            },
+            title = {
+                Text(
+                    "Contact Code",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = textPrimary,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Code Display with Copy
+                    Surface(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("Contact Code", contact.uniqueCode)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Code copied!", Toast.LENGTH_SHORT).show()
+                        },
+                        color = backgroundColor,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, primaryColor.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = contact.uniqueCode,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp,
+                                color = primaryColor
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Icon(Icons.Default.ContentCopy, "Copy", tint = textSecondary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        "Share this code with other Callyn users to get this contact.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showShareCodeDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text("Close", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             },
             shape = RoundedCornerShape(28.dp)
@@ -1567,7 +2467,9 @@ private fun ModernDeviceBottomSheet(
                             }
                         },
                         colors = actionButtonColors,
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
                     ) { Icon(Icons.Default.Edit, "Edit Contact", modifier = Modifier.size(20.dp)) }
 
                     IconButton(
@@ -1582,7 +2484,9 @@ private fun ModernDeviceBottomSheet(
                             }
                         },
                         colors = actionButtonColors,
-                        modifier = Modifier.size(40.dp).clip(CircleShape)
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
                     ) { Icon(Icons.Default.OpenInNew, "View Contact", modifier = Modifier.size(20.dp)) }
                 }
 
@@ -1795,7 +2699,15 @@ private fun ModernDeviceBottomSheet(
                         // SIM 1
                         Button(
                             onClick = { onCall(effectiveDefault.number, 0) },
-                            modifier = Modifier.weight(1f).height(64.dp).shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(64.dp)
+                                .shadow(
+                                    8.dp,
+                                    RoundedCornerShape(20.dp),
+                                    ambientColor = Color(0xFF3B82F6),
+                                    spotColor = Color(0xFF3B82F6)
+                                ),
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
@@ -1809,7 +2721,15 @@ private fun ModernDeviceBottomSheet(
                         // SIM 2
                         Button(
                             onClick = { onCall(effectiveDefault.number, 1) },
-                            modifier = Modifier.weight(1f).height(64.dp).shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(64.dp)
+                                .shadow(
+                                    8.dp,
+                                    RoundedCornerShape(20.dp),
+                                    ambientColor = Color(0xFF10B981),
+                                    spotColor = Color(0xFF10B981)
+                                ),
                             shape = RoundedCornerShape(20.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
@@ -1827,7 +2747,12 @@ private fun ModernDeviceBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(64.dp)
-                            .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
+                            .shadow(
+                                12.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = primaryColor,
+                                spotColor = primaryColor
+                            ),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = primaryColor
