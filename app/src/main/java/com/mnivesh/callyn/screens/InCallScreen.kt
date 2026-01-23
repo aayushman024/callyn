@@ -147,8 +147,9 @@ fun InCallContent(
     var showMessageSheet by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    val backgroundBrush = if (currentState.type == "work") WorkGradient else PersonalGradient
-
+    val backgroundBrush = remember(currentState.type) {
+        if (currentState.type == "work") WorkGradient else PersonalGradient
+    }
     Box(
         modifier = Modifier
             .fillMaxSize()

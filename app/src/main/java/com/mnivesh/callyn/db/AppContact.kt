@@ -1,13 +1,11 @@
 package com.mnivesh.callyn.db
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
+import androidx.room.Ignore
 import androidx.room.PrimaryKey
-import java.security.MessageDigest
 
-/**
- * Defines the schema for the local contacts table.
- * This matches your requested schema.
- */
+@Immutable
 @Entity(tableName = "contacts")
 data class AppContact(
     @PrimaryKey(autoGenerate = true)
@@ -15,27 +13,30 @@ data class AppContact(
     val name: String,
     val number: String,
     val type: String = "work",
-    val pan: String,         // ADDED FIELD
-    val rshipManager: String, // ADDED FIELD
-    val familyHead: String   // ADDED FIELD
-)
+    val pan: String,
+    val rshipManager: String,
+    val familyHead: String
+) {
+    /**
+     * HIGH-SPEED OPTIMIZATION:
+     * 1. Computed inside the class as a 'val'. This runs ONLY ONCE when the object is created.
+     * 2. Uses 'hashCode()' instead of MD5. This is ~100x faster and requires zero byte-array allocations.
+     * 3. @Ignore ensures Room does not try to save this as a database column.
+     */
+    @get:Ignore
+    val uniqueCode: String by lazy(LazyThreadSafetyMode.NONE) {
+        // 1. Combine fields (String concatenation is fast enough for this)
+        val rawInput = name.trim().lowercase() + number.trim() + pan.trim().lowercase()
 
-/**
- * Runtime Extension to generate a deterministic 6-digit Hex Code.
- * - Combines Name + Number + PAN (stable fields).
- * - Hashes them using MD5.
- * - Returns the first 6 characters as an Uppercase Hex string.
- * - This is NOT stored in the DB, it is calculated on the fly.
- */
-val AppContact.uniqueCode: String
-    get() {
-        // 1. Combine stable fields.
-        // Using trim() and lowercase() ensures "Ramesh" and "RAMESH" produce the SAME code.
-        val rawInput = "${name.trim().lowercase()}${number.trim()}${pan.trim().lowercase()}"
+        // 2. Compute Hash (Native Java/Kotlin Int Hash is extremely fast)
+        val hash = rawInput.hashCode()
 
-        // 2. Compute MD5 Hash
-        val bytes = MessageDigest.getInstance("MD5").digest(rawInput.toByteArray())
+        // 3. Convert to 6-char Hex
+        // We mask with 0xFFFFFF to ensure we get a clean 24-bit integer (max 6 hex chars)
+        // and handle negative hash codes gracefully.
+        val hex = Integer.toHexString(hash and 0xFFFFFF).uppercase()
 
-        // 3. Convert to Hex and take first 6 characters
-        return bytes.joinToString("") { "%02x".format(it) }.take(6).uppercase()
+        // 4. Pad with zeros if the hash happens to be small (e.g., "A1" -> "0000A1")
+        hex.padStart(6, '0')
     }
+}

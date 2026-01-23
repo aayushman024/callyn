@@ -154,7 +154,11 @@ class MainActivity : ComponentActivity() {
                 checkLoginState()
             } else {
                 // OPTIONAL: If denied, force logout or show a Toast explanation
-                Toast.makeText(this, "Contacts permission is required to continue.", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this,
+                    "Contacts permission is required to continue.",
+                    Toast.LENGTH_LONG
+                ).show()
                 // We leave them on 'Loading' or you can set uiState = LoggedOut
             }
         }
@@ -165,12 +169,14 @@ class MainActivity : ComponentActivity() {
     }
 
     // Launcher for Conflict Resolution (Write Contacts)
-    private val writeContactPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
-        if (isGranted) {
-            // Just toast, user will press button again
-            Toast.makeText(this, "Permission granted. Tap Continue again.", Toast.LENGTH_SHORT).show()
+    private val writeContactPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                // Just toast, user will press button again
+                Toast.makeText(this, "Permission granted. Tap Continue again.", Toast.LENGTH_SHORT)
+                    .show()
+            }
         }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -178,7 +184,8 @@ class MainActivity : ComponentActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars =
+            false
 
         if (!handleIntent(intent)) {
             checkLoginState()
@@ -205,7 +212,10 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     when (val state = uiState) {
                         is MainActivityUiState.Loading -> {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 CircularProgressIndicator()
                             }
                         }
@@ -217,7 +227,11 @@ class MainActivity : ComponentActivity() {
                                     uiState = MainActivityUiState.LoggedIn(state.userName)
                                 },
                                 onConflictsFound = { conflicts, workContacts ->
-                                    uiState = MainActivityUiState.ResolvingConflicts(state.userName, conflicts, workContacts)
+                                    uiState = MainActivityUiState.ResolvingConflicts(
+                                        state.userName,
+                                        conflicts,
+                                        workContacts
+                                    )
                                 }
                             )
                         }
@@ -308,14 +322,26 @@ class MainActivity : ComponentActivity() {
                         )
                         showUpdateDialog = true
                     } else if (isManualCheck) {
-                        Toast.makeText(this@MainActivity, "You are already on the latest version", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@MainActivity,
+                            "You are already on the latest version",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 } else if (isManualCheck) {
-                    Toast.makeText(this@MainActivity, "Failed to check for updates", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to check for updates",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } catch (e: Exception) {
                 if (isManualCheck) {
-                    Toast.makeText(this@MainActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Error: ${e.localizedMessage}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
                 Log.e(TAG, "Update check failed", e)
             }
@@ -385,13 +411,24 @@ class MainActivity : ComponentActivity() {
 
                 // [!code ++] Skip check for Management/IT Desk
                 if (department != "Management" && department != "IT Desk") {
-                    val hasRead = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-                    val hasWrite = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                    val hasRead = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.READ_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasWrite = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.WRITE_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
 
                     if (!hasRead || !hasWrite) {
                         if (!isPermissionRequestInProgress) {
                             isPermissionRequestInProgress = true
-                            multiplePermissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS))
+                            multiplePermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_CONTACTS,
+                                    Manifest.permission.WRITE_CONTACTS
+                                )
+                            )
                         }
                         // Stop here. Wait for callback or onResume.
                         return@launch
@@ -399,7 +436,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Permissions granted (or not needed), proceed.
-              //uiState = MainActivityUiState.Preparing(userName)
+                //uiState = MainActivityUiState.Preparing(userName)
 
                 uiState = MainActivityUiState.LoggedIn(userName) // Add this: Go directly to home
 
@@ -506,7 +543,10 @@ class MainActivity : ComponentActivity() {
             if (!isDefaultDialer()) {
                 try {
                     val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
-                        .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
+                        .putExtra(
+                            TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,
+                            packageName
+                        )
                     defaultDialerLauncher.launch(intent)
                 } catch (e: Exception) {
                 }
@@ -567,11 +607,12 @@ class MainActivity : ComponentActivity() {
             requestPermissions(); return
         }
 
-        val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
-            "+${number.filter { it.isDigit() }}"
-        } else {
-            number
-        }
+        val numberToDial =
+            if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
+                "+${number.filter { it.isDigit() }}"
+            } else {
+                number
+            }
 
         try {
             val telecomManager = getSystemService(TelecomManager::class.java)
@@ -609,7 +650,10 @@ class MainActivity : ComponentActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun findHandleForSubId(telecomManager: TelecomManager, subId: Int): PhoneAccountHandle? {
+    private fun findHandleForSubId(
+        telecomManager: TelecomManager,
+        subId: Int
+    ): PhoneAccountHandle? {
         return telecomManager.callCapablePhoneAccounts.firstOrNull { handle ->
             handle.id.contains(subId.toString())
         }
@@ -652,8 +696,14 @@ fun LoadingDetailsScreen(
                     shouldCheckPermissions = false
                 } else {
                     // For others, check actual Android permissions
-                    val hasRead = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-                    val hasWrite = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+                    val hasRead = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.READ_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasWrite = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.WRITE_CONTACTS
+                    ) == PackageManager.PERMISSION_GRANTED
 
                     if (hasRead && hasWrite) {
                         arePermissionsGranted = true
@@ -669,11 +719,23 @@ fun LoadingDetailsScreen(
     LaunchedEffect(Unit) {
         val dept = authManager.getDepartment() ?: ""
         if (dept != "Management") {
-            val hasRead = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-            val hasWrite = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED
+            val hasRead = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED
+            val hasWrite = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_CONTACTS
+            ) == PackageManager.PERMISSION_GRANTED
 
             if (!hasRead || !hasWrite) {
-                permissionLauncher.launch(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS, Manifest.permission.READ_PHONE_STATE))
+                permissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.READ_CONTACTS,
+                        Manifest.permission.WRITE_CONTACTS,
+                        Manifest.permission.READ_PHONE_STATE
+                    )
+                )
             } else {
                 arePermissionsGranted = true
             }
@@ -723,18 +785,37 @@ fun LoadingDetailsScreen(
 
     // --- UI ---
     val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.loading))
-    val progress by animateLottieCompositionAsState(composition = composition, iterations = LottieConstants.IterateForever)
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = LottieConstants.IterateForever
+    )
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(ComposeColor(0xFF1E293B), ComposeColor(0xFF0F172A)))),
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        ComposeColor(0xFF1E293B),
+                        ComposeColor(0xFF0F172A)
+                    )
+                )
+            ),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        LottieAnimation(composition = composition, progress = { progress }, modifier = Modifier.size(200.dp))
+        LottieAnimation(
+            composition = composition,
+            progress = { progress },
+            modifier = Modifier.size(200.dp)
+        )
         Spacer(modifier = Modifier.height(24.dp))
-        Text("Loading your details...", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = ComposeColor.White)
+        Text(
+            "Loading your details...",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium,
+            color = ComposeColor.White
+        )
 
         if (!arePermissionsGranted) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -780,7 +861,8 @@ fun ConflictResolutionScreen(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) showDeleteConfirm = true
-        else Toast.makeText(context, "Permission needed to clear conflicts", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(context, "Permission needed to clear conflicts", Toast.LENGTH_SHORT)
+            .show()
     }
 
     val filteredConflicts = remember(searchQuery, conflicts) {
@@ -794,13 +876,19 @@ fun ConflictResolutionScreen(
     Scaffold(
         containerColor = ComposeColor(0xFF0F172A),
         topBar = {
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .background(ComposeColor(0xFF0F172A))
-                .systemBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 26.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(ComposeColor(0xFF0F172A))
+                    .systemBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 26.dp)
             ) {
-                Text("Resolve Conflicts", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+                Text(
+                    "Resolve Conflicts",
+                    fontSize = 25.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ComposeColor.White
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "We found ${conflicts.size} contacts that are already assigned by your company. Please delete the duplicates from your device.",
@@ -812,47 +900,85 @@ fun ConflictResolutionScreen(
                 TextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
-                    placeholder = { Text("Search conflicts...", color = ComposeColor.White.copy(alpha = 0.5f)) },
-                    leadingIcon = { Icon(Icons.Default.Search, "Search", tint = ComposeColor.White.copy(alpha = 0.6f)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp)),
+                    placeholder = {
+                        Text(
+                            "Search conflicts...",
+                            color = ComposeColor.White.copy(alpha = 0.5f)
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            "Search",
+                            tint = ComposeColor.White.copy(alpha = 0.6f)
+                        )
+                    },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, "Clear", tint = ComposeColor.White.copy(alpha = 0.6f)) }
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    "Clear",
+                                    tint = ComposeColor.White.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     },
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
-                        focusedTextColor = ComposeColor.White, unfocusedTextColor = ComposeColor.White,
+                        focusedTextColor = ComposeColor.White,
+                        unfocusedTextColor = ComposeColor.White,
                         focusedContainerColor = ComposeColor.White.copy(alpha = 0.1f),
                         unfocusedContainerColor = ComposeColor.White.copy(alpha = 0.08f),
-                        focusedIndicatorColor = ComposeColor.Transparent, unfocusedIndicatorColor = ComposeColor.Transparent,
+                        focusedIndicatorColor = ComposeColor.Transparent,
+                        unfocusedIndicatorColor = ComposeColor.Transparent,
                         cursorColor = ComposeColor.White
                     )
                 )
             }
         },
         bottomBar = {
-            Column(modifier = Modifier.background(ComposeColor(0xFF0F172A)).padding(44.dp)) {
+            Column(modifier = Modifier
+                .background(ComposeColor(0xFF0F172A))
+                .padding(44.dp)) {
                 Button(
                     onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                        if (ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.WRITE_CONTACTS
+                            ) == PackageManager.PERMISSION_GRANTED
+                        ) {
                             showDeleteConfirm = true
                         } else {
                             writePermissionLauncher.launch(Manifest.permission.WRITE_CONTACTS)
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFFEF4444))
                 ) {
-                    if (isDeleting) CircularProgressIndicator(color = ComposeColor.White, modifier = Modifier.size(24.dp))
-                    else Text("Delete All (${conflicts.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    if (isDeleting) CircularProgressIndicator(
+                        color = ComposeColor.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    else Text(
+                        "Delete All (${conflicts.size})",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.padding(padding).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .padding(padding)
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
         ) {
@@ -863,7 +989,11 @@ fun ConflictResolutionScreen(
                     onRequestClick = {
                         // Work Match Logic
                         val workMatch = workContacts.firstOrNull { work ->
-                            contact.numbers.any { numObj -> sanitizePhoneNumber(work.number) == sanitizePhoneNumber(numObj.number) }
+                            contact.numbers.any { numObj ->
+                                sanitizePhoneNumber(work.number) == sanitizePhoneNumber(
+                                    numObj.number
+                                )
+                            }
                         }
 
                         contactNameForRequest = workMatch?.name ?: contact.name
@@ -874,7 +1004,12 @@ fun ConflictResolutionScreen(
             }
             if (filteredConflicts.isEmpty()) {
                 item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text("No conflicts found", color = ComposeColor.White.copy(alpha = 0.5f))
                     }
                 }
@@ -885,8 +1020,19 @@ fun ConflictResolutionScreen(
             AlertDialog(
                 onDismissRequest = { showDeleteConfirm = false },
                 containerColor = ComposeColor(0xFF1E293B),
-                title = { Text("Confirm Deletion", color = ComposeColor.White, fontWeight = FontWeight.Bold) },
-                text = { Text("Are you sure you want to delete these ${conflicts.size} contacts? This ensures your Work contacts are synced correctly.", color = ComposeColor.White.copy(alpha = 0.8f)) },
+                title = {
+                    Text(
+                        "Confirm Deletion",
+                        color = ComposeColor.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        "Are you sure you want to delete these ${conflicts.size} contacts? This ensures your Work contacts are synced correctly.",
+                        color = ComposeColor.White.copy(alpha = 0.8f)
+                    )
+                },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -895,11 +1041,18 @@ fun ConflictResolutionScreen(
                             scope.launch(Dispatchers.IO) {
                                 try {
                                     conflicts.forEach { contact ->
-                                        val uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, contact.id)
+                                        val uri = Uri.withAppendedPath(
+                                            ContactsContract.Contacts.CONTENT_URI,
+                                            contact.id
+                                        )
                                         context.contentResolver.delete(uri, null, null)
                                     }
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "Cleaned up contacts", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            "Cleaned up contacts",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                         onFinished()
                                     }
                                 } catch (e: Exception) {
@@ -907,11 +1060,20 @@ fun ConflictResolutionScreen(
                                 }
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFFEF4444))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ComposeColor(
+                                0xFFEF4444
+                            )
+                        )
                     ) { Text("Delete", fontWeight = FontWeight.Bold) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel", color = ComposeColor.White.copy(alpha = 0.6f)) }
+                    TextButton(onClick = { showDeleteConfirm = false }) {
+                        Text(
+                            "Cancel",
+                            color = ComposeColor.White.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             )
         }
@@ -920,7 +1082,13 @@ fun ConflictResolutionScreen(
             AlertDialog(
                 onDismissRequest = { showRequestDialog = false },
                 containerColor = ComposeColor(0xFF1E293B),
-                title = { Text("Mark as Personal", color = ComposeColor.White, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Mark as Personal",
+                        color = ComposeColor.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 text = {
                     Column {
                         Text(
@@ -933,7 +1101,12 @@ fun ConflictResolutionScreen(
                             value = requestReason,
                             onValueChange = { requestReason = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Reason (e.g. Relative, Friend)", color = ComposeColor.Gray) },
+                            placeholder = {
+                                Text(
+                                    "Reason (e.g. Relative, Friend)",
+                                    color = ComposeColor.Gray
+                                )
+                            },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = ComposeColor(0xFF3B82F6),
                                 unfocusedBorderColor = ComposeColor.White.copy(alpha = 0.2f),
@@ -968,23 +1141,41 @@ fun ConflictResolutionScreen(
                                     withContext(Dispatchers.Main) {
                                         if (success && idToSend != null) {
                                             sentRequestIds.add(idToSend)
-                                            Toast.makeText(context, "Request Submitted", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                "Request Submitted",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         } else {
-                                            Toast.makeText(context, "Failed to submit request", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                "Failed to submit request",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                     }
                                 }
                                 showRequestDialog = false
                                 requestReason = ""
                             } else {
-                                Toast.makeText(context, "Please enter a reason", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Please enter a reason", Toast.LENGTH_SHORT)
+                                    .show()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ComposeColor(
+                                0xFF3B82F6
+                            )
+                        )
                     ) { Text("Submit") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showRequestDialog = false }) { Text("Cancel", color = ComposeColor.White.copy(alpha = 0.6f)) }
+                    TextButton(onClick = { showRequestDialog = false }) {
+                        Text(
+                            "Cancel",
+                            color = ComposeColor.White.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             )
         }
@@ -993,51 +1184,56 @@ fun ConflictResolutionScreen(
 
 // --- HELPER FUNCTIONS ---
 
-suspend fun loadDeviceContacts(context: Context): List<DeviceContact> = withContext(Dispatchers.IO) {
-    val contactsMap = mutableMapOf<String, DeviceContact>()
-    val cursor = context.contentResolver.query(
-        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-        arrayOf(
-            ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-            ContactsContract.CommonDataKinds.Phone.NUMBER,
-            ContactsContract.CommonDataKinds.Phone.STARRED,
-            ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY
-        ),
-        null, null, null
-    )
+suspend fun loadDeviceContacts(context: Context): List<DeviceContact> =
+    withContext(Dispatchers.IO) {
+        val contactsMap = mutableMapOf<String, DeviceContact>()
+        val cursor = context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(
+                ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.STARRED,
+                ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY
+            ),
+            null, null, null
+        )
 
-    cursor?.use {
-        val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
-        val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-        val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-        val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED)
-        val defaultIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
+        cursor?.use {
+            val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+            val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            val starredIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.STARRED)
+            val defaultIndex =
+                it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY)
 
-        while (it.moveToNext()) {
-            val id = it.getString(idIndex)
-            val name = it.getString(nameIndex) ?: "Unknown"
-            val rawNumber = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
-            val isStarred = it.getInt(starredIndex) == 1
-            val isDefault = it.getInt(defaultIndex) > 0
+            while (it.moveToNext()) {
+                val id = it.getString(idIndex)
+                val name = it.getString(nameIndex) ?: "Unknown"
+                val rawNumber = it.getString(numberIndex)?.replace("\\s".toRegex(), "") ?: ""
+                val isStarred = it.getInt(starredIndex) == 1
+                val isDefault = it.getInt(defaultIndex) > 0
 
-            if (rawNumber.isNotEmpty()) {
-                val numberObj = DeviceNumber(rawNumber, isDefault)
-                if (contactsMap.containsKey(id)) {
-                    val existing = contactsMap[id]!!
-                    if (existing.numbers.none { n -> n.number == rawNumber }) {
-                        contactsMap[id] = existing.copy(numbers = existing.numbers + numberObj)
+                if (rawNumber.isNotEmpty()) {
+                    val numberObj = DeviceNumber(rawNumber, isDefault)
+                    if (contactsMap.containsKey(id)) {
+                        val existing = contactsMap[id]!!
+                        if (existing.numbers.none { n -> n.number == rawNumber }) {
+                            contactsMap[id] = existing.copy(numbers = existing.numbers + numberObj)
+                        }
+                    } else {
+                        contactsMap[id] = DeviceContact(id, name, listOf(numberObj), isStarred)
                     }
-                } else {
-                    contactsMap[id] = DeviceContact(id, name, listOf(numberObj), isStarred)
                 }
             }
         }
+        contactsMap.values.toList()
     }
-    contactsMap.values.toList()
-}
 
-fun findConflicts(deviceContacts: List<DeviceContact>, workContacts: List<AppContact>): List<DeviceContact> {
+fun findConflicts(
+    deviceContacts: List<DeviceContact>,
+    workContacts: List<AppContact>
+): List<DeviceContact> {
     return deviceContacts.filter { device ->
         device.numbers.any { numObj ->
             val deviceNum = sanitizePhoneNumber(numObj.number)
@@ -1089,16 +1285,33 @@ fun ModernConflictItem(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                avatarColor,
+                                avatarColor.copy(alpha = 0.7f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(initials, color = ComposeColor.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    initials,
+                    color = ComposeColor.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
             Spacer(modifier = Modifier.width(16.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(contact.name, color = ComposeColor.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text(
+                    contact.name,
+                    color = ComposeColor.White,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp
+                )
 //                Text(
 //                    contact.numbers.firstOrNull()?.number ?: "",
 //                    color = ComposeColor.White.copy(alpha = 0.6f),
@@ -1111,13 +1324,22 @@ fun ModernConflictItem(
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "Sent",
                     tint = ComposeColor(0xFF10B981),
-                    modifier = Modifier.size(28.dp).padding(end = 8.dp)
+                    modifier = Modifier
+                        .size(28.dp)
+                        .padding(end = 8.dp)
                 )
             } else {
                 OutlinedButton(
                     onClick = onRequestClick,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFF60A5FA)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ComposeColor(0xFF60A5FA)),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        ComposeColor(0xFF60A5FA)
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = ComposeColor(
+                            0xFF60A5FA
+                        )
+                    ),
                     shape = RoundedCornerShape(8.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 ) {
@@ -1239,18 +1461,25 @@ fun MainScreenContent(
                     scope.launch {
                         val token = AuthManager(context).getToken()
                         if (token != null) {
-                            Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT)
+                                .show()
                             val app = context.applicationContext as CallynApplication
                             // Use repository to sync contacts
                             val isSuccess = app.repository.refreshContacts(token, userName)
 
                             if (isSuccess) {
-                                Toast.makeText(context, "Sync Successful!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Sync Successful!", Toast.LENGTH_SHORT)
+                                    .show()
                             } else {
-                                Toast.makeText(context, "Sync Failed. Check Internet.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    "Sync Failed. Check Internet.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         } else {
-                            Toast.makeText(context, "Authentication Error", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Authentication Error", Toast.LENGTH_SHORT)
+                                .show()
                         }
                     }
                 },
@@ -1421,7 +1650,14 @@ private fun SetupScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(ComposeColor(0xFF1E293B), ComposeColor(0xFF0F172A)))),
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        ComposeColor(0xFF1E293B),
+                        ComposeColor(0xFF0F172A)
+                    )
+                )
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -1430,7 +1666,12 @@ private fun SetupScreen(
                 .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Callyn", fontSize = 48.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White)
+            Text(
+                "Callyn",
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                color = ComposeColor.White
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             if (!isDefaultDialer) {
@@ -1446,9 +1687,16 @@ private fun SetupScreen(
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = ComposeColor(0xFFF59E0B).copy(alpha = 0.15f)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ComposeColor(0xFFF59E0B).copy(
+                                alpha = 0.15f
+                            )
+                        ),
                         shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFFF59E0B).copy(alpha = 0.5f))
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            ComposeColor(0xFFF59E0B).copy(alpha = 0.5f)
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -1478,8 +1726,15 @@ private fun SetupScreen(
 
                             OutlinedButton(
                                 onClick = openAppSettings,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, ComposeColor(0xFFF59E0B)),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = ComposeColor(0xFFF59E0B)),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    ComposeColor(0xFFF59E0B)
+                                ),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = ComposeColor(
+                                        0xFFF59E0B
+                                    )
+                                ),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("1. Open Settings")
@@ -1523,7 +1778,13 @@ private fun SetupCard(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ComposeColor.White, modifier = Modifier.padding(bottom = 12.dp))
+        Text(
+            title,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = ComposeColor.White,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
         Text(
             text = description,
             fontSize = 14.sp,
@@ -1531,7 +1792,12 @@ private fun SetupCard(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 24.dp)
         )
-        Button(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
+        ) {
             Text(buttonText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
     }
