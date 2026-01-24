@@ -53,6 +53,7 @@ class ContactRepository(
                 }
 
                 // 2. Save to Database
+                contactDao.deleteByRshipManager("Employee")
                 // Note: insertAll uses OnConflictStrategy.REPLACE
                 contactDao.insertAll(employeeContacts)
                 Log.d(TAG, "Saved ${employeeContacts.size} employees to local database.")

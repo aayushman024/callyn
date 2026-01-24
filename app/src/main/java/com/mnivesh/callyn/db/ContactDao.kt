@@ -43,6 +43,10 @@ interface ContactDao {
     @Query("DELETE FROM contacts")
     suspend fun deleteAll()
 
+    // In ContactDao.kt
+    @Query("DELETE FROM contacts WHERE rshipManager = :identifier")
+    suspend fun deleteByRshipManager(identifier: String)
+
     @Query("SELECT * FROM work_call_logs WHERE isSynced = 0")
     suspend fun getUnsyncedWorkLogs(): List<WorkCallLog>
 
