@@ -7,10 +7,11 @@ import androidx.room.PrimaryKey
 data class WorkCallLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,
+    val familyHead: String,
     val number: String,
     val duration: Long,
     val timestamp: Long,
-    val type: String,          // "work"
+    val type: String,
     //val recordingPath: String? = null,
     val direction: String = "", // "incoming" or "outgoing"
     val simSlot: String? = null,

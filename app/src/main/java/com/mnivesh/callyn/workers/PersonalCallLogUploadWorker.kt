@@ -33,6 +33,7 @@ class PersonalUploadWorker(
         val request = CallLogRequest(
             callerName = "Unknown",
             rshipManagerName = "Unknown",
+            familyHead = "",
             type = direction,
             timestamp = timestamp,
             duration = duration,

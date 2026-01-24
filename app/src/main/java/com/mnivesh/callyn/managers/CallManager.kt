@@ -54,6 +54,8 @@ data class CallState(
     val participants: List<String> = emptyList(),
     val familyHead: String? = null,
     val rshipManager: String? = null,
+    val aum: String? = null,
+    val familyAum: String? = null,
     val connectTimeMillis: Long = 0,
     internal val call: Call? = null,
 
@@ -315,15 +317,19 @@ object CallManager {
             var type = "personal"
             var familyHead: String? = null
             var rshipManager: String? = null
+            var aum: String? = null
+            var familyAum: String? = null
 
             // 2. Work Contact (If not found in device)
-            if (resolvedName == null && normalized.length > 6) {
+            if (resolvedName == null && normalized.length > 9) {
                 val workContact = repository?.findWorkContactByNumber(normalized)
                 if (workContact != null) {
                     resolvedName = workContact.name
                     type = "work"
                     familyHead = workContact.familyHead
                     rshipManager = workContact.rshipManager
+                    aum = workContact.aum
+                    familyAum = workContact.familyAum
                 }
             }
 
@@ -346,7 +352,10 @@ object CallManager {
                     name = finalName, // <--- Passing result to the existing variable
                     type = type,
                     familyHead = familyHead,
-                    rshipManager = rshipManager
+                    rshipManager = rshipManager,
+                    aum = aum,
+                    familyAum = familyAum
+
                 )
                 _callState.value = updatedState
             }
@@ -409,8 +418,9 @@ object CallManager {
             // 2. Identify Call Type (Duplication Logic Check)
             var isWork = false
             var workName = ""
+            var familyHead = ""
 
-            if (normalized.length > 6) {
+            if (normalized.length > 9) {
                 // Check Work DB
                 val workContact = repository?.findWorkContactByNumber(normalized)
                 val inWorkDb = workContact != null
@@ -418,7 +428,8 @@ object CallManager {
                 if (inWorkDb) {
                     // It is definitely Work
                     isWork = true
-                    workName = workContact?.name ?: ""
+                    workName = workContact.name
+                    familyHead = workContact.familyHead
                 } else {
                     // Only check device contacts if NOT in work DB
                     val deviceName = findPersonalContactName(normalized)
@@ -435,6 +446,7 @@ object CallManager {
                 repository?.insertWorkLog(
                     WorkCallLog(
                         name = workName,
+                        familyHead = familyHead,
                         number = rawNumber,
                         duration = durationSeconds,
                         timestamp = now,

@@ -12,11 +12,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,14 +27,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -44,14 +48,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.SimManager
 
 data class ContactResult(val name: String, val number: String, val isWork: Boolean = false)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DialerScreen(
-    // [!code --] onCallClick: (String, Boolean) -> Unit
-    onCallClick: (String, Int?) -> Unit // [!code ++] Changed to accept Slot Index
+    onCallClick: (String, Boolean, Int?) -> Unit
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -70,10 +74,10 @@ fun DialerScreen(
     var showSimSheet by remember { mutableStateOf(false) }
     val simSheetState = rememberModalBottomSheetState()
 
-    // [!code ++] Sim Count State
+    // Sim Count State
     var isDualSim by remember { mutableStateOf(false) }
 
-    // [!code ++] Check SIM Status
+    // Check SIM Status
     LaunchedEffect(Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
             try {
@@ -95,8 +99,36 @@ fun DialerScreen(
 
         withContext(Dispatchers.IO) {
             val combinedResults = mutableListOf<ContactResult>()
+            val seenNumbers = mutableSetOf<String>()
 
-            // 1. Search Device Contacts
+            // Helper to normalize phone numbers for comparison
+            fun normalizeNumber(number: String): String {
+                return number.filter { it.isDigit() }.takeLast(10)
+            }
+
+            // 1. Search Work Contacts First (If Management)
+            if (department == "Management" || department == "IT Desk") {
+                val matches = workContacts.filter {
+                    it.name.contains(phoneNumber, ignoreCase = true) ||
+                            it.number.contains(phoneNumber)
+                }
+
+                matches.forEach { appContact ->
+                    val normalized = normalizeNumber(appContact.number)
+                    if (normalized !in seenNumbers) {
+                        seenNumbers.add(normalized)
+                        combinedResults.add(
+                            ContactResult(
+                                name = appContact.name,
+                                number = appContact.number,
+                                isWork = true
+                            )
+                        )
+                    }
+                }
+            }
+
+            // 2. Search Device Contacts
             if (ContextCompat.checkSelfPermission(
                     context,
                     Manifest.permission.READ_CONTACTS
@@ -118,78 +150,66 @@ fun DialerScreen(
                         val nameIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                         val numIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
 
-                        while (it.moveToNext() && combinedResults.size < 4) {
-                            combinedResults.add(
-                                ContactResult(
-                                    name = it.getString(nameIdx) ?: "Unknown",
-                                    number = it.getString(numIdx) ?: "",
-                                    isWork = false
+                        while (it.moveToNext()) {
+                            val number = it.getString(numIdx) ?: ""
+                            val normalized = normalizeNumber(number)
+
+                            if (normalized !in seenNumbers) {
+                                seenNumbers.add(normalized)
+                                combinedResults.add(
+                                    ContactResult(
+                                        name = it.getString(nameIdx) ?: "Unknown",
+                                        number = number,
+                                        isWork = false
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                 } catch (_: Exception) { }
             }
 
-            // 2. Search Work Contacts (If Management)
-            if (department == "Management") {
-                val matches = workContacts.filter {
-                    it.name.contains(phoneNumber, ignoreCase = true) ||
-                            it.number.contains(phoneNumber)
-                }.take(4)
-
-                matches.forEach { appContact ->
-                    combinedResults.add(
-                        ContactResult(
-                            name = appContact.name,
-                            number = appContact.number,
-                            isWork = true
-                        )
-                    )
-                }
-            }
-
-            // Update State
-            searchResults = combinedResults.distinctBy { it.number }
+            // Update State - limit to top 6 results
+            searchResults = combinedResults.take(6)
         }
     }
 
-    // [!code ++] ---------------- CALL LOGIC (UPDATED) ----------------
+    // ---------------- CALL LOGIC ----------------
     fun initiateCall() {
         if (phoneNumber.isBlank()) return
 
-        if (isDualSim) {
+        // 1. Check if the typed number exists in the Work Database
+        val cleanInput = phoneNumber.filter { it.isDigit() }
+        val isWorkMatch = workContacts.any { contact ->
+            val cleanContact = contact.number.filter { it.isDigit() }
+            if (cleanContact.length >= 10 && cleanInput.length >= 10) {
+                cleanContact.takeLast(10) == cleanInput.takeLast(10)
+            } else {
+                cleanContact == cleanInput
+            }
+        }
+
+        // 2. Logic: If Work Match + Work SIM -> Auto Dial. Else if Dual SIM -> Show Sheet.
+        if (isWorkMatch && SimManager.workSimSlot != null) {
+            // Found in Work DB + Work SIM Configured -> Use it!
+            onCallClick(phoneNumber, true, SimManager.workSimSlot)
+        } else if (isDualSim) {
+            // Not a Work Match (or no Work SIM) AND we have 2 SIMs -> Give User Option
             showSimSheet = true
         } else {
-            onCallClick(phoneNumber, null) // Default/System choice
+            // Single SIM or Default behavior -> Let System decide
+            onCallClick(phoneNumber, false, null)
         }
     }
-
-    // [!code --] Previous checkSimsAndCall logic commented out
-    /*
-    fun checkSimsAndCall() {
-        if (phoneNumber.isBlank()) return
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-            val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-            val activeSims = subManager.activeSubscriptionInfoList
-            if (activeSims != null && activeSims.size > 1) {
-                showSimSheet = true
-            } else {
-                onCallClick(phoneNumber, false)
-            }
-        } else {
-            onCallClick(phoneNumber, false)
-        }
-    }
-    */
 
     // ---------------- UI ----------------
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF121212))
+            .statusBarsPadding()
             .padding(horizontal = 24.dp)
-            .padding(bottom = 140.dp),
+            .padding(bottom = 94.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
@@ -199,33 +219,33 @@ fun DialerScreen(
                 .weight(1f)
                 .fillMaxWidth(),
             reverseLayout = true,
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom),
+            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom),
             contentPadding = PaddingValues(bottom = 20.dp)
         ) {
             items(searchResults) { contact ->
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .clickable { phoneNumber = contact.number },
-                    color = Color(0xFF1A1A1A),
-                    tonalElevation = 2.dp,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                    color = if (contact.isWork) Color(0xFF1E293B) else Color(0xFF1A1A1A),
+                    tonalElevation = if (contact.isWork) 4.dp else 2.dp,
+                    shadowElevation = if (contact.isWork) 2.dp else 0.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
 
                         // Avatar
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .background(
                                     if (contact.isWork) {
                                         Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))
                                     } else {
-                                        Brush.linearGradient(listOf(Color(0xFF2A2A2A), Color(0xFF1F1F1F)))
+                                        Brush.linearGradient(listOf(Color(0xFF2D2D2D), Color(0xFF242424)))
                                     },
                                     CircleShape
                                 ),
@@ -234,8 +254,8 @@ fun DialerScreen(
                             Text(
                                 text = contact.name.firstOrNull()?.uppercase() ?: "?",
                                 color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
                             )
                         }
 
@@ -243,54 +263,85 @@ fun DialerScreen(
 
                         Column(
                             modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Text(
-                                text = highlightMatch(contact.name, phoneNumber),
-                                fontSize = 15.sp,
-                                color = Color.White,
-                                fontWeight = FontWeight.Medium
-                            )
-
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = highlightMatch(contact.number, phoneNumber),
-                                    fontSize = 13.sp,
-                                    color = Color.Gray
+                                    text = contact.name,
+                                    fontSize = 16.sp,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 // Work Badge
                                 if (contact.isWork) {
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "WORK",
-                                        fontSize = 10.sp,
-                                        color = Color(0xFF60A5FA),
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        color = Color(0xFF3B82F6).copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Work",
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF60A5FA),
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
                                 }
                             }
+
+                            Text(
+                                text = contact.number,
+                                fontSize = 14.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
                         }
 
                         Icon(
                             Icons.Filled.ChevronRight,
                             null,
-                            tint = Color.White.copy(alpha = 0.4f)
+                            tint = Color.White.copy(alpha = 0.3f),
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
             }
         }
 
-        // -------- NUMBER DISPLAY --------
-        Text(
-            text = phoneNumber.ifEmpty { "Enter Number" },
-            color = if (phoneNumber.isEmpty()) Color.Gray else Color.White,
-            fontSize = 36.sp,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 14.dp)
+        // -------- EDITABLE NUMBER DISPLAY --------
+        BasicTextField(
+            value = phoneNumber,
+            onValueChange = { phoneNumber = it },
+            textStyle = TextStyle(
+                color = Color.White,
+                fontSize = 36.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
+            ),
+            readOnly = true,
+            cursorBrush = SolidColor(Color(0xFF3B82F6)),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp, bottom = 14.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (phoneNumber.isEmpty()) {
+                        Text(
+                            text = "Enter Number",
+                            color = Color.Gray,
+                            fontSize = 36.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                    innerTextField()
+                }
+            }
         )
 
         // -------- KEYPAD --------
@@ -319,51 +370,92 @@ fun DialerScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
 
             // -------- ACTION ROW --------
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
 
-                IconButton(
-                    enabled = phoneNumber.isNotEmpty(),
-                    onClick = {
-                        try {
-                            val intent = Intent(Intent.ACTION_INSERT).apply {
-                               type = ContactsContract.Contacts.CONTENT_TYPE
-                                putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
-                            }
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }
-                ) {
-                    Icon(Icons.Filled.PersonAdd, null,
-                        modifier = Modifier.size(35.dp),
-                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.Gray)
-                }
-
+                // Add Contact Button
                 Box(
                     modifier = Modifier
-                        .size(85.dp)
-                        .background(Color(0xFF00C853), CircleShape)
+                        .size(64.dp)
+                        .shadow(
+                            elevation = if (phoneNumber.isNotEmpty()) 4.dp else 0.dp,
+                            shape = CircleShape,
+                            ambientColor = Color(0xFF3B82F6).copy(alpha = 0.3f)
+                        )
+                        .background(
+                            if (phoneNumber.isNotEmpty()) Color(0xFF1E293B) else Color(0xFF1A1A1A),
+                            CircleShape
+                        )
+                        .clickable(enabled = phoneNumber.isNotEmpty()) {
+                            try {
+                                val intent = Intent(Intent.ACTION_INSERT).apply {
+                                    type = ContactsContract.Contacts.CONTENT_TYPE
+                                    putExtra(ContactsContract.Intents.Insert.PHONE, phoneNumber)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.PersonAdd,
+                        null,
+                        modifier = Modifier.size(28.dp),
+                        tint = if (phoneNumber.isNotEmpty()) Color(0xFF60A5FA) else Color(0xFF4A4A4A)
+                    )
+                }
+
+                // Call Button
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .shadow(
+                            elevation = 8.dp,
+                            shape = CircleShape,
+                            ambientColor = Color(0xFF00C853),
+                            spotColor = Color(0xFF00C853)
+                        )
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF00E676), Color(0xFF00C853))
+                            ),
+                            CircleShape
+                        )
                         .clickable(enabled = phoneNumber.isNotEmpty()) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            // [!code ++] Use new logic
                             initiateCall()
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Call, null, tint = Color.White, modifier = Modifier.size(45.dp))
+                    Icon(
+                        Icons.Filled.Call,
+                        null,
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
                 }
 
+                // Backspace Button
                 Box(
                     modifier = Modifier
                         .size(64.dp)
+                        .shadow(
+                            elevation = if (phoneNumber.isNotEmpty()) 4.dp else 0.dp,
+                            shape = CircleShape,
+                            ambientColor = Color(0xFFEF4444).copy(alpha = 0.3f)
+                        )
+                        .background(
+                            if (phoneNumber.isNotEmpty()) Color(0xFF1E293B) else Color(0xFF1A1A1A),
+                            CircleShape
+                        )
                         .clip(CircleShape)
                         .combinedClickable(
                             enabled = phoneNumber.isNotEmpty(),
@@ -378,20 +470,23 @@ fun DialerScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Backspace, null,    modifier = Modifier.size(35.dp),
-                        tint = if (phoneNumber.isNotEmpty()) Color.White else Color.Gray)
-
+                    Icon(
+                        Icons.Filled.Backspace,
+                        null,
+                        modifier = Modifier.size(28.dp),
+                        tint = if (phoneNumber.isNotEmpty()) Color(0xFFF87171) else Color(0xFF4A4A4A)
+                    )
                 }
             }
         }
     }
 
-    // ---------------- SIM BOTTOM SHEET (UPDATED) ----------------
+    // ---------------- SIM BOTTOM SHEET ----------------
     if (showSimSheet) {
         ModalBottomSheet(
             onDismissRequest = { showSimSheet = false },
             sheetState = simSheetState,
-            containerColor = Color(0xFF1E293B), // Dark background matching other screens
+            containerColor = Color(0xFF1E293B),
             contentColor = Color.White
         ) {
             Column(
@@ -410,7 +505,6 @@ fun DialerScreen(
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
 
-                // [!code ++] Side-by-side Buttons Logic
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -420,7 +514,7 @@ fun DialerScreen(
                         onClick = {
                             scope.launch { simSheetState.hide() }.invokeOnCompletion {
                                 showSimSheet = false
-                                onCallClick(phoneNumber, 0) // Slot 0
+                                onCallClick(phoneNumber, false, 0)
                             }
                         },
                         modifier = Modifier
@@ -428,7 +522,7 @@ fun DialerScreen(
                             .height(64.dp)
                             .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
                         shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
@@ -442,7 +536,7 @@ fun DialerScreen(
                         onClick = {
                             scope.launch { simSheetState.hide() }.invokeOnCompletion {
                                 showSimSheet = false
-                                onCallClick(phoneNumber, 1) // Slot 1
+                                onCallClick(phoneNumber, false, 1)
                             }
                         },
                         modifier = Modifier
@@ -450,7 +544,7 @@ fun DialerScreen(
                             .height(64.dp)
                             .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
                         shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
@@ -461,37 +555,6 @@ fun DialerScreen(
                 }
             }
         }
-    }
-}
-
-// ---------------- HIGHLIGHT ----------------
-@Composable
-fun highlightMatch(text: String, query: String): AnnotatedString {
-    if (query.isEmpty()) return AnnotatedString(text)
-
-    val lowerText = text.lowercase()
-    val lowerQuery = query.lowercase()
-
-    return buildAnnotatedString {
-        var start = 0
-        var index = lowerText.indexOf(lowerQuery)
-
-        while (index >= 0) {
-            append(text.substring(start, index))
-
-            pushStyle(
-                SpanStyle(
-                    color = Color(0xFF3B82F6),
-                    fontWeight = FontWeight.SemiBold
-                )
-            )
-            append(text.substring(index, index + query.length))
-            pop()
-
-            start = index + query.length
-            index = lowerText.indexOf(lowerQuery, start)
-        }
-        append(text.substring(start))
     }
 }
 
@@ -508,7 +571,17 @@ fun DialerButton(
     Box(
         modifier = Modifier
             .size(72.dp)
-            .background(Color(0xFF1E1E1E), CircleShape)
+            .shadow(
+                elevation = 2.dp,
+                shape = CircleShape,
+                ambientColor = Color.White.copy(alpha = 0.05f)
+            )
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFF242424), Color(0xFF1A1A1A))
+                ),
+                CircleShape
+            )
             .combinedClickable(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -523,6 +596,6 @@ fun DialerButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, fontSize = 32.sp, color = Color.White)
+        Text(label, fontSize = 32.sp, color = Color.White, fontWeight = FontWeight.Medium)
     }
 }

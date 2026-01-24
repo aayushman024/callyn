@@ -145,6 +145,10 @@ fun InCallContent(
     var showConferenceSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMessageSheet by remember { mutableStateOf(false) }
+
+    // New State for AUM Popup
+    var showDetailsPopup by remember { mutableStateOf(false) }
+
     val scope = rememberCoroutineScope()
 
     val backgroundBrush = remember(currentState.type) {
@@ -168,7 +172,7 @@ fun InCallContent(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentAlignment = Alignment.TopCenter
+                contentAlignment = Alignment.Center
             ) {
                 if (showDialpad) {
                     DialpadComponent(
@@ -179,7 +183,10 @@ fun InCallContent(
                             .verticalScroll(rememberScrollState())
                     )
                 } else {
-                    CallerInfo(currentState)
+                    CallerInfo(
+                        currentState = currentState,
+                        onShowDetails = { showDetailsPopup = true }
+                    )
                 }
             }
 
@@ -190,10 +197,10 @@ fun InCallContent(
             ) {
                 if (currentState.isIncoming && currentState.status == "Ringing") {
                     RingingControls(
-                        isPersonal = currentState.type != "work", // Pass the type check
+                        isPersonal = currentState.type != "work",
                         onAnswer = onAnswer,
                         onReject = onReject,
-                        onMessageClick = { showMessageSheet = true } // Open the sheet
+                        onMessageClick = { showMessageSheet = true }
                     )
                 } else {
                     ActiveCallControls(
@@ -229,6 +236,60 @@ fun InCallContent(
                 onAccept = onAnswerWaiting,
                 onDecline = onRejectWaiting
             )
+        }
+
+        // --- AUM Details Popup (Glass Blur Like) ---
+        if (showDetailsPopup) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f)) // Dim background
+                    .clickable { showDetailsPopup = false }, // Dismiss on outside tap
+                contentAlignment = Alignment.Center
+            ) {
+                // Glass-like Card
+                Surface(
+                    modifier = Modifier
+                        .padding(32.sdp())
+                        .fillMaxWidth()
+                        .clickable(enabled = false) {}, // Consume clicks inside
+                    color = Color(0xFF1E293B).copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(16.sdp()),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    shadowElevation = 8.sdp()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.sdp()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.sdp())
+                    ) {
+                        Text(
+                            "Asset Details",
+                            color = TextPrimary,
+                            fontSize = 18.ssp(),
+                            fontWeight = FontWeight.Bold
+                        )
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+
+                        if (!currentState.aum.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.CurrencyRupee,
+                                label = "AUM",
+                                value = currentState.aum,
+                                color = Color(0xFF10B981)
+                            )
+                        }
+                        if (!currentState.familyAum.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.Money,
+                                label = "Family AUM",
+                                value = currentState.familyAum,
+                                color = Color(0xFF10B981)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -311,9 +372,6 @@ fun CallWaitingPopup(name: String, number: String, onAccept: () -> Unit, onDecli
             Column(modifier = Modifier.weight(1f)) {
                 Text("Incoming Call", color = Color(0xFF30D158), fontSize = 12.ssp(), fontWeight = FontWeight.Bold)
                 Text(name, color = Color.White, fontSize = 16.ssp(), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-//                if (number.isNotEmpty() && name != number) {
-//                    Text(number, color = Color.Gray, fontSize = 14.ssp())
-//                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.sdp())) {
                 // Reject
@@ -393,14 +451,17 @@ fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
 }
 
 @Composable
-private fun CallerInfo(currentState: CallState) {
+private fun CallerInfo(
+    currentState: CallState,
+    onShowDetails: () -> Unit
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .padding(top = 18.sdp())
             .verticalScroll(rememberScrollState())
+            .padding(bottom = 24.sdp())
     ) {
-    //call status and duration
+        // --- Status & Duration ---
         Surface(
             color = Color.White.copy(alpha = 0.1f),
             shape = RoundedCornerShape(50),
@@ -417,7 +478,6 @@ private fun CallerInfo(currentState: CallState) {
                     fontWeight = FontWeight.Bold,
                     color = TextSecondary,
                     modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
-                    //  letterSpacing = 1.5.ssp()
                 )
             }
         }
@@ -427,20 +487,20 @@ private fun CallerInfo(currentState: CallState) {
         // 1. Avatar
         Box(
             modifier = Modifier
-                .size(100.sdp())
+                .size(80.sdp())
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if(currentState.isConference) Icons.Default.Groups else Icons.Default.Person,
+                imageVector = if (currentState.isConference) Icons.Default.Groups else Icons.Default.Person,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.8f),
                 modifier = Modifier.size(48.sdp())
             )
         }
 
-        Spacer(modifier = Modifier.height(20.sdp()))
+        Spacer(modifier = Modifier.height(25.sdp()))
 
         // 2. Name
         Text(
@@ -454,61 +514,120 @@ private fun CallerInfo(currentState: CallState) {
 
         Spacer(modifier = Modifier.height(16.sdp()))
 
-        // 3. Info Pills (Family Head & RM)
+        // 3. Info Pills (Updated Logic)
         if (currentState.type == "work" && !currentState.isConference) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.sdp())
             ) {
-                if (currentState.familyHead?.isNotEmpty() == true) {
-                    InfoPill(Icons.Default.FamilyRestroom, "Family Head", currentState.familyHead, Color(0xFF60A5FA))
-                }
-                if (currentState.rshipManager?.isNotEmpty() == true) {
-                    InfoPill(Icons.Default.AccountBox, "RM", currentState.rshipManager, Color(0xFFC084FC))
+                // Check if the contact is an Employee
+                val isEmployee = currentState.rshipManager?.equals("Employee", ignoreCase = true) == true
+
+                if (isEmployee) {
+                    // --- EMPLOYEE VIEW ---
+                    if (!currentState.familyHead.isNullOrEmpty()) {
+                        InfoPill(
+                            icon = Icons.Default.Apartment,
+                            label = "Department",
+                            value = currentState.familyHead,
+                            color = Color(0xFF60A5FA) // Blue
+                        )
+                    }
+                } else {
+                    // --- CLIENT VIEW ---
+
+                    // Always Show: Family Head
+                    if (!currentState.familyHead.isNullOrEmpty()) {
+                        InfoPill(
+                            icon = Icons.Default.FamilyRestroom,
+                            label = "Family Head",
+                            value = currentState.familyHead,
+                            color = Color(0xFF60A5FA) // Blue
+                        )
+                    }
+                    // Always Show: Relationship Manager
+                    if (!currentState.rshipManager.isNullOrEmpty()) {
+                        Row {
+                            InfoPill(
+                                icon = Icons.Default.AccountBox,
+                                label = "RM",
+                                value = currentState.rshipManager,
+                                color = Color(0xFFC084FC) // Purple
+                            )
+                        }
+                    }
+
+                    // Conditional Rendering for AUM
+                    // Show Full details if Ringing/Dialing/Incoming.
+                    // Collapse if Active/OnHold to save space for buttons.
+                    val isActiveOrHold = currentState.status.equals("Active", ignoreCase = true) ||
+                            currentState.status.equals("On Hold", ignoreCase = true)
+
+                    if (!isActiveOrHold) {
+                        // --- FULL VIEW (Ringing/Dialing) ---
+                        if (!currentState.aum.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.CurrencyRupee,
+                                label = "AUM",
+                                value = currentState.aum,
+                                color = Color(0xFF10B981) // Green
+                            )
+                        }
+                        if (!currentState.familyAum.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.Money,
+                                label = "Family AUM",
+                                value = currentState.familyAum,
+                                color = Color(0xFF10B981) // Green
+                            )
+                        }
+                    } else {
+                        // --- COMPACT VIEW (Active Call) ---
+                        // Show "More Details" button if there is data to show
+                        if (!currentState.aum.isNullOrEmpty() || !currentState.familyAum.isNullOrEmpty()) {
+                            TextButton(
+                                onClick = onShowDetails,
+                                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                            ) {
+                                Text(
+                                    "Show More Details",
+                                    fontSize = 12.ssp(),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.sdp()))
+                            }
+                        }
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(24.sdp()))
-            Surface(
-                color = Color(0xFF3B82F6).copy(alpha = 0.2f),
-                shape = RoundedCornerShape(50),
-            ) {
-                Text(
-                    text = "WORK CALL",
-                    fontSize = 11.ssp(),
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF60A5FA),
-                    modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 4.sdp()),
-                    letterSpacing = 1.ssp()
-                )
-            }
+
+            Spacer(modifier = Modifier.height(20.sdp()))
         }
 
-        // 4. Number
+        // 4. Number (Personal Calls only)
         if (currentState.number.isNotEmpty() && !currentState.isConference && currentState.type != "work") {
             Text(
                 text = currentState.number,
                 fontSize = 18.ssp(),
                 color = TextSecondary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 12.sdp()),
+                modifier = Modifier.padding(top = 20.sdp()),
                 letterSpacing = 1.ssp()
             )
         }
-        Spacer(modifier = Modifier.height(16.sdp()))
-
+        Spacer(modifier = Modifier.height(10.sdp()))
     }
 }
 
 // -------------------------------------------------------------
-// REPLACED: RingingControls with Swipeable Implementation
+// Ringing Controls
 // -------------------------------------------------------------
-// Find your existing RingingControls function and REPLACE it with this:
 @Composable
 private fun RingingControls(
-    isPersonal: Boolean,       // <--- NEW PARAM
+    isPersonal: Boolean,
     onAnswer: () -> Unit,
     onReject: () -> Unit,
-    onMessageClick: () -> Unit // <--- NEW PARAM
+    onMessageClick: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -651,7 +770,10 @@ private fun SwipeableCallControl(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
                         scope.launch {
-                            val newOffset = (offsetX.value + delta).coerceIn(-maxTravelDistance, maxTravelDistance)
+                            val newOffset = (offsetX.value + delta).coerceIn(
+                                -maxTravelDistance,
+                                maxTravelDistance
+                            )
                             offsetX.snapTo(newOffset)
 
                             // Haptic feedback when crossing threshold
@@ -678,7 +800,10 @@ private fun SwipeableCallControl(
 
                                 // 2. Run Animation in Separate Scope (Non-blocking)
                                 scope.launch {
-                                    offsetX.animateTo(maxTravelDistance, spring(stiffness = Spring.StiffnessLow))
+                                    offsetX.animateTo(
+                                        maxTravelDistance,
+                                        spring(stiffness = Spring.StiffnessLow)
+                                    )
                                 }
                             }
 
@@ -694,7 +819,10 @@ private fun SwipeableCallControl(
 
                                 // 2. Run Animation in Separate Scope (Non-blocking)
                                 scope.launch {
-                                    offsetX.animateTo(-maxTravelDistance, spring(stiffness = Spring.StiffnessLow))
+                                    offsetX.animateTo(
+                                        -maxTravelDistance,
+                                        spring(stiffness = Spring.StiffnessLow)
+                                    )
                                 }
                             }
 
@@ -728,9 +856,6 @@ private fun SwipeableCallControl(
         }
     }
 }
-
-
-
 
 @Composable
 private fun ActiveCallControls(
@@ -843,7 +968,10 @@ fun ConferenceParticipantRow(name: String, onSplit: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-            Box(Modifier.size(44.sdp()).clip(CircleShape).background(Color(0xFF3A3A3C)), Alignment.Center) {
+            Box(Modifier
+                .size(44.sdp())
+                .clip(CircleShape)
+                .background(Color(0xFF3A3A3C)), Alignment.Center) {
                 Text(name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.ssp())
             }
             Spacer(Modifier.width(16.sdp()))
@@ -955,4 +1083,117 @@ fun QuickResponseSheet(
             }
         }
     }
+}
+
+
+
+//PREVIEW
+// ... existing code ...
+
+// -------------------------------------------------------------
+// PREVIEWS
+// -------------------------------------------------------------
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+fun PreviewPersonalActiveCall() {
+    // Mock State for a Personal Call (Active)
+    val mockState = CallState(
+        name = "Aayushman",
+        number = "+91 98765 43210",
+        status = "Active",
+        type = "personal",
+        isMuted = false,
+        isSpeakerOn = true,
+        isBluetoothOn = false,
+        isIncoming = false,
+        connectTimeMillis = System.currentTimeMillis() - 125000 // 2m 05s ago
+    )
+
+    InCallContent(
+        currentState = mockState,
+        onDigitClick = {},
+        onAnswer = {},
+        onReject = {},
+        onMute = {},
+        onSpeaker = {},
+        onHold = {},
+        onMerge = {},
+        onSwap = {},
+        onBluetooth = {},
+        onSplitConference = {},
+        onAddCall = {},
+        onAnswerWaiting = {},
+        onRejectWaiting = {}
+    )
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+fun PreviewWorkIncomingCall() {
+    // Mock State for a Work Call (Incoming, Employee)
+    val mockState = CallState(
+        name = "Rahul Sharma",
+        number = "+91 11223 34455",
+        status = "Ringing",
+        type = "work",
+        isIncoming = true,
+        // Mocking Employee Data
+        rshipManager = "Employee",
+        familyHead = "Tech Team",
+        aum = null
+    )
+
+    InCallContent(
+        currentState = mockState,
+        onDigitClick = {},
+        onAnswer = {},
+        onReject = {},
+        onMute = {},
+        onSpeaker = {},
+        onHold = {},
+        onMerge = {},
+        onSwap = {},
+        onBluetooth = {},
+        onSplitConference = {},
+        onAddCall = {},
+        onAnswerWaiting = {},
+        onRejectWaiting = {}
+    )
+}
+
+@androidx.compose.ui.tooling.preview.Preview(showBackground = true)
+@Composable
+fun PreviewClientWorkCall() {
+    // Mock State for a Client Work Call (Active)
+    val mockState = CallState(
+        name = "Suresh Raina",
+        number = "+91 55667 78899",
+        status = "Ringing",
+        type = "work",
+        isIncoming = true,
+        connectTimeMillis = System.currentTimeMillis() - 60000,
+        // Mocking Client Data
+        rshipManager = "Amit Verma",
+        familyHead = "Raina Family",
+        aum = "₹5,00,000",
+        familyAum = "₹20,00,000"
+    )
+
+    InCallContent(
+        currentState = mockState,
+        onDigitClick = {},
+        onAnswer = {},
+        onReject = {},
+        onMute = {},
+        onSpeaker = {},
+        onHold = {},
+        onMerge = {},
+        onSwap = {},
+        onBluetooth = {},
+        onSplitConference = {},
+        onAddCall = {},
+        onAnswerWaiting = {},
+        onRejectWaiting = {}
+    )
 }

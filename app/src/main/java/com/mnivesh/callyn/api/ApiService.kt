@@ -45,7 +45,9 @@ data class ContactResponse(
     val type: String,
     val pan: String,
     val familyHead: String,
-    val rshipManager: String
+    val rshipManager: String,
+    val aum: String,
+    val familyAum: String
 )
 
 /**
@@ -53,6 +55,7 @@ data class ContactResponse(
  */
 data class CallLogRequest(
     val callerName: String,
+    val familyHead: String,
     val rshipManagerName: String?,
     val type: String,
     val timestamp: Long,
@@ -64,6 +67,7 @@ data class CallLogRequest(
 data class CallLogResponse(
     val _id: String,
     val callerName: String,
+    val familyHead: String,
     val rshipManagerName: String?,
     val type: String, // "outgoing", "incoming", "missed"
     val timestamp: String,

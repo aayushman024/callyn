@@ -82,6 +82,7 @@ import androidx.compose.ui.zIndex
 import com.mnivesh.callyn.components.AppDrawer
 import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -151,7 +152,7 @@ fun getHighlightedText(text: String, query: String): AnnotatedString {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ContactsScreen(
-    onContactClick: (String, Int?) -> Unit, // Changed to accept Slot Index (Int?)
+    onContactClick: (String, Boolean, Int?) -> Unit,
 //    onShowRequests: () -> Unit,
 //    onShowUserDetails: () -> Unit,
 //    onShowCallLogs: () -> Unit,
@@ -278,21 +279,28 @@ fun ContactsScreen(
     val contentResolver = LocalContext.current.contentResolver
 
     // --- FILTER LOGIC ---
+    // [!code update] Added SimManager check to hide list if Work SIM is missing
     val myContacts = remember(workContacts, userName, department) {
-        workContacts.filter { contact ->
-            val rshipManager = contact.rshipManager ?: ""
+        if (SimManager.workSimSlot == null) {
+            // "Show none to the user" if no Work SIM
+            emptyList()
+        } else {
+            // Otherwise, apply standard logic
+            workContacts.filter { contact ->
+                val rshipManager = contact.rshipManager ?: ""
 
-            // 1. Global Rule: If rshipManager is "Employee", exclude them immediately
-            if (rshipManager.equals("Employee", ignoreCase = true)) {
-                return@filter false
-            }
+                // 1. Global Rule: If rshipManager is "Employee", exclude them immediately
+                if (rshipManager.equals("Employee", ignoreCase = true)) {
+                    return@filter false
+                }
 
-            // 2. Department Logic
-            if (department == "Management" || department == "IT Desk" || department == "Operations Dept" || userEmail == "arbind@niveshonline.com") {
-                true // Show all (except the ones excluded above)
-            } else {
-                // Show only if assigned to this specific user
-                rshipManager.equals(userName, ignoreCase = true)
+                // 2. Department Logic
+                if (department == "Management" || department == "IT Desk" || department == "Operations Dept" || userEmail == "arbind@niveshonline.com") {
+                    true // Show all (except the ones excluded above)
+                } else {
+                    // Show only if assigned to this specific user
+                    rshipManager.equals(userName, ignoreCase = true)
+                }
             }
         }
     }
@@ -770,7 +778,7 @@ fun ContactsScreen(
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onContactClick(selectedWorkContact!!.number, slotIndex)
+                        onContactClick(selectedWorkContact!!.number, true, slotIndex)
                         selectedWorkContact = null
                     }
                 },
@@ -803,7 +811,7 @@ fun ContactsScreen(
                 },
                 onCall = { number, slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onContactClick(number, slotIndex)
+                        onContactClick(number, false, slotIndex)
                         selectedDeviceContact = null
                     }
                 }
@@ -821,7 +829,7 @@ fun ContactsScreen(
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onContactClick(selectedEmployeeContact!!.number, slotIndex)
+                        onContactClick(selectedEmployeeContact!!.number, true, slotIndex)
                         selectedEmployeeContact = null
                     }
                 }
@@ -1809,8 +1817,11 @@ fun EmployeeBottomSheet(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Call Buttons
-            if (isDualSim) {
+            // LOGIC: Show Dual Buttons ONLY if it's Dual SIM AND we assume we don't know the Work Slot yet.
+            // If SimManager.workSimSlot is set, we skip the selection and show one "Call Work" button.
+            val showDualButtons = isDualSim && SimManager.workSimSlot == null
+
+            if (showDualButtons) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1885,7 +1896,9 @@ fun EmployeeBottomSheet(
                 ) {
                     Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "Call", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    // Update Text to reflect if we are using Work SIM
+                    val buttonText = if (SimManager.workSimSlot != null) "Call (Work SIM)" else "Call"
+                    Text(text = buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -2626,10 +2639,32 @@ private fun ModernBottomSheet(
                             }
                             ModernDetailRow(
                                 Icons.Default.CreditCard,
-                                "PAN Number",
+                                "PAN",
                                 contact.pan,
                                 warningColor
                             )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = textSecondary.copy(alpha = 0.1f)
+                            )
+                            Row(){
+                                Box(modifier = Modifier.weight(1f)) {
+                                    ModernDetailRow(
+                                        Icons.Default.CurrencyRupee,
+                                        "AUM",
+                                        "₹ " + contact.aum,
+                                        Color(0xFF60A5FA)
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    ModernDetailRow(
+                                        Icons.Default.Money,
+                                        "Family AUM",
+                                        "₹ " + contact.familyAum,
+                                        Color(0xFF60A5FA)
+                                    )
+                                }
+                            }
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
                                 color = textSecondary.copy(alpha = 0.1f)
@@ -2699,7 +2734,9 @@ private fun ModernBottomSheet(
             Spacer(modifier = Modifier.height(32.dp))
 
             // --- Main Call Button Logic (Split for Dual Sim) ---
-            if (isDualSim) {
+            val showDualButtons = isDualSim && SimManager.workSimSlot == null
+
+            if (showDualButtons) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -2757,27 +2794,20 @@ private fun ModernBottomSheet(
             } else {
                 // Original Single Button
                 Button(
-                    onClick = { onCall(null) },
+                    onClick = { onCall(null) }, // Pass null to trigger smart dial logic
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(64.dp)
-                        .shadow(
-                            12.dp,
-                            RoundedCornerShape(20.dp),
-                            ambientColor = primaryColor,
-                            spotColor = primaryColor
-                        ),
+                        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
                     shape = RoundedCornerShape(20.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 4.dp
-                    )
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
                 ) {
                     Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Call",
+                        // Update text to show if we are using a specific SIM automatically
+                        text = if(isWorkContact && SimManager.workSimSlot != null) "Call (Work SIM)" else "Call",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -3023,7 +3053,10 @@ private fun ModernDetailRow(icon: ImageVector, label: String, value: String, ico
                 color = Color.White.copy(alpha = 0.5f),
                 fontWeight = FontWeight.Medium
             )
-            Text(value, fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Medium)
+            Text(value,
+                maxLines = 1, // [!code ++]
+                overflow = TextOverflow.Ellipsis,
+                fontSize = 16.sp, color = Color.White, fontWeight = FontWeight.Medium)
         }
     }
 }

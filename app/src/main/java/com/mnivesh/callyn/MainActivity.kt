@@ -25,9 +25,21 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -97,7 +109,17 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.times
 import com.mnivesh.callyn.components.AppDrawer
+import com.mnivesh.callyn.managers.SimManager
 
 private const val TAG = "MainActivity"
 
@@ -139,6 +161,9 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.WRITE_CALL_LOG,
         Manifest.permission.RECORD_AUDIO
     ).apply {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            add(Manifest.permission.READ_PHONE_NUMBERS)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -274,6 +299,12 @@ class MainActivity : ComponentActivity() {
         checkStoragePermission()
         checkForUpdates()
         syncDeviceDetails()
+
+        //check for sim data
+        if (checkAllPermissions()) {
+            val workPhone = authManager.getWorkPhone()
+            SimManager.detectSimRoles(this, workPhone)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -394,7 +425,7 @@ class MainActivity : ComponentActivity() {
 
         WorkManager.getInstance(this).enqueueUniqueWork(
             "SyncUserDetailsWork",
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.REPLACE,
             syncRequest
         )
     }
@@ -599,20 +630,11 @@ class MainActivity : ComponentActivity() {
     // --- LOGIC: Smart Dialing (Sim 1 vs Sim 2) ---
 
     @SuppressLint("MissingPermission")
-    fun dialSmart(number: String, specificSlot: Int?) {
-        if (!isDefaultDialer()) {
-            offerDefaultDialer(); return
-        }
-        if (!checkAllPermissions()) {
-            requestPermissions(); return
-        }
+    fun dialSmart(number: String, isWorkCall: Boolean, specificSlot: Int? = null) {
+        if (!isDefaultDialer()) { offerDefaultDialer(); return }
+        if (!checkAllPermissions()) { requestPermissions(); return }
 
-        val numberToDial =
-            if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) {
-                "+${number.filter { it.isDigit() }}"
-            } else {
-                number
-            }
+        val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) "+${number.filter { it.isDigit() }}" else number
 
         try {
             val telecomManager = getSystemService(TelecomManager::class.java)
@@ -624,25 +646,29 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            val selectedSim = if (specificSlot != null) {
-                activeSims.find { it.simSlotIndex == specificSlot } ?: activeSims.first()
-            } else {
-                activeSims.first()
-            }
+            // --- STRICT SLOT SELECTION ---
+            // 1. Use specific slot if user forced it (via fallback UI).
+            // 2. Else, use the Auto-Detected Work/Personal Slot.
+            val targetSlotIndex = specificSlot ?: if (isWorkCall) SimManager.workSimSlot else SimManager.personalSimSlot
 
-            val simName = selectedSim.displayName ?: "SIM ${selectedSim.simSlotIndex + 1}"
-            Toast.makeText(this, "Dialing via $simName", Toast.LENGTH_SHORT).show()
+            val selectedSim = if (targetSlotIndex != null) activeSims.find { it.simSlotIndex == targetSlotIndex } else null
 
             val uri = Uri.fromParts("tel", numberToDial, null)
             val intent = Intent(Intent.ACTION_CALL, uri)
 
-            val targetHandle = findHandleForSubId(telecomManager, selectedSim.subscriptionId)
-            if (targetHandle != null) {
-                intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, targetHandle)
+            if (selectedSim != null) {
+                // Force call through the specific SIM
+                val targetHandle = findHandleForSubId(telecomManager, selectedSim.subscriptionId)
+                if (targetHandle != null) {
+                    intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, targetHandle)
+                }
+                Toast.makeText(this, "Dialing via ${selectedSim.displayName} (${if(isWorkCall) "Work" else "Personal"})", Toast.LENGTH_SHORT).show()
+            } else {
+                // Fallback: System chooser (only if detection failed and no specific slot passed)
+                Log.d(TAG, "Smart Dial: No specific SIM determined. Using system default.")
             }
 
             startActivity(intent)
-
         } catch (e: Exception) {
             Log.e(TAG, "Smart dial failed", e)
             Toast.makeText(this, "Call failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -1384,7 +1410,7 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
         missedCallCount = missedCallCount,
         onRequestPermissions = { requestPermissions() },
         onRequestDefaultDialer = { offerDefaultDialer() },
-        onSmartDial = { number, slot -> this.dialSmart(number, slot) },
+        onSmartDial = { number, isWork, slot -> this.dialSmart(number, isWork, slot) }, // [!code updated]
         onResetMissedCount = {
             missedCallCount = 0
             markMissedCallsAsRead()
@@ -1412,7 +1438,7 @@ fun MainScreen(
     missedCallCount: Int,
     onRequestPermissions: () -> Unit,
     onRequestDefaultDialer: () -> Unit,
-    onSmartDial: (String, Int?) -> Unit,
+    onSmartDial: (String, Boolean, Int?) -> Unit, // [!code updated] Added Boolean for isWork
     onResetMissedCount: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -1441,7 +1467,7 @@ fun MainScreen(
 @Composable
 fun MainScreenContent(
     userName: String,
-    onSmartDial: (String, Int?) -> Unit,
+    onSmartDial: (String, Boolean, Int?) -> Unit,
     onLogout: () -> Unit,
     missedCallCount: Int,
     onResetMissedCount: () -> Unit
@@ -1519,13 +1545,13 @@ fun MainScreenContent(
             ) {
                 composable(Screen.Recents.route) {
                     RecentCallsScreen(
-                        onCallClick = { num, slot -> onSmartDial(num, slot) },
+                        onCallClick = { number, isWork, slot -> onSmartDial(number, isWork, slot) },
                         onScreenEntry = onResetMissedCount
                     )
                 }
                 composable(Screen.Contacts.route) {
                     ContactsScreen(
-                        onContactClick = { number, slot -> onSmartDial(number, slot) },
+                        onContactClick = { number, isWork, slot -> onSmartDial(number, isWork, slot) },
 //                        onLogout = onLogout,
 //                        onShowUserDetails = { navController.navigate(Screen.UserDetails.route) },
 //                        onShowCallLogs = { navController.navigate(Screen.ShowCallLogs.route) },
@@ -1536,7 +1562,7 @@ fun MainScreenContent(
                 }
                 composable(Screen.Dialer.route) {
                     DialerScreen(
-                        onCallClick = { num, slot -> onSmartDial(num, slot) },
+                        onCallClick = { number, isWork, slot -> onSmartDial(number, isWork, slot) }
                     )
                 }
                 composable(Screen.Requests.route) {
@@ -1553,7 +1579,8 @@ fun MainScreenContent(
                     EmployeeDirectoryScreen(
                         onNavigateBack = { navController.popBackStack() },
                         onCallClick = { number, slot ->
-                            onSmartDial(number, slot)
+                            // Employees are ALWAYS Work contacts
+                            onSmartDial(number, true, slot)
                         }
                     )
                 }
@@ -1575,7 +1602,7 @@ fun BottomNavigationBar(navController: NavController, missedCallCount: Int) {
     val currentDestination = navBackStackEntry?.destination
 
     NavigationBar(
-        containerColor = ComposeColor(0xFF0F172A),
+        containerColor = ComposeColor(0xFF080C17),
         contentColor = ComposeColor.White,
         tonalElevation = 0.dp
     ) {
@@ -1626,6 +1653,7 @@ fun BottomNavigationBar(navController: NavController, missedCallCount: Int) {
         }
     }
 }
+
 
 @Composable
 private fun SetupScreen(

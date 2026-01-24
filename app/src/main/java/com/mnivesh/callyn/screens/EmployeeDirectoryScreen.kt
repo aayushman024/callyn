@@ -37,6 +37,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.api.EmployeeDirectory
+import com.mnivesh.callyn.managers.SimManager
 
 // --- Helper Functions ---
 
@@ -508,8 +509,9 @@ fun EmployeeBottomSheet(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Call Buttons
-            if (isDualSim) {
+            //smart calling
+            val showDualButtons = isDualSim && SimManager.workSimSlot == null
+            if (showDualButtons) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -551,7 +553,9 @@ fun EmployeeBottomSheet(
                 ) {
                     Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(text = "Call", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    // Text Update
+                    val buttonText = if (SimManager.workSimSlot != null) "Call (Work SIM)" else "Call"
+                    Text(text = buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))

@@ -40,6 +40,7 @@ class UploadCallLogWorker(
 
                 val request = CallLogRequest(
                     callerName = log.name,
+                    familyHead = log.familyHead,
                     rshipManagerName = rmName,
                     type = log.direction,
                     timestamp = log.timestamp,

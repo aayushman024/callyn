@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -57,6 +58,7 @@ import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.Dispatchers
@@ -133,7 +135,9 @@ class RecentCallsViewModel(
             getApplication<Application>().contentResolver.registerContentObserver(
                 CallLog.Calls.CONTENT_URI, true, callLogObserver
             )
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
         // Initial Load
         loadNextPage()
@@ -207,7 +211,11 @@ class RecentCallsViewModel(
             val localWorkLogs = _workLogs.value.filter {
                 it.number.filter { c -> c.isDigit() }.takeLast(10) == normalizedQuery
             }.map { workLog ->
-                val isIncoming = workLog.direction.equals("incoming", true) || workLog.direction.equals("missed", true)
+                val isIncoming =
+                    workLog.direction.equals("incoming", true) || workLog.direction.equals(
+                        "missed",
+                        true
+                    )
                 RecentCallUiItem(
                     id = "w_hist_${workLog.id}",
                     name = workLog.name,
@@ -249,7 +257,11 @@ class RecentCallsViewModel(
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
                     // Requires WRITE_CALL_LOG permission or Default Dialer status
-                    Toast.makeText(getApplication(), "Could not delete. Check permissions.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        getApplication(),
+                        "Could not delete. Check permissions.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
@@ -272,7 +284,11 @@ class RecentCallsViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(getApplication(), "Failed to block. Ensure app is Default Dialer.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        getApplication(),
+                        "Failed to block. Ensure app is Default Dialer.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
@@ -284,7 +300,8 @@ class RecentCallsViewModel(
     }
 }
 
-class RecentCallsViewModelFactory(val app: Application, val repo: ContactRepository) : ViewModelProvider.Factory {
+class RecentCallsViewModelFactory(val app: Application, val repo: ContactRepository) :
+    ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return RecentCallsViewModel(app, repo) as T
     }
@@ -294,7 +311,7 @@ class RecentCallsViewModelFactory(val app: Application, val repo: ContactReposit
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecentCallsScreen(
-    onCallClick: (String, Int?) -> Unit,
+    onCallClick: (String, Boolean, Int?) -> Unit, // [!code update]
     onScreenEntry: () -> Unit
 ) {
     val context = LocalContext.current
@@ -327,9 +344,14 @@ fun RecentCallsScreen(
 
     // Check SIM Status
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.READ_PHONE_STATE
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
             try {
-                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                val subManager =
+                    context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
                 val activeSims = subManager.activeSubscriptionInfoCount
                 isDualSim = activeSims > 1
             } catch (e: Exception) {
@@ -366,6 +388,7 @@ fun RecentCallsScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedWorkContact by remember { mutableStateOf<AppContact?>(null) }
     var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
+    var selectedEmployeeContact by remember { mutableStateOf<AppContact?>(null) }
 
     // Filtering
     val authManager = remember { AuthManager(context) }
@@ -376,7 +399,10 @@ fun RecentCallsScreen(
             val isWorkCall = call.type == "Work"
             val matchesSearch = if (searchQuery.isBlank()) true else {
                 val nameMatch = call.name.contains(searchQuery, ignoreCase = true)
-                val numberMatch = if (isWorkCall && department != "Management") false else call.number.contains(searchQuery)
+                val numberMatch =
+                    if (isWorkCall && department != "Management") false else call.number.contains(
+                        searchQuery
+                    )
                 nameMatch || numberMatch
             }
             val matchesFilter = when (activeFilter) {
@@ -398,17 +424,26 @@ fun RecentCallsScreen(
                     application.repository.findWorkContactByNumber(item.number.takeLast(10))
                 }
                 if (workContact != null) {
-                    selectedWorkContact = workContact
+                    // [!code replace] Check if it's an Employee or standard Work Contact
+                    if (workContact.rshipManager.equals("Employee", ignoreCase = true)) {
+                        selectedEmployeeContact = workContact
+                    } else {
+                        selectedWorkContact = workContact
+                    }
                     sheetState.show()
                 } else {
                     selectedDeviceContact = DeviceContact(
-                        id = item.id, name = item.name, numbers = listOf(DeviceNumber(item.number, isDefault = true))
+                        id = item.id,
+                        name = item.name,
+                        numbers = listOf(DeviceNumber(item.number, isDefault = true))
                     )
                     sheetState.show()
                 }
             } else {
                 selectedDeviceContact = DeviceContact(
-                    id = item.id, name = item.name, numbers = listOf(DeviceNumber(item.number, isDefault = true))
+                    id = item.id,
+                    name = item.name,
+                    numbers = listOf(DeviceNumber(item.number, isDefault = true))
                 )
                 sheetState.show()
             }
@@ -429,7 +464,9 @@ fun RecentCallsScreen(
 
     // --- UI Structure ---
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)))
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F172A)))
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
@@ -441,7 +478,9 @@ fun RecentCallsScreen(
                     isRefreshing = false
                 }
             },
-            modifier = Modifier.fillMaxSize().statusBarsPadding()
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
         ) {
             LazyColumn(
                 state = listState,
@@ -454,7 +493,12 @@ fun RecentCallsScreen(
                         fontSize = 24.ssp(),
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        modifier = Modifier.padding(top = 24.sdp(), bottom = 16.sdp(), start = 16.sdp(), end = 16.sdp())
+                        modifier = Modifier.padding(
+                            top = 24.sdp(),
+                            bottom = 16.sdp(),
+                            start = 16.sdp(),
+                            end = 16.sdp()
+                        )
                     )
                 }
 
@@ -462,43 +506,95 @@ fun RecentCallsScreen(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.sdp()).padding(bottom = 4.sdp()),
-                        placeholder = { Text("Search name or number...", color = Color.Gray, fontSize = 14.ssp()) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.sdp())
+                            .padding(bottom = 4.sdp()),
+                        placeholder = {
+                            Text(
+                                "Search name or number...",
+                                color = Color.Gray,
+                                fontSize = 14.ssp()
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                tint = Color.Gray
+                            )
+                        },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray) }
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                }) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = Color.Gray
+                                    )
+                                }
                             }
                         },
                         shape = RoundedCornerShape(12.sdp()),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF3B82F6), unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-                            focusedTextColor = Color.White, unfocusedTextColor = Color.White, cursorColor = Color(0xFF3B82F6),
-                            focusedContainerColor = Color.White.copy(alpha = 0.05f), unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                            focusedBorderColor = Color(0xFF3B82F6),
+                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = Color(0xFF3B82F6),
+                            focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                            unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
                         ),
                         singleLine = true
                     )
                 }
 
                 stickyHeader {
-                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF0F172A))) {
+                    Box(modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF0F172A))) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.sdp(), horizontal = 16.sdp()),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.sdp(), horizontal = 16.sdp()),
                             horizontalArrangement = Arrangement.spacedBy(8.sdp())
                         ) {
-                            FilterChipItem("All", activeFilter == CallFilter.ALL) { activeFilter = CallFilter.ALL }
-                            FilterChipItem(label = "Missed", isSelected = activeFilter == CallFilter.MISSED, icon = Icons.Default.CallMissed, onClick = { activeFilter = CallFilter.MISSED })
-                            FilterChipItem("Personal", activeFilter == CallFilter.PERSONAL) { activeFilter = CallFilter.PERSONAL }
-                            FilterChipItem("Work", activeFilter == CallFilter.WORK) { activeFilter = CallFilter.WORK }
+                            FilterChipItem("All", activeFilter == CallFilter.ALL) {
+                                activeFilter = CallFilter.ALL
+                            }
+                            FilterChipItem(
+                                label = "Missed",
+                                isSelected = activeFilter == CallFilter.MISSED,
+                                icon = Icons.Default.CallMissed,
+                                onClick = { activeFilter = CallFilter.MISSED })
+                            FilterChipItem(
+                                "Personal",
+                                activeFilter == CallFilter.PERSONAL
+                            ) { activeFilter = CallFilter.PERSONAL }
+                            FilterChipItem("Work", activeFilter == CallFilter.WORK) {
+                                activeFilter = CallFilter.WORK
+                            }
                         }
                     }
                 }
 
                 if (filteredCalls.isEmpty() && !isLoading) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().height(400.sdp()), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(400.sdp()),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.History, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.sdp()))
+                                Icon(
+                                    Icons.Default.History,
+                                    contentDescription = null,
+                                    tint = Color.Gray,
+                                    modifier = Modifier.size(48.sdp())
+                                )
                                 Spacer(modifier = Modifier.height(16.sdp()))
                                 Text("No matching calls", color = Color.Gray, fontSize = 16.ssp())
                             }
@@ -511,7 +607,10 @@ fun RecentCallsScreen(
                         RecentCallItem(
                             log = log,
                             onBodyClick = { onItemClicked(log) },
-                            onCallClick = { onCallClick(log.number, null) },
+                            onCallClick = {
+                                val isWork = log.type.equals("Work", ignoreCase = true)
+                                onCallClick(log.number, isWork, null)
+                            },
                             onDelete = { viewModel.deleteLog(log.providerId) }, // [!code ++]
                             onBlock = { viewModel.blockNumber(log.number) }     // [!code ++]
                         )
@@ -520,8 +619,16 @@ fun RecentCallsScreen(
 
                 if (isLoading) {
                     item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(16.sdp()), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = Color.White.copy(alpha = 0.5f))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.sdp()),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.sdp()),
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
                         }
                     }
                 }
@@ -529,6 +636,25 @@ fun RecentCallsScreen(
         }
 
         // --- Bottom Sheets ---
+        if (selectedEmployeeContact != null) {
+            RecentEmployeeBottomSheet(
+                contact = selectedEmployeeContact!!,
+                history = selectedContactHistory, // Pass history!
+                isLoading = isHistoryLoading,     // Pass loading state!
+                sheetState = sheetState,
+                isDualSim = isDualSim,
+                onDismiss = {
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { selectedEmployeeContact = null }
+                },
+                onCall = { slotIndex ->
+                    scope.launch { sheetState.hide() }.invokeOnCompletion {
+                        onCallClick(selectedEmployeeContact!!.number, true, slotIndex)
+                        selectedEmployeeContact = null
+                    }
+                }
+            )
+        }
+
         if (selectedWorkContact != null) {
             RecentWorkBottomSheet(
                 contact = selectedWorkContact!!,
@@ -536,10 +662,13 @@ fun RecentCallsScreen(
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 isDualSim = isDualSim,
-                onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null } },
+                onDismiss = {
+                    scope.launch { sheetState.hide() }
+                        .invokeOnCompletion { selectedWorkContact = null }
+                },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onCallClick(selectedWorkContact!!.number, slotIndex)
+                        onCallClick(selectedWorkContact!!.number, true, slotIndex)
                         selectedWorkContact = null
                     }
                 }
@@ -553,10 +682,13 @@ fun RecentCallsScreen(
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 isDualSim = isDualSim,
-                onDismiss = { scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null } },
+                onDismiss = {
+                    scope.launch { sheetState.hide() }
+                        .invokeOnCompletion { selectedDeviceContact = null }
+                },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onCallClick(selectedDeviceContact!!.numbers.first().number, slotIndex)
+                        onCallClick(selectedDeviceContact!!.numbers.first().number, false, slotIndex)
                         selectedDeviceContact = null
                     }
                 }
@@ -608,7 +740,11 @@ suspend fun fetchSystemCallLogs(
         val logs = mutableListOf<RecentCallUiItem>()
         val simMap = mutableMapOf<String, String>()
         try {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.READ_PHONE_STATE
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
                 val subManager = context.getSystemService(SubscriptionManager::class.java)
                 val activeSims = subManager.activeSubscriptionInfoList
                 activeSims?.forEach { info ->
@@ -641,8 +777,10 @@ suspend fun fetchSystemCallLogs(
             selectionArgs.add("%${numberFilter.takeLast(10)}%")
         }
 
-        val selection = if (selectionParts.isNotEmpty()) selectionParts.joinToString(" AND ") else null
-        val sortOrder = if (limit != null) "${CallLog.Calls.DATE} DESC LIMIT $limit" else "${CallLog.Calls.DATE} DESC"
+        val selection =
+            if (selectionParts.isNotEmpty()) selectionParts.joinToString(" AND ") else null
+        val sortOrder =
+            if (limit != null) "${CallLog.Calls.DATE} DESC LIMIT $limit" else "${CallLog.Calls.DATE} DESC"
 
         try {
             val cursor = context.contentResolver.query(
@@ -787,7 +925,12 @@ fun RecentCallItem(
                         .background(iconTint.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.sdp()))
+                    Icon(
+                        icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(24.sdp())
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(16.sdp()))
@@ -825,7 +968,11 @@ fun RecentCallItem(
                         modifier = Modifier.padding(top = 4.sdp())
                     ) {
                         Icon(
-                            imageVector = if (log.type.equals("Work", ignoreCase = true)) Icons.Default.BusinessCenter else Icons.Default.Person,
+                            imageVector = if (log.type.equals(
+                                    "Work",
+                                    ignoreCase = true
+                                )
+                            ) Icons.Default.BusinessCenter else Icons.Default.Person,
                             contentDescription = null,
                             tint = tagColor,
                             modifier = Modifier.size(14.sdp())
@@ -851,7 +998,12 @@ fun RecentCallItem(
                 }
 
                 IconButton(onClick = onCallClick) {
-                    Icon(Icons.Default.Call, contentDescription = "Call", tint = Color.White, modifier = Modifier.size(24.sdp()))
+                    Icon(
+                        Icons.Default.Call,
+                        contentDescription = "Call",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.sdp())
+                    )
                 }
             }
 
@@ -889,7 +1041,10 @@ fun CallHistoryRow(log: RecentCallUiItem) {
         log.isIncoming -> Icons.Default.CallReceived
         else -> Icons.Default.CallMade
     }
-    val iconColor = if (log.isMissed) Color(0xFFEF4444) else if (log.isIncoming) Color(0xFF10B981) else Color(0xFF60A5FA)
+    val iconColor =
+        if (log.isMissed) Color(0xFFEF4444) else if (log.isIncoming) Color(0xFF10B981) else Color(
+            0xFF60A5FA
+        )
 
     Row(
         modifier = Modifier
@@ -929,17 +1084,270 @@ fun CallHistoryRow(log: RecentCallUiItem) {
 @Composable
 private fun ContactDetailRow(icon: ImageVector, label: String, value: String, labelColor: Color) {
     Row(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.sdp())).background(Color.White.copy(alpha = 0.05f)).padding(12.sdp()),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.sdp()))
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(10.sdp()),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = labelColor, modifier = Modifier.size(24.sdp()))
-        Spacer(modifier = Modifier.width(12.sdp()))
+        Icon(icon, null, tint = labelColor, modifier = Modifier.size(20.sdp()))
+        Spacer(modifier = Modifier.width(10.sdp()))
         Column {
-            Text(label, fontSize = 12.ssp(), fontWeight = FontWeight.Medium, color = labelColor.copy(alpha = 0.8f))
-            Text(value.ifBlank { "N/A" }, fontSize = 16.ssp(), fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                label,
+                fontSize = 11.ssp(),
+                fontWeight = FontWeight.Medium,
+                color = labelColor.copy(alpha = 0.8f)
+            )
+            Text(
+                value.ifBlank { "N/A" },
+                fontSize = 14.ssp(),
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RecentEmployeeBottomSheet(
+    contact: AppContact,
+    history: List<RecentCallUiItem>,
+    isLoading: Boolean,
+    sheetState: SheetState,
+    isDualSim: Boolean,
+    onDismiss: () -> Unit,
+    onCall: (Int?) -> Unit
+) {
+    val context = LocalContext.current
+
+    // UI Colors
+    val backgroundColor = Color(0xFF0F172A)
+    val textPrimary = Color.White
+    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val secondaryColor = Color(0xFF60A5FA) // Blue for Employee
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = backgroundColor,
+        contentColor = textPrimary
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.sdp())
+                .padding(bottom = 16.sdp()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // --- Avatar ---
+            Box(
+                modifier = Modifier
+                    .size(110.sdp())
+                    .clip(CircleShape)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                getColorForName(contact.name),
+                                getColorForName(contact.name).copy(alpha = 0.6f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    getInitials(contact.name),
+                    color = Color.White,
+                    fontSize = 40.ssp(),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.sdp()))
+
+            // --- Name ---
+            Text(
+                text = contact.name,
+                fontSize = 26.ssp(),
+                fontWeight = FontWeight.Bold,
+                color = textPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(12.sdp()))
+
+            // --- Employee Pill ---
+            Surface(
+                color = secondaryColor.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.height(32.sdp())
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.sdp())
+                ) {
+                    Icon(
+                        Icons.Default.Badge,
+                        null,
+                        tint = secondaryColor,
+                        modifier = Modifier.size(14.sdp())
+                    )
+                    Spacer(modifier = Modifier.width(6.sdp()))
+                    Text(
+                        text = "Employee",
+                        fontSize = 13.ssp(),
+                        color = secondaryColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.sdp()))
+
+            // --- Contact Details (Mobile & Dept) ---
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "CONTACT DETAILS",
+                    color = textSecondary,
+                    fontSize = 12.ssp(),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 8.sdp(), bottom = 8.sdp())
+                )
+
+                // Mobile Row
+                ContactDetailRow(
+                    icon = Icons.Default.Phone,
+                    label = "Mobile",
+                    value = contact.number,
+                    labelColor = Color(0xFF10B981)
+                )
+
+                Spacer(modifier = Modifier.height(8.sdp()))
+
+                // Department Row (Using familyHead)
+                ContactDetailRow(
+                    icon = Icons.Default.Apartment,
+                    label = "Department",
+                    value = contact.familyHead.ifBlank { "N/A" },
+                    labelColor = Color(0xFF8B5CF6)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.sdp()))
+
+            // --- Call Buttons (Dual SIM Logic) ---
+            val showDualButtons = isDualSim && SimManager.workSimSlot == null
+            if (showDualButtons) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                ) {
+                    // SIM 1
+                    Button(
+                        onClick = { onCall(0) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.sdp())
+                            .shadow(
+                                8.sdp(),
+                                RoundedCornerShape(20.sdp()),
+                                ambientColor = Color(0xFF3B82F6),
+                                spotColor = Color(0xFF3B82F6)
+                            ),
+                        shape = RoundedCornerShape(20.sdp()),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, null)
+                            Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    // SIM 2
+                    Button(
+                        onClick = { onCall(1) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.sdp())
+                            .shadow(
+                                8.sdp(),
+                                RoundedCornerShape(20.sdp()),
+                                ambientColor = Color(0xFF10B981),
+                                spotColor = Color(0xFF10B981)
+                            ),
+                        shape = RoundedCornerShape(20.sdp()),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, null)
+                            Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                Button(
+                    onClick = { onCall(null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.sdp()),
+                    shape = RoundedCornerShape(16.sdp()),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                    Spacer(modifier = Modifier.width(12.sdp()))
+                    Text(if(SimManager.workSimSlot != null) "Call (Work SIM)" else "Call Now")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.sdp()))
+
+            // --- HISTORY SECTION (The Critical Addition) ---
+            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+            Spacer(modifier = Modifier.height(16.sdp()))
+
+            Text(
+                text = "Previous Calls",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 14.ssp(),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.height(8.sdp()))
+
+            if (isLoading) {
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.sdp()), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                }
+            } else if (history.isNotEmpty()) {
+                LazyColumn(modifier = Modifier.heightIn(max = 250.sdp())) {
+                    items(history) { log ->
+                        CallHistoryRow(log) // Reusing the existing row
+                    }
+                }
+            } else {
+                Text(
+                    "No recent history",
+                    color = Color.White.copy(alpha = 0.3f),
+                    fontSize = 12.ssp(),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(20.sdp())
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.sdp()))
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -952,35 +1360,114 @@ private fun RecentWorkBottomSheet(
     onDismiss: () -> Unit,
     onCall: (Int?) -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = Color(0xFF1E293B), contentColor = Color.White) {
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF0F172A),
+        contentColor = Color.White
+    ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.sdp(), vertical = 16.sdp()),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.sdp(), vertical = 16.sdp()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
-                modifier = Modifier.size(100.sdp()).clip(CircleShape).background(Brush.linearGradient(listOf(getColorForName(contact.name), getColorForName(contact.name).copy(alpha = 0.7f)))),
+                modifier = Modifier
+                    .size(70.sdp())
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                getColorForName(contact.name),
+                                getColorForName(contact.name).copy(alpha = 0.7f)
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(getInitials(contact.name), color = Color.White, fontSize = 36.ssp(), fontWeight = FontWeight.Bold)
+                Text(
+                    getInitials(contact.name),
+                    color = Color.White,
+                    fontSize = 26.ssp(),
+                    fontWeight = FontWeight.Bold
+                )
             }
-            Spacer(modifier = Modifier.height(20.sdp()))
-            Text(contact.name, fontSize = 24.ssp(), fontWeight = FontWeight.Bold, color = Color.White)
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.sdp())) {
-                Icon(Icons.Default.BusinessCenter, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(16.sdp()))
+            Spacer(modifier = Modifier.height(18.sdp()))
+            Text(
+                contact.name,
+                fontSize = 21.ssp(),
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 8.sdp())
+            ) {
+                Icon(
+                    Icons.Default.BusinessCenter,
+                    null,
+                    tint = Color(0xFF60A5FA),
+                    modifier = Modifier.size(13.sdp())
+                )
                 Spacer(modifier = Modifier.width(6.sdp()))
-                Text("Work Contact", fontSize = 15.ssp(), color = Color(0xFF60A5FA), fontWeight = FontWeight.Medium)
+                Text(
+                    "Work Contact",
+                    fontSize = 13.ssp(),
+                    color = Color(0xFF60A5FA),
+                    fontWeight = FontWeight.Medium
+                )
             }
-            Spacer(modifier = Modifier.height(16.sdp()))
-            ContactDetailRow(Icons.Default.CreditCard, "PAN", contact.pan, Color(0xFFFFB74D))
             Spacer(modifier = Modifier.height(8.sdp()))
-            ContactDetailRow(Icons.Default.FamilyRestroom, "Family Head", contact.familyHead, Color(0xFF81C784))
+            ContactDetailRow(
+                icon = Icons.Default.CreditCard,
+                label = "PAN",
+                value = contact.pan,
+                labelColor = Color(0xFFFFB74D)
+            )
             Spacer(modifier = Modifier.height(8.sdp()))
-            ContactDetailRow(Icons.Default.AccountBox, "Relationship Manager", contact.rshipManager ?: "N/A", Color(0xFFC084FC))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.sdp()) // Spacing between the two boxes
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    ContactDetailRow(
+                        icon = Icons.Default.CurrencyRupee,
+                        label = "AUM",
+                        value = contact.aum,
+                        labelColor = Color(0xFFFFB74D)
+                    )
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    ContactDetailRow(
+                        icon = Icons.Default.Money,
+                        label = "Family AUM",
+                        value = contact.familyAum,
+                        labelColor = Color(0xFF60A5FA)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.sdp()))
+            ContactDetailRow(
+                Icons.Default.FamilyRestroom,
+                "Family Head",
+                contact.familyHead,
+                Color(0xFF81C784)
+            )
+            Spacer(modifier = Modifier.height(8.sdp()))
+            ContactDetailRow(
+                Icons.Default.AccountBox,
+                "Relationship Manager",
+                contact.rshipManager ?: "N/A",
+                Color(0xFFC084FC)
+            )
 
             Spacer(modifier = Modifier.height(24.sdp()))
 
             // Dual SIM Logic
-            if (isDualSim) {
+            val showDualButtons = isDualSim && SimManager.workSimSlot == null
+            if (showDualButtons) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.sdp())
@@ -991,10 +1478,18 @@ private fun RecentWorkBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.sdp())
-                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            .shadow(
+                                8.sdp(),
+                                RoundedCornerShape(20.sdp()),
+                                ambientColor = Color(0xFF3B82F6),
+                                spotColor = Color(0xFF3B82F6)
+                            ),
                         shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, contentDescription = null)
@@ -1008,10 +1503,18 @@ private fun RecentWorkBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.sdp())
-                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            .shadow(
+                                8.sdp(),
+                                RoundedCornerShape(20.sdp()),
+                                ambientColor = Color(0xFF10B981),
+                                spotColor = Color(0xFF10B981)
+                            ),
                         shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, contentDescription = null)
@@ -1021,10 +1524,17 @@ private fun RecentWorkBottomSheet(
                 }
             } else {
                 // Original Single Button
-                Button(onClick = { onCall(null) }, modifier = Modifier.fillMaxWidth().height(52.sdp()), shape = RoundedCornerShape(16.sdp()), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))) {
+                Button(
+                    onClick = { onCall(null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.sdp()),
+                    shape = RoundedCornerShape(16.sdp()),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
                     Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
                     Spacer(modifier = Modifier.width(12.sdp()))
-                    Text("Call Now", fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
+                    Text(if(SimManager.workSimSlot != null) "Call (Work SIM)" else "Call Now")
                 }
             }
 
@@ -1041,7 +1551,12 @@ private fun RecentWorkBottomSheet(
             Spacer(modifier = Modifier.height(8.sdp()))
 
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth().height(100.sdp()), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.sdp()),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
                 }
             } else if (history.isNotEmpty()) {
@@ -1051,7 +1566,14 @@ private fun RecentWorkBottomSheet(
                     }
                 }
             } else {
-                Text("No recent history", color = Color.White.copy(alpha = 0.3f), fontSize = 12.ssp(), modifier = Modifier.align(Alignment.CenterHorizontally).padding(20.sdp()))
+                Text(
+                    "No recent history",
+                    color = Color.White.copy(alpha = 0.3f),
+                    fontSize = 12.ssp(),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(20.sdp())
+                )
             }
 
             Spacer(modifier = Modifier.height(24.sdp()))
@@ -1086,13 +1608,18 @@ private fun RecentDeviceBottomSheet(
                     )
                     val cursor = contentResolver.query(
                         uri,
-                        arrayOf(ContactsContract.PhoneLookup._ID, ContactsContract.PhoneLookup.LOOKUP_KEY),
+                        arrayOf(
+                            ContactsContract.PhoneLookup._ID,
+                            ContactsContract.PhoneLookup.LOOKUP_KEY
+                        ),
                         null, null, null
                     )
                     cursor?.use {
                         if (it.moveToFirst()) {
-                            val id = it.getLong(it.getColumnIndexOrThrow(ContactsContract.PhoneLookup._ID))
-                            val lookupKey = it.getString(it.getColumnIndexOrThrow(ContactsContract.PhoneLookup.LOOKUP_KEY))
+                            val id =
+                                it.getLong(it.getColumnIndexOrThrow(ContactsContract.PhoneLookup._ID))
+                            val lookupKey =
+                                it.getString(it.getColumnIndexOrThrow(ContactsContract.PhoneLookup.LOOKUP_KEY))
                             contactUri = ContactsContract.Contacts.getLookupUri(id, lookupKey)
                         }
                     }
@@ -1106,7 +1633,7 @@ private fun RecentDeviceBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF1E293B),
+        containerColor = Color(0xFF0F172A),
         contentColor = Color.White
     ) {
         Column(
@@ -1149,7 +1676,8 @@ private fun RecentDeviceBottomSheet(
                                 }
                                 context.startActivity(intent)
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Cannot edit contact", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Cannot edit contact", Toast.LENGTH_SHORT)
+                                    .show()
                             }
                         }) {
                             Icon(Icons.Default.Edit, "Edit", tint = Color.White.copy(alpha = 0.7f))
@@ -1162,10 +1690,15 @@ private fun RecentDeviceBottomSheet(
                                 }
                                 context.startActivity(intent)
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Cannot open contact", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Cannot open contact", Toast.LENGTH_SHORT)
+                                    .show()
                             }
                         }) {
-                            Icon(Icons.Default.OpenInNew, "View", tint = Color.White.copy(alpha = 0.7f))
+                            Icon(
+                                Icons.Default.OpenInNew,
+                                "View",
+                                tint = Color.White.copy(alpha = 0.7f)
+                            )
                         }
                     }
                 }
@@ -1237,7 +1770,8 @@ private fun RecentDeviceBottomSheet(
                     modifier = Modifier
                         .size(18.sdp())
                         .clickable {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clipboard =
+                                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText("Phone Number", number)
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
@@ -1256,7 +1790,8 @@ private fun RecentDeviceBottomSheet(
                             }
                             context.startActivity(intent)
                         } catch (e: Exception) {
-                            Toast.makeText(context, "Unable to add contact", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Unable to add contact", Toast.LENGTH_SHORT)
+                                .show()
                         }
                     },
                     border = BorderStroke(1.sdp(), Color(0xFF3B82F6)),
@@ -1285,10 +1820,18 @@ private fun RecentDeviceBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.sdp())
-                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            .shadow(
+                                8.sdp(),
+                                RoundedCornerShape(20.sdp()),
+                                ambientColor = Color(0xFF3B82F6),
+                                spotColor = Color(0xFF3B82F6)
+                            ),
                         shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, contentDescription = null)
@@ -1303,10 +1846,18 @@ private fun RecentDeviceBottomSheet(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.sdp())
-                            .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            .shadow(
+                                8.sdp(),
+                                RoundedCornerShape(20.sdp()),
+                                ambientColor = Color(0xFF10B981),
+                                spotColor = Color(0xFF10B981)
+                            ),
                         shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, contentDescription = null)
@@ -1343,7 +1894,12 @@ private fun RecentDeviceBottomSheet(
             Spacer(modifier = Modifier.height(8.sdp()))
 
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth().height(100.sdp()), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.sdp()),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
                 }
             } else if (history.isNotEmpty()) {
@@ -1353,7 +1909,14 @@ private fun RecentDeviceBottomSheet(
                     }
                 }
             } else {
-                Text("No recent history", color = Color.White.copy(alpha = 0.3f), fontSize = 12.ssp(), modifier = Modifier.align(Alignment.CenterHorizontally).padding(20.sdp()))
+                Text(
+                    "No recent history",
+                    color = Color.White.copy(alpha = 0.3f),
+                    fontSize = 12.ssp(),
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(20.sdp())
+                )
             }
 
             Spacer(modifier = Modifier.height(24.sdp()))

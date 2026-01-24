@@ -46,7 +46,9 @@ class ContactRepository(
                         type = "work",
                         pan = employee.email,
                         familyHead = employee.department,
-                        rshipManager = "Employee"
+                        rshipManager = "Employee",
+                        aum = "0",
+                        familyAum = "0",
                     )
                 }
 
@@ -78,7 +80,9 @@ class ContactRepository(
                         type = it.type,
                         pan = it.pan,
                         familyHead = it.familyHead,
-                        rshipManager = it.rshipManager
+                        rshipManager = it.rshipManager,
+                        aum = it.aum,
+                        familyAum = it.familyAum
                     )
                 }
                 contactDao.deleteAll()
@@ -126,6 +130,7 @@ class ContactRepository(
 
                         val workLog = WorkCallLog(
                             name = log.callerName,
+                            familyHead = log.familyHead,
                             number = contact.number, // Mapped from DB
                             duration = log.duration,
                             timestamp = timestampLong,

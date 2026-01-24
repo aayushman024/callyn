@@ -394,12 +394,24 @@ fun CallLogCard(log: CallLogResponse) {
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp) // Gap between stacked pills
+                        ) {
+                            // RM Pill
                             ContainerPill(
                                 text = "RM: ${log.rshipManagerName ?: "-"}",
                                 color = RolePillText,
                                 bgColor = RolePillBg
                             )
+
+                            // Family Head Pill - Now stacked below RM
+                            if (log.familyHead.isNotBlank()) {
+                                ContainerPill(
+                                    text = "FH: ${log.familyHead}",
+                                    color = Color(0xFFFCD34D),
+                                    bgColor = Color(0xFFFCD34D).copy(alpha = 0.15f)
+                                )
+                            }
                         }
                     }
                 }
