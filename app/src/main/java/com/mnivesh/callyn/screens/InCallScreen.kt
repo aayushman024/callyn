@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -146,14 +147,28 @@ fun InCallContent(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMessageSheet by remember { mutableStateOf(false) }
 
-    // New State for AUM Popup
+    // State for Details Popup
     var showDetailsPopup by remember { mutableStateOf(false) }
-
     val scope = rememberCoroutineScope()
+
+    // --- Dynamic Size Calculation based on Screen Height ---
+    val configuration = LocalConfiguration.current
+    val screenHeight = configuration.screenHeightDp
+
+    // Determine sizing strategy based on screen height
+    val isSmallScreen = screenHeight < 680
+
+    // Adjusted Sizes
+    val controlButtonSize = if (isSmallScreen) 56.sdp() else 62.sdp()
+    val hangupButtonSize = if (isSmallScreen) 64.sdp() else 72.sdp()
+    val verticalSpacing = if (isSmallScreen) 12.sdp() else 20.sdp()
+    val dialerKeySize = if (isSmallScreen) 60.sdp() else 68.sdp()
+    val avatarSize = if (isSmallScreen) 60.sdp() else 80.sdp()
 
     val backgroundBrush = remember(currentState.type) {
         if (currentState.type == "work") WorkGradient else PersonalGradient
     }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -163,7 +178,7 @@ fun InCallContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.sdp(), vertical = 20.sdp()),
+                .padding(horizontal = 24.sdp(), vertical = 12.sdp()), // Reduced vertical padding
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -177,14 +192,17 @@ fun InCallContent(
                 if (showDialpad) {
                     DialpadComponent(
                         onDigitClick = onDigitClick,
+                        keySize = dialerKeySize,
                         modifier = Modifier
-                            .padding(top = 20.sdp())
+                            .padding(top = 10.sdp())
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                     )
                 } else {
                     CallerInfo(
                         currentState = currentState,
+                        avatarSize = avatarSize,
+                        isSmallScreen = isSmallScreen,
                         onShowDetails = { showDetailsPopup = true }
                     )
                 }
@@ -206,6 +224,9 @@ fun InCallContent(
                     ActiveCallControls(
                         state = currentState,
                         isDialpadVisible = showDialpad,
+                        buttonSize = controlButtonSize,
+                        hangupSize = hangupButtonSize,
+                        verticalSpacing = verticalSpacing,
                         onToggleDialpad = { showDialpad = !showDialpad },
                         onAddCall = onAddCall,
                         onManageConference = { showConferenceSheet = true },
@@ -238,24 +259,23 @@ fun InCallContent(
             )
         }
 
-        // --- AUM Details Popup (Glass Blur Like) ---
+        // --- Details Popup (Glass Blur Like) ---
         if (showDetailsPopup) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.6f)) // Dim background
+                    .background(Color.Black.copy(alpha = 0.7f)) // Dim background
                     .clickable { showDetailsPopup = false }, // Dismiss on outside tap
                 contentAlignment = Alignment.Center
             ) {
-                // Glass-like Card
                 Surface(
                     modifier = Modifier
                         .padding(32.sdp())
                         .fillMaxWidth()
                         .clickable(enabled = false) {}, // Consume clicks inside
-                    color = Color(0xFF1E293B).copy(alpha = 0.95f),
+                    color = Color(0xFF1E293B),
                     shape = RoundedCornerShape(16.sdp()),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
                     shadowElevation = 8.sdp()
                 ) {
                     Column(
@@ -286,6 +306,16 @@ fun InCallContent(
                                 value = currentState.familyAum,
                                 color = Color(0xFF10B981)
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.sdp()))
+
+                        Button(
+                            onClick = { showDetailsPopup = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Close", color = Color.White)
                         }
                     }
                 }
@@ -453,13 +483,20 @@ fun InfoPill(icon: ImageVector, label: String, value: String, color: Color) {
 @Composable
 private fun CallerInfo(
     currentState: CallState,
+    avatarSize: Dp,
+    isSmallScreen: Boolean,
     onShowDetails: () -> Unit
 ) {
+    val spacerHeight = if (isSmallScreen) 10.sdp() else 25.sdp()
+    val nameSize = if (isSmallScreen) 26.ssp() else 32.ssp()
+    val nameLineHeight = if (isSmallScreen) 30.ssp() else 38.ssp()
+    val verticalScrollState = rememberScrollState()
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.sdp())
+            .verticalScroll(verticalScrollState)
+            .padding(bottom = 12.sdp())
     ) {
         // --- Status & Duration ---
         Surface(
@@ -487,7 +524,7 @@ private fun CallerInfo(
         // 1. Avatar
         Box(
             modifier = Modifier
-                .size(80.sdp())
+                .size(avatarSize)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center
@@ -496,20 +533,20 @@ private fun CallerInfo(
                 imageVector = if (currentState.isConference) Icons.Default.Groups else Icons.Default.Person,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.size(48.sdp())
+                modifier = Modifier.size(avatarSize * 0.6f)
             )
         }
 
-        Spacer(modifier = Modifier.height(25.sdp()))
+        Spacer(modifier = Modifier.height(spacerHeight))
 
         // 2. Name
         Text(
             text = currentState.name,
-            fontSize = 32.ssp(),
+            fontSize = nameSize,
             fontWeight = FontWeight.Bold,
             color = TextPrimary,
             textAlign = TextAlign.Center,
-            lineHeight = 38.ssp()
+            lineHeight = nameLineHeight
         )
 
         Spacer(modifier = Modifier.height(16.sdp()))
@@ -523,6 +560,10 @@ private fun CallerInfo(
                 // Check if the contact is an Employee
                 val isEmployee = currentState.rshipManager?.equals("Employee", ignoreCase = true) == true
 
+                // Determine if call is connected/active
+                val isActiveOrHold = currentState.status.equals("Active", ignoreCase = true) ||
+                        currentState.status.equals("On Hold", ignoreCase = true)
+
                 if (isEmployee) {
                     // --- EMPLOYEE VIEW ---
                     if (!currentState.familyHead.isNullOrEmpty()) {
@@ -535,19 +576,20 @@ private fun CallerInfo(
                     }
                 } else {
                     // --- CLIENT VIEW ---
+                    if (isActiveOrHold) {
+                        // --- COMPACT VIEW (Active/Hold) ---
+                        // Family Head
+                        if (!currentState.familyHead.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.FamilyRestroom,
+                                label = "Family Head",
+                                value = currentState.familyHead,
+                                color = Color(0xFF60A5FA) // Blue
+                            )
+                        }
 
-                    // Always Show: Family Head
-                    if (!currentState.familyHead.isNullOrEmpty()) {
-                        InfoPill(
-                            icon = Icons.Default.FamilyRestroom,
-                            label = "Family Head",
-                            value = currentState.familyHead,
-                            color = Color(0xFF60A5FA) // Blue
-                        )
-                    }
-                    // Always Show: Relationship Manager
-                    if (!currentState.rshipManager.isNullOrEmpty()) {
-                        Row {
+                        // Relationship Manager
+                        if (!currentState.rshipManager.isNullOrEmpty()) {
                             InfoPill(
                                 icon = Icons.Default.AccountBox,
                                 label = "RM",
@@ -555,16 +597,60 @@ private fun CallerInfo(
                                 color = Color(0xFFC084FC) // Purple
                             )
                         }
-                    }
 
-                    // Conditional Rendering for AUM
-                    // Show Full details if Ringing/Dialing/Incoming.
-                    // Collapse if Active/OnHold to save space for buttons.
-                    val isActiveOrHold = currentState.status.equals("Active", ignoreCase = true) ||
-                            currentState.status.equals("On Hold", ignoreCase = true)
+                        // Show More Details Button (only if AUM data exists)
+                        if (!currentState.aum.isNullOrEmpty() || !currentState.familyAum.isNullOrEmpty()) {
+                            Spacer(modifier = Modifier.height(8.sdp()))
+                            Surface(
+                                onClick = onShowDetails,
+                                color = Color.White.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(20.sdp()),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 8.sdp()),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Show Asset Details",
+                                        fontSize = 13.ssp(),
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF60A5FA) // Blue
+                                    )
+                                    Spacer(modifier = Modifier.width(6.sdp()))
+                                    Icon(
+                                        Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color(0xFF60A5FA),
+                                        modifier = Modifier.size(16.sdp())
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // --- FULL VIEW (Incoming, Dialing, Ringing, Alerting) ---
 
-                    if (!isActiveOrHold) {
-                        // --- FULL VIEW (Ringing/Dialing) ---
+                        // Family Head
+                        if (!currentState.familyHead.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.FamilyRestroom,
+                                label = "Family Head",
+                                value = currentState.familyHead,
+                                color = Color(0xFF60A5FA) // Blue
+                            )
+                        }
+
+                        // Relationship Manager
+                        if (!currentState.rshipManager.isNullOrEmpty()) {
+                            InfoPill(
+                                icon = Icons.Default.AccountBox,
+                                label = "RM",
+                                value = currentState.rshipManager,
+                                color = Color(0xFFC084FC) // Purple
+                            )
+                        }
+
+                        // AUM
                         if (!currentState.aum.isNullOrEmpty()) {
                             InfoPill(
                                 icon = Icons.Default.CurrencyRupee,
@@ -573,6 +659,8 @@ private fun CallerInfo(
                                 color = Color(0xFF10B981) // Green
                             )
                         }
+
+                        // Family AUM
                         if (!currentState.familyAum.isNullOrEmpty()) {
                             InfoPill(
                                 icon = Icons.Default.Money,
@@ -580,22 +668,6 @@ private fun CallerInfo(
                                 value = currentState.familyAum,
                                 color = Color(0xFF10B981) // Green
                             )
-                        }
-                    } else {
-                        // --- COMPACT VIEW (Active Call) ---
-                        // Show "More Details" button if there is data to show
-                        if (!currentState.aum.isNullOrEmpty() || !currentState.familyAum.isNullOrEmpty()) {
-                            TextButton(
-                                onClick = onShowDetails,
-                                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
-                            ) {
-                                Text(
-                                    "Show More Details",
-                                    fontSize = 12.ssp(),
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Icon(Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.sdp()))
-                            }
                         }
                     }
                 }
@@ -639,6 +711,7 @@ private fun RingingControls(
                 icon = Icons.Default.Message,
                 text = "Message",
                 isActive = false,
+                buttonSize = 64.sdp(),
                 onClick = onMessageClick
             )
         }
@@ -714,7 +787,7 @@ private fun SwipeableCallControl(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 52.sdp())
+            .padding(bottom = 32.sdp()) // Reduced bottom padding
             .height(trackHeight)
             .padding(horizontal = 20.sdp())
             .onSizeChanged { trackWidth = it.width.toFloat() }
@@ -861,6 +934,9 @@ private fun SwipeableCallControl(
 private fun ActiveCallControls(
     state: CallState,
     isDialpadVisible: Boolean,
+    buttonSize: Dp,
+    hangupSize: Dp,
+    verticalSpacing: Dp,
     onToggleDialpad: () -> Unit,
     onAddCall: () -> Unit,
     onManageConference: () -> Unit,
@@ -874,52 +950,59 @@ private fun ActiveCallControls(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(24.sdp())
+        verticalArrangement = Arrangement.spacedBy(verticalSpacing)
     ) {
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
-            CallToggleButton(if (state.isMuted) Icons.Default.MicOff else Icons.Default.Mic, "Mute", state.isMuted, onMute)
-            CallToggleButton(Icons.Default.Dialpad, "Keypad", isDialpadVisible, onToggleDialpad)
-            CallToggleButton(Icons.Default.VolumeUp, "Speaker", state.isSpeakerOn, onSpeaker)
+            CallToggleButton(if (state.isMuted) Icons.Default.MicOff else Icons.Default.Mic, "Mute", state.isMuted, buttonSize, onMute)
+            CallToggleButton(Icons.Default.Dialpad, "Keypad", isDialpadVisible, buttonSize, onToggleDialpad)
+            CallToggleButton(Icons.Default.VolumeUp, "Speaker", state.isSpeakerOn, buttonSize, onSpeaker)
         }
 
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
-            CallToggleButton(Icons.Default.Pause, if (state.isHolding) "Unhold" else "Hold", state.isHolding, onHold)
+            CallToggleButton(Icons.Default.Pause, if (state.isHolding) "Unhold" else "Hold", state.isHolding, buttonSize, onHold)
 
             if (state.canMerge) {
-                CallToggleButton(Icons.Default.CallMerge, "Merge", false, onMerge)
+                CallToggleButton(Icons.Default.CallMerge, "Merge", false, buttonSize, onMerge)
             } else if (state.canSwap) {
-                CallToggleButton(Icons.Default.SwapCalls, "Swap", false, onSwap)
+                CallToggleButton(Icons.Default.SwapCalls, "Swap", false, buttonSize, onSwap)
             } else if (state.isConference) {
-                CallToggleButton(Icons.Default.Groups, "Manage", false, onManageConference)
+                CallToggleButton(Icons.Default.Groups, "Manage", false, buttonSize, onManageConference)
             } else {
-                CallToggleButton(Icons.Default.PersonAdd, "Add Call", false, onAddCall)
+                CallToggleButton(Icons.Default.PersonAdd, "Add Call", false, buttonSize, onAddCall)
             }
 
             if (CallManager.isBluetoothAvailable()) {
-                CallToggleButton(Icons.Default.Bluetooth, "Audio", state.isBluetoothOn, onBluetooth)
+                CallToggleButton(Icons.Default.Bluetooth, "Audio", state.isBluetoothOn, buttonSize, onBluetooth)
             } else {
-                Spacer(modifier = Modifier.size(72.sdp()))
+                Spacer(modifier = Modifier.size(buttonSize))
             }
         }
 
-        Spacer(modifier = Modifier.height(24.sdp()))
+        Spacer(modifier = Modifier.height(verticalSpacing))
 
         Box(Modifier.fillMaxWidth(), Alignment.Center) {
-            CallActionButton(Icons.Default.CallEnd, HangupRed, 72.sdp(), onReject)
+            CallActionButton(Icons.Default.CallEnd, HangupRed, hangupSize, onReject)
         }
         Spacer(modifier = Modifier.height(16.sdp()))
     }
 }
 
 @Composable
-private fun CallToggleButton(icon: ImageVector, text: String, isActive: Boolean, onClick: () -> Unit) {
+private fun CallToggleButton(
+    icon: ImageVector,
+    text: String,
+    isActive: Boolean,
+    buttonSize: Dp,
+    onClick: () -> Unit
+) {
     val backgroundColor by animateColorAsState(if (isActive) ActiveButtonColor else GlassButtonColor, label = "bg")
     val contentColor by animateColorAsState(if (isActive) Color.Black else Color.White, label = "content")
+    val iconSize = buttonSize * 0.44f // Dynamically scale icon
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
-                .size(72.sdp())
+                .size(buttonSize)
                 .clip(CircleShape)
                 .background(backgroundColor)
                 .clickable(
@@ -929,7 +1012,7 @@ private fun CallToggleButton(icon: ImageVector, text: String, isActive: Boolean,
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, text, tint = contentColor, modifier = Modifier.size(32.sdp()))
+            Icon(icon, text, tint = contentColor, modifier = Modifier.size(iconSize))
         }
         Spacer(modifier = Modifier.height(8.sdp()))
         Text(text, color = TextSecondary, fontSize = 13.ssp(), fontWeight = FontWeight.Medium)
@@ -940,6 +1023,7 @@ private fun CallToggleButton(icon: ImageVector, text: String, isActive: Boolean,
 private fun CallActionButton(icon: ImageVector, backgroundColor: Color, size: Dp, onClick: () -> Unit) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (isPressed) 0.9f else 1f, label = "scale")
+    val iconSize = size * 0.5f
 
     Box(
         modifier = Modifier
@@ -954,7 +1038,7 @@ private fun CallActionButton(icon: ImageVector, backgroundColor: Color, size: Dp
             ),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(36.sdp()))
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(iconSize))
     }
 }
 
@@ -992,6 +1076,7 @@ fun ConferenceParticipantRow(name: String, onSplit: () -> Unit) {
 @Composable
 private fun DialpadComponent(
     onDigitClick: (Char) -> Unit,
+    keySize: Dp,
     modifier: Modifier = Modifier
 ) {
     val buttons = listOf(
@@ -1003,7 +1088,7 @@ private fun DialpadComponent(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.sdp())
+        verticalArrangement = Arrangement.spacedBy(16.sdp()) // Reduced spacing
     ) {
         buttons.forEach { row ->
             Row(
@@ -1011,7 +1096,7 @@ private fun DialpadComponent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 row.forEach { digit ->
-                    DialerKey(digit = digit, onClick = { onDigitClick(digit) })
+                    DialerKey(digit = digit, size = keySize, onClick = { onDigitClick(digit) })
                 }
             }
         }
@@ -1019,10 +1104,10 @@ private fun DialpadComponent(
 }
 
 @Composable
-private fun DialerKey(digit: Char, onClick: () -> Unit) {
+private fun DialerKey(digit: Char, size: Dp, onClick: () -> Unit) {
     Box(
         modifier = Modifier
-            .size(72.sdp())
+            .size(size)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.1f))
             .clickable(
@@ -1085,11 +1170,6 @@ fun QuickResponseSheet(
     }
 }
 
-
-
-//PREVIEW
-// ... existing code ...
-
 // -------------------------------------------------------------
 // PREVIEWS
 // -------------------------------------------------------------
@@ -1097,7 +1177,6 @@ fun QuickResponseSheet(
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @Composable
 fun PreviewPersonalActiveCall() {
-    // Mock State for a Personal Call (Active)
     val mockState = CallState(
         name = "Aayushman",
         number = "+91 98765 43210",
@@ -1107,7 +1186,7 @@ fun PreviewPersonalActiveCall() {
         isSpeakerOn = true,
         isBluetoothOn = false,
         isIncoming = false,
-        connectTimeMillis = System.currentTimeMillis() - 125000 // 2m 05s ago
+        connectTimeMillis = System.currentTimeMillis() - 125000
     )
 
     InCallContent(
@@ -1131,14 +1210,12 @@ fun PreviewPersonalActiveCall() {
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @Composable
 fun PreviewWorkIncomingCall() {
-    // Mock State for a Work Call (Incoming, Employee)
     val mockState = CallState(
         name = "Rahul Sharma",
         number = "+91 11223 34455",
         status = "Ringing",
         type = "work",
         isIncoming = true,
-        // Mocking Employee Data
         rshipManager = "Employee",
         familyHead = "Tech Team",
         aum = null
@@ -1165,7 +1242,6 @@ fun PreviewWorkIncomingCall() {
 @androidx.compose.ui.tooling.preview.Preview(showBackground = true)
 @Composable
 fun PreviewClientWorkCall() {
-    // Mock State for a Client Work Call (Active)
     val mockState = CallState(
         name = "Suresh Raina",
         number = "+91 55667 78899",
@@ -1173,7 +1249,6 @@ fun PreviewClientWorkCall() {
         type = "work",
         isIncoming = true,
         connectTimeMillis = System.currentTimeMillis() - 60000,
-        // Mocking Client Data
         rshipManager = "Amit Verma",
         familyHead = "Raina Family",
         aum = "₹5,00,000",

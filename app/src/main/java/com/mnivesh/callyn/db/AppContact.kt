@@ -16,8 +16,8 @@ data class AppContact(
     val pan: String,
     val rshipManager: String,
     val familyHead: String,
-    val aum: String,
-    val familyAum: String,
+    val aum: String?,
+    val familyAum: String?,
 ) {
     /**
      * HIGH-SPEED OPTIMIZATION:

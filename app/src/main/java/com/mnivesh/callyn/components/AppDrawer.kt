@@ -55,11 +55,10 @@ fun AppDrawer(
         drawerContainerColor = Color(0xFF0B1220),
         drawerContentColor = Color.White,
         modifier = Modifier.width(drawerWidth)
+            .systemBarsPadding()
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // --- HEADER (Fixed) ---
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header remains fixed at the top
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -68,11 +67,11 @@ fun AppDrawer(
                             listOf(Color(0xFF020617), Color(0xFF0B1220), Color(0xFF111827))
                         )
                     )
-                    .padding(top = 44.dp, bottom = 28.dp, start = 24.dp, end = 24.dp)
+                    .padding(top = 40.dp, bottom = 25.dp, start = 24.dp, end = 24.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(76.dp)
+                        .size(70.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
@@ -83,7 +82,7 @@ fun AppDrawer(
                 ) {
                     Text(
                         text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
-                        fontSize = 30.sp,
+                        fontSize = 26.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -123,7 +122,7 @@ fun AppDrawer(
                         ) {
                             Icon(
                                 Icons.Default.BusinessCenter,
-                                contentDescription = null,
+                                null,
                                 tint = Color(0xFF94A3B8),
                                 modifier = Modifier.size(16.dp)
                             )
@@ -141,18 +140,22 @@ fun AppDrawer(
 
             HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
 
-            // --- SCROLLABLE CONTENT (Takes available space) ---
+            // All items (Navigation + Actions + Version) are now in the scrollable list
             Column(
                 modifier = Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .verticalScroll(scrollState)
-                    .padding(vertical = 14.dp, horizontal = 14.dp)
+                    .systemBarsPadding()
+                    .padding(vertical = 12.dp, horizontal = 14.dp)
             ) {
 
                 @Composable
                 fun drawerItem(
                     label: String,
                     icon: @Composable () -> Unit,
+                    textColor: Color = Color.White.copy(alpha = 0.92f),
+                    iconColor: Color = Color.White.copy(alpha = 0.92f),
+                    containerColor: Color = Color.White.copy(alpha = 0.04f),
                     onClick: () -> Unit
                 ) {
                     NavigationDrawerItem(
@@ -167,27 +170,19 @@ fun AppDrawer(
                         },
                         shape = RoundedCornerShape(18.dp),
                         colors = NavigationDrawerItemDefaults.colors(
-                            unselectedContainerColor = Color.White.copy(alpha = 0.04f),
-                            unselectedTextColor = Color.White.copy(alpha = 0.92f),
-                            unselectedIconColor = Color.White.copy(alpha = 0.92f),
-                            selectedContainerColor = Color.White.copy(alpha = 0.1f)
+                            unselectedContainerColor = containerColor,
+                            unselectedTextColor = textColor,
+                            unselectedIconColor = iconColor,
                         ),
                         modifier = Modifier
-                            .padding(vertical = 5.dp)
+                            .padding(vertical = 4.dp)
                             .fillMaxWidth()
                     )
                 }
 
                 drawerItem(
                     label = "Sync Work Contacts",
-                    icon = {
-                        Icon(
-                            Icons.Default.Refresh,
-                            null,
-                            Modifier.size(22.dp),
-                            tint = Color(0xFF38BDF8)
-                        )
-                    }
+                    icon = { Icon(Icons.Default.Refresh, null, Modifier.size(22.dp), tint = Color(0xFF38BDF8)) }
                 ) {
                     Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
                     onSync()
@@ -195,115 +190,50 @@ fun AppDrawer(
 
                 drawerItem(
                     label = "Employee Directory",
-                    icon = {
-                        Icon(
-                            Icons.Default.Badge,
-                            null,
-                            Modifier.size(22.dp),
-                            tint = Color(0xFFF472B6)
-                        )
-                    }
+                    icon = { Icon(Icons.Default.Badge, null, Modifier.size(22.dp), tint = Color(0xFFF472B6)) }
                 ) { onShowDirectory() }
 
                 if (department == "Management" || department == "IT Desk") {
                     drawerItem(
                         "User Status",
-                        {
-                            Icon(
-                                Icons.Default.Group,
-                                null,
-                                Modifier.size(22.dp),
-                                tint = Color(0xFFA5B4FC)
-                            )
-                        }
+                        { Icon(Icons.Default.Group, null, Modifier.size(22.dp), tint = Color(0xFFA5B4FC)) }
                     ) { onShowUserDetails() }
                 }
 
                 if (department == "Management" || email == "aayushman@niveshonline.com" || email == "ishika@niveshonline.com" || email == "sagar@niveshonline.com" || email == "ved@niveshonline.com") {
                     drawerItem(
                         "View Call Logs",
-                        {
-                            Icon(
-                                Icons.Default.List,
-                                null,
-                                Modifier.size(22.dp),
-                                tint = Color(0xFF34D399)
-                            )
-                        }
+                        { Icon(Icons.Default.List, null, Modifier.size(22.dp), tint = Color(0xFF34D399)) }
                     ) { onShowCallLogs() }
                 }
 
                 drawerItem(
                     "Personal Contact Requests",
-                    {
-                        Icon(
-                            Icons.Default.AssignmentInd,
-                            null,
-                            Modifier.size(22.dp),
-                            tint = Color(0xFFFACC15)
-                        )
-                    }
+                    { Icon(Icons.Default.AssignmentInd, null, Modifier.size(22.dp), tint = Color(0xFFFACC15)) }
                 ) { onShowRequests() }
 
-            }
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(horizontal = 8.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // --- BOTTOM SECTION (Fixed) ---
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp)
-                    .padding(bottom = 20.dp)
-            ) {
-                HorizontalDivider(
-                    color = Color.White.copy(alpha = 0.08f),
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                // Logout moved into the list
+                drawerItem(
+                    label = "Logout",
+                    textColor = Color(0xFFF44336),
+                    iconColor = Color(0xFFF44336),
+                    containerColor = Color(0xFFF44336).copy(alpha = 0.1f),
+                    icon = { Icon(Icons.AutoMirrored.Filled.Logout, null, Modifier.size(22.dp)) }
+                ) { onLogout() }
 
-                // Logout Button - Prominent placement
-                Surface(
-                    onClick = {
-                        onClose()
-                        onLogout()
-                    },
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF1F2937),
-                    border = BorderStroke(1.dp, Color(0xFFF44336).copy(alpha = 0.3f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Logout,
-                            contentDescription = null,
-                            tint = Color(0xFFF44336),
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Logout",
-                            fontSize = 15.sp,
-                            color = Color(0xFFF44336),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
+                Spacer(modifier = Modifier.height(24.dp))
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Version info
+                // Version info at the end of the scrollable list
                 Surface(
                     onClick = { (context as? MainActivity)?.manualUpdateCheck() },
                     shape = RoundedCornerShape(30),
                     color = Color.White.copy(alpha = 0.06f),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(bottom = 80.sdp())
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -311,22 +241,22 @@ fun AppDrawer(
                     ) {
                         Icon(
                             Icons.Default.SystemUpdate,
-                            contentDescription = null,
+                            null,
                             tint = Color(0xFF93C5FD),
                             modifier = Modifier.size(14.dp)
                         )
-
                         Spacer(modifier = Modifier.width(10.dp))
-
                         Text(
                             text = "Callyn v$version",
                             fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.8f),
-                            letterSpacing = 0.5.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
+
+                // Extra padding for bottom visibility
+                Spacer(modifier = Modifier.height(40.dp))
             }
         }
     }

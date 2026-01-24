@@ -140,20 +140,18 @@ object CallManager {
                 (!primary.children.isNullOrEmpty())
 
         val children = primary.children ?: emptyList()
+        val handle = details.handle
+        val displayNumber = handle?.schemeSpecificPart ?: ""
 
-        var displayNumber = ""
-        var finalName = ""
-
-        if (isConference) {
-            val count = children.size
-            finalName = "Conference ($count)"
+        var finalName = if (isConference) {
+            "Conference (${children.size})"
         } else {
-            val handle = details.handle
-            displayNumber = handle?.schemeSpecificPart ?: ""
-            finalName = displayNumber
+            displayNumber
         }
 
         val currentState = _callState.value
+
+        // Check if we already have a resolved name to avoid flickering
         if (!isConference && displayNumber.isNotEmpty()) {
             if (currentState?.number == displayNumber && currentState.name != displayNumber) {
                 finalName = currentState.name
@@ -162,54 +160,34 @@ object CallManager {
             }
         }
 
-        val status = primary.getStateString()
-        val isIncoming = (primary.state == Call.STATE_RINGING)
-
-        val canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
-                (registeredCalls.size > 1 && registeredCalls.none { it.state == Call.STATE_RINGING })
-
-        val canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
-                (registeredCalls.size > 1 && secondary?.state == Call.STATE_HOLDING)
-
-        var secName: String? = null
-        var secNumber: String? = null
+        // Secondary call logic (Call Waiting)
         val isSecondRinging = secondary?.state == Call.STATE_RINGING
-
-        if (secondary != null) {
-            val rawSec = secondary.details.handle?.schemeSpecificPart ?: ""
-            secNumber = rawSec
-            secName = if (currentState?.secondCallerNumber == rawSec) currentState.secondCallerName else rawSec
-
-            if (isSecondRinging && secName == rawSec) {
-                resolveSecondaryContactInfo(rawSec)
-            }
+        var secName = secondary?.details?.handle?.schemeSpecificPart ?: ""
+        if (isSecondRinging && currentState?.secondCallerNumber == secName) {
+            secName = currentState.secondCallerName ?: secName
+        } else if (isSecondRinging) {
+            resolveSecondaryContactInfo(secName)
         }
 
-        val newState = CallState(
+        // Use .copy() to preserve AUM, FamilyHead, etc.
+        _callState.value = (currentState ?: CallState(name = finalName, number = displayNumber, status = "Connecting")).copy(
             name = finalName,
             number = displayNumber,
-            status = status,
-            isIncoming = isIncoming,
+            status = primary.getStateString(),
+            isIncoming = (primary.state == Call.STATE_RINGING),
             isConference = isConference,
-            canMerge = canMerge,
-            canSwap = canSwap,
+            canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
+                    (registeredCalls.size > 1 && !isSecondRinging),
+            canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
+                    (registeredCalls.size > 1 && secondary?.state == Call.STATE_HOLDING),
             participants = children.map { it.details.handle?.schemeSpecificPart ?: "Unknown" },
             call = primary,
-            type = currentState?.type ?: "unknown",
-            isMuted = currentState?.isMuted ?: false,
             isHolding = (primary.state == Call.STATE_HOLDING),
-            isSpeakerOn = currentState?.isSpeakerOn ?: false,
-            isBluetoothOn = currentState?.isBluetoothOn ?: false,
-            availableRoutes = currentState?.availableRoutes ?: 0,
-            familyHead = currentState?.familyHead,
-            rshipManager = currentState?.rshipManager,
             connectTimeMillis = details.connectTimeMillis,
             secondIncomingCall = if (isSecondRinging) secondary else null,
-            secondCallerName = secName,
-            secondCallerNumber = secNumber
+            secondCallerName = if (isSecondRinging) secName else null,
+            secondCallerNumber = if (isSecondRinging) secName else null
         )
-
-        _callState.value = newState
     }
 
     // --- Actions ---

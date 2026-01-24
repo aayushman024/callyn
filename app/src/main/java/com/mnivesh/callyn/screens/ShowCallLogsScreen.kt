@@ -376,7 +376,6 @@ fun CallLogCard(log: CallLogResponse) {
                 Column(modifier = Modifier.weight(1f)) {
                     if (isPersonal) {
                         // --- PERSONAL LAYOUT (Clean) ---
-                        // Just one text, no redundant tags/pills
                         Text(
                             text = "Personal Call",
                             color = Color.White,
@@ -394,23 +393,47 @@ fun CallLogCard(log: CallLogResponse) {
                             overflow = TextOverflow.Ellipsis
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(6.dp) // Gap between stacked pills
-                        ) {
-                            // RM Pill
-                            ContainerPill(
-                                text = "RM: ${log.rshipManagerName ?: "-"}",
-                                color = RolePillText,
-                                bgColor = RolePillBg
-                            )
 
-                            // Family Head Pill - Now stacked below RM
-                            if (log.familyHead.isNotBlank()) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // --- NEW LOGIC: Check for Employee ---
+                            val isEmployee = log.rshipManagerName?.equals("Employee", ignoreCase = true) == true
+
+                            if (isEmployee) {
+                                // 1. Employee Tag
                                 ContainerPill(
-                                    text = "FH: ${log.familyHead}",
-                                    color = Color(0xFFFCD34D),
-                                    bgColor = Color(0xFFFCD34D).copy(alpha = 0.15f)
+                                    text = "Employee",
+                                    color = RolePillText,
+                                    bgColor = RolePillBg
                                 )
+
+                                // 2. Department Tag (Mapped from familyHead)
+                                if (!log.familyHead.isNullOrBlank()) {
+                                    ContainerPill(
+                                        text = "Department: ${log.familyHead}",
+                                        color = Color(0xFF60A5FA), // Blue tint for Department
+                                        bgColor = Color(0xFF60A5FA).copy(alpha = 0.15f)
+                                    )
+                                }
+                            } else {
+                                // --- STANDARD CLIENT VIEW ---
+
+                                // RM Pill
+                                ContainerPill(
+                                    text = "RM: ${log.rshipManagerName ?: "-"}",
+                                    color = RolePillText,
+                                    bgColor = RolePillBg
+                                )
+
+                                // Family Head Pill
+                                if (!log.familyHead.isNullOrBlank()) {
+                                    ContainerPill(
+                                        text = "FH: ${log.familyHead}",
+                                        color = Color(0xFFFCD34D),
+                                        bgColor = Color(0xFFFCD34D).copy(alpha = 0.15f)
+                                    )
+                                }
                             }
                         }
                     }
@@ -437,6 +460,7 @@ fun CallLogCard(log: CallLogResponse) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // ... (Bottom row code remains same) ...
                 // Left: Uploaded By
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CloudUpload, null, tint = SubtextColor, modifier = Modifier.size(14.dp))

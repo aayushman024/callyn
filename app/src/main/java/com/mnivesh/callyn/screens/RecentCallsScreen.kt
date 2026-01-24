@@ -1435,7 +1435,7 @@ private fun RecentWorkBottomSheet(
                     ContactDetailRow(
                         icon = Icons.Default.CurrencyRupee,
                         label = "AUM",
-                        value = contact.aum,
+                        value = contact.aum?: "0",
                         labelColor = Color(0xFFFFB74D)
                     )
                 }
@@ -1443,7 +1443,7 @@ private fun RecentWorkBottomSheet(
                     ContactDetailRow(
                         icon = Icons.Default.Money,
                         label = "Family AUM",
-                        value = contact.familyAum,
+                        value = contact.familyAum ?: "0",
                         labelColor = Color(0xFF60A5FA)
                     )
                 }
