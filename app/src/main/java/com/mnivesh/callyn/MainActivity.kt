@@ -1781,16 +1781,35 @@ private fun SetupScreen(
                 }
 
             } else if (!hasAllPermissions) {
-                val description = if (missingPermissions.isNotEmpty()) {
-                    "Missing: ${missingPermissions.joinToString(", ")}"
+
+                val formatted = if (missingPermissions.isNotEmpty()) {
+                    missingPermissions.joinToString(", ") {
+                        formatPermission(it)
+                    }
                 } else {
                     "Required for contacts & logs."
                 }
-                SetupCard("Grant Permissions", description, "Grant", onRequestPermissions)
+
+                val description = "Missing: $formatted"
+
+                SetupCard(
+                    "Grant Permissions",
+                    description,
+                    "Grant",
+                    onRequestPermissions
+                )
             }
         }
     }
 }
+
+fun formatPermission(permission: String): String {
+    return permission
+        .removePrefix("android.permission.")
+        .split("_")
+        .joinToString(" ") { it.lowercase().replaceFirstChar { c -> c.uppercase() } }
+}
+
 
 @Composable
 private fun SetupCard(

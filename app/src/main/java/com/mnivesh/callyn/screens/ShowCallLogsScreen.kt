@@ -292,27 +292,42 @@ fun FilterSection(
         Spacer(modifier = Modifier.height(12.dp))
 
         // Date Picker
-        OutlinedTextField(
-            value = selectedDate,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Date") },
-            placeholder = { Text("All Time") },
-            trailingIcon = {
-                if (selectedDate.isNotEmpty()) {
-                    IconButton(onClick = onClearDate) {
-                        Icon(Icons.Default.Close, null, tint = SubtextColor)
+        // Date Picker Field
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onDateClick() } // Move click listener here
+        ) {
+            OutlinedTextField(
+                value = selectedDate,
+                onValueChange = {},
+                readOnly = true, // Keep it read-only so keyboard doesn't open
+                enabled = true,  // Keep it enabled so it remains visible and styled
+                label = { Text("Date") },
+                placeholder = { Text("All Time") },
+                trailingIcon = {
+                    if (selectedDate.isNotEmpty()) {
+                        IconButton(onClick = onClearDate) {
+                            Icon(Icons.Default.Close, null, tint = SubtextColor)
+                        }
+                    } else {
+                        Icon(Icons.Default.DateRange, null, tint = PrimaryColor)
                     }
-                } else {
-                    Icon(Icons.Default.DateRange, null, tint = PrimaryColor)
-                }
-            },
-            colors = filterTextFieldColors(),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().clickable { onDateClick() },
-            enabled = false
-        )
-        Box(modifier = Modifier.clickable { onDateClick() })
+                },
+                colors = filterTextFieldColors(),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            // Transparent overlay to ensure the click is caught even if
+            // the TextField internals try to consume it
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Transparent)
+                    .clickable { onDateClick() }
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 

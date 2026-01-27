@@ -60,6 +60,7 @@ data class CallLogRequest(
     val type: String,
     val timestamp: Long,
     val duration: Long,
+    val notes: String?,
     val simSlot: String? = null,
     val isWork: Boolean
 )
@@ -72,6 +73,7 @@ data class CallLogResponse(
     val type: String, // "outgoing", "incoming", "missed"
     val timestamp: String,
     val duration: Long,
+    val notes: String?,
     val uploadedBy: String?,
     val simslot: String?,
     val isWork: Boolean,
