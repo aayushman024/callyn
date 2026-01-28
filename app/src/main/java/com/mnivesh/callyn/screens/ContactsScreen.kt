@@ -36,8 +36,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -2274,7 +2276,7 @@ fun ModernEmployeeCard(contact: AppContact, onClick: () -> Unit, highlightQuery:
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ModernBottomSheet(
+public fun ModernBottomSheet(
     contact: AppContact,
     sheetState: SheetState,
     onDismiss: () -> Unit,
@@ -2330,7 +2332,8 @@ private fun ModernBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp),
+                .padding(bottom = 24.dp)
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
@@ -2367,6 +2370,7 @@ private fun ModernBottomSheet(
                         }
                     }
 
+                    if(department == "ConflictContactPaused")
                     // Custom Dropdown
                     MaterialTheme(
                         shapes = MaterialTheme.shapes.copy(
@@ -2409,7 +2413,7 @@ private fun ModernBottomSheet(
                 // Centered Avatar
                 Box(
                     modifier = Modifier
-                        .size(110.dp)
+                        .size(80.dp)
                         .align(Alignment.Center)
                         .border(4.dp, backgroundColor, CircleShape)
                         .padding(4.dp)
@@ -2427,7 +2431,7 @@ private fun ModernBottomSheet(
                     Text(
                         getInitials(contact.name),
                         color = Color.White,
-                        fontSize = 40.sp,
+                        fontSize = 30.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -2438,7 +2442,7 @@ private fun ModernBottomSheet(
             // --- Contact Name ---
             Text(
                 text = contact.name,
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
                 color = textPrimary,
                 textAlign = TextAlign.Center
@@ -2473,6 +2477,95 @@ private fun ModernBottomSheet(
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
+
+            val showDualButtons = isDualSim && SimManager.workSimSlot == null
+
+            if (showDualButtons) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // SIM 1 Button
+                    Button(
+                        onClick = { onCall(0) }, // Slot 0
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(
+                                8.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = Color(0xFF3B82F6),
+                                spotColor = Color(0xFF3B82F6)
+                            ),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // SIM 2 Button
+                    Button(
+                        onClick = { onCall(1) }, // Slot 1
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(64.dp)
+                            .shadow(
+                                8.dp,
+                                RoundedCornerShape(20.dp),
+                                ambientColor = Color(0xFF10B981),
+                                spotColor = Color(0xFF10B981)
+                            ),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 0.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Row(horizontalArrangement = Arrangement.Center) {
+                            Icon(Icons.Default.Phone, contentDescription = null)
+                            Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                // Original Single Button
+                Button(
+                    onClick = { onCall(null) }, // Pass null to trigger smart dial logic
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .shadow(
+                            12.dp,
+                            RoundedCornerShape(20.dp),
+                            ambientColor = primaryColor,
+                            spotColor = primaryColor
+                        ),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                ) {
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        // Update text to show if we are using a specific SIM automatically
+                        text = if(isWorkContact && SimManager.workSimSlot != null) "Call (Work SIM)" else "Call",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // --- Info Cards Section ---
             if (isWorkContact) {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -2731,88 +2824,8 @@ private fun ModernBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // --- Main Call Button Logic (Split for Dual Sim) ---
-            val showDualButtons = isDualSim && SimManager.workSimSlot == null
-
-            if (showDualButtons) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // SIM 1 Button
-                    Button(
-                        onClick = { onCall(0) }, // Slot 0
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(64.dp)
-                            .shadow(
-                                8.dp,
-                                RoundedCornerShape(20.dp),
-                                ambientColor = Color(0xFF3B82F6),
-                                spotColor = Color(0xFF3B82F6)
-                            ),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 0.dp,
-                            pressedElevation = 4.dp
-                        )
-                    ) {
-                        Row(horizontalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Phone, contentDescription = null)
-                            Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // SIM 2 Button
-                    Button(
-                        onClick = { onCall(1) }, // Slot 1
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(64.dp)
-                            .shadow(
-                                8.dp,
-                                RoundedCornerShape(20.dp),
-                                ambientColor = Color(0xFF10B981),
-                                spotColor = Color(0xFF10B981)
-                            ),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 0.dp,
-                            pressedElevation = 4.dp
-                        )
-                    ) {
-                        Row(horizontalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Phone, contentDescription = null)
-                            Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            } else {
-                // Original Single Button
-                Button(
-                    onClick = { onCall(null) }, // Pass null to trigger smart dial logic
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
-                ) {
-                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        // Update text to show if we are using a specific SIM automatically
-                        text = if(isWorkContact && SimManager.workSimSlot != null) "Call (Work SIM)" else "Call",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
         }
     }
 
@@ -3063,7 +3076,7 @@ private fun ModernDetailRow(icon: ImageVector, label: String, value: String, ico
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ModernDeviceBottomSheet(
+public fun ModernDeviceBottomSheet(
     contact: DeviceContact,
     sheetState: SheetState,
     isDualSim: Boolean,

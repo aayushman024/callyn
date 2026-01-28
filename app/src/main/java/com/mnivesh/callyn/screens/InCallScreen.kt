@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -50,6 +51,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -119,7 +122,8 @@ fun InCallScreen() {
         },
         // Call Waiting
         onAnswerWaiting = { CallManager.acceptCallWaiting() },
-        onRejectWaiting = { CallManager.rejectCallWaiting() }
+        onRejectWaiting = { CallManager.rejectCallWaiting() },
+        onSaveNote = { note -> CallManager.setCallNote(note) }
     )
 }
 
@@ -140,7 +144,8 @@ fun InCallContent(
     onSplitConference: (Int) -> Unit,
     onAddCall: () -> Unit,
     onAnswerWaiting: () -> Unit,
-    onRejectWaiting: () -> Unit
+    onRejectWaiting: () -> Unit,
+    onSaveNote: (String) -> Unit
 ) {
     var showDialpad by remember { mutableStateOf(false) }
     var showConferenceSheet by remember { mutableStateOf(false) }
@@ -154,6 +159,11 @@ fun InCallContent(
     // --- Dynamic Size Calculation based on Screen Height ---
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp
+
+    //notes section
+    var showNotePopup by remember { mutableStateOf(false) }
+    // Initialize draft with what's already saved in CallManager (if any), allows "load what he had written"
+    var noteDraft by remember { mutableStateOf(CallManager.getCallNote() ?: "") }
 
     // Determine sizing strategy based on screen height
     val isSmallScreen = screenHeight < 680
@@ -242,6 +252,42 @@ fun InCallContent(
             }
         }
 
+        // --- Work Call Notes Button (Top Right) ---
+        if (currentState.type == "work" && currentState.status != "Ended") {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .systemBarsPadding()
+                    .padding(top = 30.dp, end = 10.dp)
+            ) {
+                Surface(
+                    onClick = { showNotePopup = true },
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(50), // Pill shape
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.sdp())
+                    ) {
+                        Text(
+                            text = "Add Notes",
+                            color = Color.White,
+                            fontSize = 12.ssp(),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Add Notes",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.sdp())
+                        )
+                    }
+                }
+            }
+        }
+
         // --- Call Waiting Popup ---
         AnimatedVisibility(
             visible = currentState.secondIncomingCall != null,
@@ -257,6 +303,150 @@ fun InCallContent(
                 onAccept = onAnswerWaiting,
                 onDecline = onRejectWaiting
             )
+        }
+
+        //notes popup
+        if (showNotePopup) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .clickable { showNotePopup = false }, // Dismiss on outside tap
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .padding(20.sdp())
+                        .fillMaxWidth()
+                        .clickable(enabled = false) {}, // Consume clicks inside
+                    color = Color(0xFF1E293B), // Slate-900 like background
+                    shape = RoundedCornerShape(16.sdp()),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    shadowElevation = 12.sdp()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(24.sdp()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.sdp())
+                    ) {
+                        // 1. Header with Icon
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.sdp())
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit, // Or EditNote if available
+                                contentDescription = null,
+                                tint = Color(0xFF60A5FA), // Blue tint
+                                modifier = Modifier.size(18.sdp())
+                            )
+                            Text(
+                                "Call Notes",
+                                color = TextPrimary,
+                                fontSize = 18.ssp(),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // 2. Note Taking Area
+                        OutlinedTextField(
+                            value = noteDraft,
+                            onValueChange = { noteDraft = it },
+                            placeholder = {
+                                Text(
+                                    "Type key details here...\n• Client requirements\n• Follow-up items",
+                                    color = TextSecondary.copy(alpha = 0.4f),
+                                    fontSize = 14.ssp()
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 250.sdp(), max = 350.sdp()), // Bigger area
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedContainerColor = Color(0xFF0F172A), // Darker inner bg
+                                unfocusedContainerColor = Color(0xFF0F172A),
+                                focusedBorderColor = Color(0xFF60A5FA),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                cursorColor = Color(0xFF60A5FA)
+                            ),
+                            textStyle = LocalTextStyle.current.copy(
+                                fontSize = 15.ssp(),
+                                lineHeight = 22.ssp(),
+                                fontWeight = FontWeight.Normal
+                            ),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Default
+                            ),
+                            shape = RoundedCornerShape(12.sdp())
+                        )
+
+                        // 3. Helper Text (Affirmation & Warning)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.sdp())
+                        ) {
+                            Text(
+                                "Draft is preserved in memory if you close this box.",
+                                color = TextSecondary,
+                                fontSize = 11.ssp(),
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                "Nothing is saved permanently unless you tap Save.",
+                                color = Color(0xFFFFCC00).copy(alpha = 0.9f), // Amber warning color
+                                fontSize = 11.ssp(),
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.sdp()))
+
+                        // 4. Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                        ) {
+                            // Discard
+                            Button(
+                                onClick = {
+                                    noteDraft = "" // Clear Draft
+                                    onSaveNote("")
+                                    showNotePopup = false
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Transparent,
+                                    contentColor = HangupRed
+                                ),
+                                border = BorderStroke(1.dp, HangupRed.copy(alpha = 0.3f)),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.sdp())
+                            ) {
+                                Text("Discard", fontWeight = FontWeight.SemiBold)
+                            }
+
+                            // Save
+                            Button(
+                                onClick = {
+                                    onSaveNote(noteDraft) // Save to Manager
+                                    showNotePopup = false
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF60A5FA), // Blue
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.sdp())
+                            ) {
+                                Text("Save Note", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // --- Details Popup (Glass Blur Like) ---
@@ -1203,7 +1393,8 @@ fun PreviewPersonalActiveCall() {
         onSplitConference = {},
         onAddCall = {},
         onAnswerWaiting = {},
-        onRejectWaiting = {}
+        onRejectWaiting = {},
+        onSaveNote = {}
     )
 }
 
@@ -1235,7 +1426,8 @@ fun PreviewWorkIncomingCall() {
         onSplitConference = {},
         onAddCall = {},
         onAnswerWaiting = {},
-        onRejectWaiting = {}
+        onRejectWaiting = {},
+        onSaveNote = {}
     )
 }
 
@@ -1245,9 +1437,9 @@ fun PreviewClientWorkCall() {
     val mockState = CallState(
         name = "Suresh Raina",
         number = "+91 55667 78899",
-        status = "Ringing",
+        status = "Active",
         type = "work",
-        isIncoming = true,
+        isIncoming = false,
         connectTimeMillis = System.currentTimeMillis() - 60000,
         rshipManager = "Amit Verma",
         familyHead = "Raina Family",
@@ -1269,6 +1461,7 @@ fun PreviewClientWorkCall() {
         onSplitConference = {},
         onAddCall = {},
         onAnswerWaiting = {},
-        onRejectWaiting = {}
+        onRejectWaiting = {},
+        onSaveNote = {}
     )
 }

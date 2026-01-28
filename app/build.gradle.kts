@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.androidx.ui.text)
     implementation(libs.androidx.ui)
     implementation(libs.androidx.animation.core)
+    implementation(libs.androidx.ui.graphics)
     ksp(libs.androidx.room.compiler)
     // -----------------------
 

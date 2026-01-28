@@ -39,20 +39,25 @@ class CallLogsViewModel : ViewModel() {
         }
     }
 
-    fun searchLogs(token: String, uploadedBy: String?, date: String?) {
-        if (uploadedBy.isNullOrBlank() && date.isNullOrBlank()) {
-            uiState = CallLogsUiState.Error("Please select a user or a date.")
-            return
-        }
-
+    // Updated to support date ranges
+    fun searchLogs(
+        token: String,
+        uploadedBy: String?,
+        startDate: String? = null,
+        endDate: String? = null,
+        showNotes: Boolean = false
+    ) {
         viewModelScope.launch {
             uiState = CallLogsUiState.Loading
             try {
-                // Call API with optional params
+                // Pass new params to API. 'date' is now null as we use start/end.
                 val response = RetrofitInstance.api.getCallLogs(
                     token = "Bearer $token",
                     uploadedBy = if (uploadedBy.isNullOrBlank()) null else uploadedBy,
-                    date = if (date.isNullOrBlank()) null else date
+                    date = null,
+                    showNotes = showNotes,
+                    startDate = startDate,
+                    endDate = endDate
                 )
 
                 if (response.isSuccessful && response.body() != null) {

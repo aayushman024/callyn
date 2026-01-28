@@ -1,5 +1,3 @@
-// [!code display_name:CallManager.kt]
-// [!code file_path:aayushman024/callyn/callyn-b3dc429adcee543cca5d11b2c13564d35d3c1f65/app/src/main/java/com/mnivesh/callyn/managers/CallManager.kt]
 package com.mnivesh.callyn.managers
 
 import android.annotation.SuppressLint
@@ -78,6 +76,9 @@ object CallManager {
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // [ADDED] Variable to hold the note for the active call
+    private var currentNote: String? = null
+
     fun initialize(repository: ContactRepository, context: Context) {
         this.repository = repository
         this.appContext = context.applicationContext
@@ -101,8 +102,14 @@ object CallManager {
     fun onCallRemoved(call: Call) {
         registeredCalls.remove(call)
 
-        // 1. Handle Logging
-        handleCallLogging(call)
+        // [MODIFIED] Capture note locally to pass to logging, then clear it
+        val noteToSave = currentNote
+
+        // 1. Handle Logging (Passing the note)
+        handleCallLogging(call, noteToSave)
+
+        // [MODIFIED] Reset note for next call
+        currentNote = null
 
         // 2. Update UI
         if (registeredCalls.isEmpty()) {
@@ -192,6 +199,15 @@ object CallManager {
 
     // --- Actions ---
 
+    // [ADDED] Note Management
+    fun setCallNote(note: String) {
+        currentNote = if (note.isBlank()) null else note
+    }
+
+    fun getCallNote(): String? {
+        return currentNote
+    }
+
     fun acceptCallWaiting() {
         val waiting = _callState.value?.secondIncomingCall ?: return
         waiting.answer(0)
@@ -249,23 +265,25 @@ object CallManager {
         if (number.isBlank()) return
         val normalized = normalizeNumber(number)
 
-        // Prevent short code lookup
         if (normalized.length < 7) return
 
         coroutineScope.launch {
-            // 1. Device Contact
-            var resolvedName: String? = findPersonalContactName(normalized)
+            var resolvedName: String? = null
 
-            // 2. Work Contact
+            // 1. Work Contact (Higher priority)
+            val workContact = repository?.findWorkContactByNumber(normalized)
+            if (workContact != null) {
+                resolvedName = workContact.name
+            }
+
+            // 2. Device Contact (Fallback)
             if (resolvedName == null) {
-                val workContact = repository?.findWorkContactByNumber(normalized)
-                if (workContact != null) resolvedName = workContact.name
+                resolvedName = findPersonalContactName(normalized)
             }
 
             // 3. CNAP / Network Name
             if (resolvedName == null) {
                 val primaryCall = _callState.value?.call
-                // Find the actual secondary call object to get its specific details
                 val secondaryCall = registeredCalls.find { it != primaryCall }
 
                 val cnapName = secondaryCall?.details?.callerDisplayName
@@ -274,10 +292,8 @@ object CallManager {
                 }
             }
 
-            // 4. Fallback to Number
             val finalName = resolvedName ?: number
 
-            // Apply Update
             val current = _callState.value
             if (current != null && current.secondCallerNumber == number) {
                 _callState.value = current.copy(secondCallerName = finalName)
@@ -290,16 +306,16 @@ object CallManager {
         val normalized = normalizeNumber(number)
 
         coroutineScope.launch {
-            // 1. Device Contact
-            var resolvedName: String? = findPersonalContactName(normalized)
-            var type = "personal"
+            var resolvedName: String? = null
+            var type = "unknown"
             var familyHead: String? = null
             var rshipManager: String? = null
             var aum: String? = null
             var familyAum: String? = null
 
-            // 2. Work Contact (If not found in device)
-            if (resolvedName == null && normalized.length > 9) {
+            // 1. Work Contact (Higher priority)
+            // Check length > 9 to avoid false matches on short numbers in the work DB
+            if (normalized.length > 9) {
                 val workContact = repository?.findWorkContactByNumber(normalized)
                 if (workContact != null) {
                     resolvedName = workContact.name
@@ -311,31 +327,34 @@ object CallManager {
                 }
             }
 
-            // 3. CNAP / Network Name (If not found in work/device)
+            // 2. Device Contact (Fallback if not in work DB)
             if (resolvedName == null) {
-                val cnapName = _callState.value?.call?.details?.callerDisplayName
-                // Only use CNAP if it's not null and not just the number repeated
-                if (!cnapName.isNullOrBlank() && normalizeNumber(cnapName) != normalized) {
-                    resolvedName = cnapName
-                    type = "unknown" // Keeps type safe
+                val personalName = findPersonalContactName(normalized)
+                if (personalName != null) {
+                    resolvedName = personalName
+                    type = "personal"
                 }
             }
 
-            // 4. Fallback to Number if everything fails
+            // 3. CNAP / Network Name
+            if (resolvedName == null) {
+                val cnapName = _callState.value?.call?.details?.callerDisplayName
+                if (!cnapName.isNullOrBlank() && normalizeNumber(cnapName) != normalized) {
+                    resolvedName = cnapName
+                }
+            }
+
             val finalName = resolvedName ?: number
 
-            // Apply Update using the same 'name' variable
             if (_callState.value?.number == number) {
-                val updatedState = _callState.value?.copy(
-                    name = finalName, // <--- Passing result to the existing variable
+                _callState.value = _callState.value?.copy(
+                    name = finalName,
                     type = type,
                     familyHead = familyHead,
                     rshipManager = rshipManager,
                     aum = aum,
                     familyAum = familyAum
-
                 )
-                _callState.value = updatedState
             }
         }
     }
@@ -366,7 +385,8 @@ object CallManager {
 
     // --- Logging & Deletion ---
     @RequiresApi(Build.VERSION_CODES.Q)
-    private fun handleCallLogging(call: Call) {
+    // [MODIFIED] Added 'callNote' parameter to constructor
+    private fun handleCallLogging(call: Call, callNote: String?) {
         val rawNumber = call.details.handle?.schemeSpecificPart ?: ""
         if (rawNumber.isBlank()) return
 
@@ -431,7 +451,8 @@ object CallManager {
                         type = "work",
                         direction = direction,
                         simSlot = simSlot,
-                        isSynced = false
+                        isSynced = false,
+                        notes = callNote // [ADDED] Save the note
                     )
                 )
 

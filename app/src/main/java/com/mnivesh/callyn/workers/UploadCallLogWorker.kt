@@ -45,6 +45,7 @@ class UploadCallLogWorker(
                     type = log.direction,
                     timestamp = log.timestamp,
                     duration = log.duration,
+                    notes = log.notes,
                     simSlot = log.simSlot,
                     isWork = true
                 )

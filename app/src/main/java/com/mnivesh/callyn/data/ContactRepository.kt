@@ -134,6 +134,7 @@ class ContactRepository(
                             familyHead = log.familyHead,
                             number = contact.number, // Mapped from DB
                             duration = log.duration,
+                            notes = log.notes,
                             timestamp = timestampLong,
                             type = "work",
                             direction = log.type, // "incoming", "outgoing", "missed"

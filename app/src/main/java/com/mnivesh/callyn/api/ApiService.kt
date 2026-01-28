@@ -219,7 +219,10 @@ interface ApiService {
     suspend fun getCallLogs(
         @Header("Authorization") token: String,
         @Query("date") date: String? = null,
-        @Query("uploadedBy") uploadedBy: String? = null
+        @Query("uploadedBy") uploadedBy: String? = null,
+        @Query("showNotes") showNotes: Boolean = false,
+        @Query("startDate") startDate: String? = null,
+        @Query("endDate") endDate: String? = null
     ): Response<CallLogListResponse>
 
     @GET("getEmployeePhoneDetails")

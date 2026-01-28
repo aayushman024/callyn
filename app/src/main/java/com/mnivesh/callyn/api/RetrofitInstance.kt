@@ -11,7 +11,7 @@ object RetrofitInstance {
 
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL_PROD)
+            .baseUrl(BASE_URL_LOCAL)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }

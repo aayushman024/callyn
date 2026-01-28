@@ -1,15 +1,19 @@
 package com.mnivesh.callyn.screens
 
 import android.app.DatePickerDialog
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.CallMade
@@ -21,13 +25,23 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mnivesh.callyn.viewmodels.CallLogsUiState
 import com.mnivesh.callyn.viewmodels.CallLogsViewModel
@@ -41,8 +55,10 @@ val BackgroundColor = Color(0xFF0F172A)
 val CardColor = Color(0xFF1E293B)
 val PrimaryColor = Color(0xFF3B82F6)
 val SuccessColor = Color(0xFF10B981)
-val ErrorColor = Color(0xFFEF4444)
+val ErrorColor = Color(0xFF2196F3)
 val SubtextColor = Color(0xFF94A3B8)
+val NotesHighVisColor = Color(0xFFFFB74D)
+val NotesPopupBg = Color(0xFF334155)
 
 // RM Pill Colors
 val RolePillBg = Color(0xFF6366F1).copy(alpha = 0.2f)
@@ -62,24 +78,54 @@ fun ShowCallLogsScreen(
     val authManager = remember { AuthManager(context) }
     val token = remember { authManager.getToken() }
 
-    // State
-    var selectedUser by remember { mutableStateOf("") }
-    var selectedDate by remember {
-        val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        mutableStateOf(format.format(Date()))
+    // --- Role Logic ---
+    val department = remember { authManager.getDepartment() ?: "" }
+    val currentUsername = remember { authManager.getUserName() ?: "" }
+
+    // Define "Power Users"
+    val isPowerUser = remember(department) {
+        department.equals("Management", ignoreCase = true) ||
+                department.equals("IT Desk", ignoreCase = true)
     }
 
+    // State
+    var selectedUser by remember { mutableStateOf(if (isPowerUser) "" else currentUsername) }
+
+    // [!code focus] Updated Date State to Range
+    var startDate by remember { mutableStateOf("") }
+    var endDate by remember { mutableStateOf("") }
+
+    // Notes: Power User default false. Standard User default true (hidden).
+    var showNotesOnly by remember { mutableStateOf(!isPowerUser) }
     var showUserDropdown by remember { mutableStateOf(false) }
 
-    // Date Picker Logic
+    // [!code focus] Date Picker Logic (Handles both Start and End)
     val calendar = Calendar.getInstance()
+    var isPickingStartDate by remember { mutableStateOf(true) }
+
     val datePickerDialog = DatePickerDialog(
         context,
         { _, year, month, day ->
             val cal = Calendar.getInstance()
             cal.set(year, month, day)
             val format = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            selectedDate = format.format(cal.time)
+            val newDate = format.format(cal.time)
+
+            if (isPickingStartDate) {
+                // Validate: Start cannot be after End
+                if (endDate.isNotEmpty() && newDate > endDate) {
+                    Toast.makeText(context, "Start date cannot be after end date", Toast.LENGTH_SHORT).show()
+                } else {
+                    startDate = newDate
+                }
+            } else {
+                // Validate: End cannot be before Start
+                if (startDate.isNotEmpty() && newDate < startDate) {
+                    Toast.makeText(context, "End date cannot be before start date", Toast.LENGTH_SHORT).show()
+                } else {
+                    endDate = newDate
+                }
+            }
         },
         calendar.get(Calendar.YEAR),
         calendar.get(Calendar.MONTH),
@@ -87,9 +133,22 @@ fun ShowCallLogsScreen(
     )
     datePickerDialog.datePicker.maxDate = System.currentTimeMillis()
 
-    // Load Data
+    // Initial Data Load
     LaunchedEffect(Unit) {
-        if (token != null) viewModel.fetchUserNames(token)
+        if (token != null) {
+            if (isPowerUser) {
+                viewModel.fetchUserNames(token)
+            } else {
+                // [!code focus] Updated search params
+                viewModel.searchLogs(
+                    token = token,
+                    uploadedBy = currentUsername,
+                    startDate = null,
+                    endDate = null,
+                    showNotes = true
+                )
+            }
+        }
     }
 
     // Render Content
@@ -97,14 +156,43 @@ fun ShowCallLogsScreen(
         uiState = viewModel.uiState,
         userList = viewModel.userNamesList,
         selectedUser = selectedUser,
-        selectedDate = selectedDate,
+        startDate = startDate,
+        endDate = endDate,
+        showNotesOnly = showNotesOnly,
         showDropdown = showUserDropdown,
+        isPowerUser = isPowerUser,
         onNavigateBack = onNavigateBack,
         onToggleDropdown = { showUserDropdown = it },
         onUserSelected = { selectedUser = it },
-        onDateClick = { datePickerDialog.show() },
-        onClearDate = { selectedDate = "" },
-        onSearch = { if (token != null) viewModel.searchLogs(token, selectedUser, selectedDate) }
+        // [!code focus] Updated Date Click Handlers
+        onStartDateClick = {
+            isPickingStartDate = true
+            datePickerDialog.show()
+        },
+        onEndDateClick = {
+            isPickingStartDate = false
+            datePickerDialog.show()
+        },
+        onClearDate = {
+            startDate = ""
+            endDate = ""
+        },
+        onToggleShowNotes = { showNotesOnly = it },
+        onSearch = {
+            if (token != null) {
+                val searchUser = if (isPowerUser) selectedUser else currentUsername
+                val searchNotes = if (isPowerUser) showNotesOnly else true
+
+                // [!code focus] Pass new range params to ViewModel
+                viewModel.searchLogs(
+                    token = token,
+                    uploadedBy = searchUser,
+                    startDate = startDate.ifBlank { null },
+                    endDate = endDate.ifBlank { null },
+                    showNotes = searchNotes
+                )
+            }
+        }
     )
 }
 
@@ -115,26 +203,27 @@ fun CallLogsContent(
     uiState: CallLogsUiState,
     userList: List<String>,
     selectedUser: String,
-    selectedDate: String,
+    startDate: String, // [!code focus]
+    endDate: String,   // [!code focus]
+    showNotesOnly: Boolean,
     showDropdown: Boolean,
+    isPowerUser: Boolean,
     onNavigateBack: () -> Unit,
     onToggleDropdown: (Boolean) -> Unit,
     onUserSelected: (String) -> Unit,
-    onDateClick: () -> Unit,
+    onStartDateClick: () -> Unit, // [!code focus]
+    onEndDateClick: () -> Unit,   // [!code focus]
     onClearDate: () -> Unit,
+    onToggleShowNotes: (Boolean) -> Unit,
     onSearch: () -> Unit
 ) {
     val isUserListReady = userList.isNotEmpty()
-
-    // 1. New Local State for Quick Filters
     var selectedTypeFilter by remember { mutableStateOf("All") }
 
-    // 2. Filter Logic
     val filteredLogs = remember(uiState, selectedTypeFilter) {
         if (uiState is CallLogsUiState.Success) {
             when (selectedTypeFilter) {
                 "All" -> uiState.logs
-                // isWork == false is strictly Personal. Null or True is Work.
                 "Personal" -> uiState.logs.filter { it.isWork == false }
                 else -> uiState.logs.filter { it.type.equals(selectedTypeFilter, ignoreCase = true) }
             }
@@ -165,23 +254,28 @@ fun CallLogsContent(
                 .fillMaxSize(),
             contentPadding = PaddingValues(bottom = 100.dp)
         ) {
-            // Section 1: Main Search Filters
+            // Section 1: Filters
             item {
                 FilterSection(
                     selectedUser = selectedUser,
-                    selectedDate = selectedDate,
+                    startDate = startDate,
+                    endDate = endDate,
+                    showNotesOnly = showNotesOnly,
                     isUserListReady = isUserListReady,
                     userList = userList,
                     showDropdown = showDropdown,
+                    isPowerUser = isPowerUser,
                     onToggleDropdown = onToggleDropdown,
                     onUserSelected = onUserSelected,
-                    onDateClick = onDateClick,
+                    onStartDateClick = onStartDateClick,
+                    onEndDateClick = onEndDateClick,
                     onClearDate = onClearDate,
+                    onToggleShowNotes = onToggleShowNotes,
                     onSearch = onSearch
                 )
             }
 
-            // Section 2: Quick Type Filters (Icon Only)
+            // Section 2: Quick Type Filters
             if (uiState is CallLogsUiState.Success) {
                 item {
                     QuickFilterRow(
@@ -193,7 +287,7 @@ fun CallLogsContent(
 
             // Section 3: Results
             when (uiState) {
-                is CallLogsUiState.Idle -> item { EmptyStateMessage("Adjust filters above to view logs.") }
+                is CallLogsUiState.Idle -> item { EmptyStateMessage("Adjust filters to view logs.") }
                 is CallLogsUiState.Loading -> item {
                     Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = PrimaryColor)
@@ -213,7 +307,11 @@ fun CallLogsContent(
                             )
                         }
                         items(filteredLogs) { log ->
-                            CallLogCard(log)
+                            if (isPowerUser) {
+                                ManagementCallLogCard(log)
+                            } else {
+                                StandardCallLogCard(log)
+                            }
                         }
                     }
                 }
@@ -222,20 +320,25 @@ fun CallLogsContent(
     }
 }
 
-// --- SUB-COMPONENTS ---
+// --- FILTER SECTION ---
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FilterSection(
     selectedUser: String,
-    selectedDate: String,
+    startDate: String,
+    endDate: String,
+    showNotesOnly: Boolean,
     isUserListReady: Boolean,
     userList: List<String>,
     showDropdown: Boolean,
+    isPowerUser: Boolean,
     onToggleDropdown: (Boolean) -> Unit,
     onUserSelected: (String) -> Unit,
-    onDateClick: () -> Unit,
+    onStartDateClick: () -> Unit,
+    onEndDateClick: () -> Unit,
     onClearDate: () -> Unit,
+    onToggleShowNotes: (Boolean) -> Unit,
     onSearch: () -> Unit
 ) {
     Column(
@@ -246,90 +349,143 @@ fun FilterSection(
             .background(CardColor)
             .padding(16.dp)
     ) {
-        Text("Filter Logs", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-        Spacer(modifier = Modifier.height(16.dp))
+        if (isPowerUser) {
+            Text("Filter Logs", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(16.dp))
 
-        // Username Dropdown
-        ExposedDropdownMenuBox(
-            expanded = showDropdown && isUserListReady,
-            onExpandedChange = { if (isUserListReady) onToggleDropdown(!showDropdown) }
-        ) {
-            OutlinedTextField(
-                value = selectedUser,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(if (isUserListReady) "Team Member" else "Loading...") },
-                placeholder = { Text("Select User") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showDropdown) },
-                colors = filterTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(
-                expanded = showDropdown,
-                onDismissRequest = { onToggleDropdown(false) },
-                modifier = Modifier.background(CardColor)
+            // Username Dropdown
+            ExposedDropdownMenuBox(
+                expanded = showDropdown && isUserListReady,
+                onExpandedChange = { if (isUserListReady) onToggleDropdown(!showDropdown) }
             ) {
-                DropdownMenuItem(
-                    text = { Text("All Members", color = PrimaryColor) },
-                    onClick = {
-                        onUserSelected("")
-                        onToggleDropdown(false)
-                    }
+                OutlinedTextField(
+                    value = selectedUser,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(if (isUserListReady) "Team Member" else "Loading...") },
+                    placeholder = { Text("Select User") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showDropdown) },
+                    colors = filterTextFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
-                userList.forEach { name ->
+                ExposedDropdownMenu(
+                    expanded = showDropdown,
+                    onDismissRequest = { onToggleDropdown(false) },
+                    modifier = Modifier.background(CardColor)
+                ) {
                     DropdownMenuItem(
-                        text = { Text(name, color = Color.White) },
-                        onClick = {
-                            onUserSelected(name)
-                            onToggleDropdown(false)
-                        }
+                        text = { Text("All Members", color = PrimaryColor) },
+                        onClick = { onUserSelected(""); onToggleDropdown(false) }
                     )
+                    userList.forEach { name ->
+                        DropdownMenuItem(
+                            text = { Text(name, color = Color.White) },
+                            onClick = { onUserSelected(name); onToggleDropdown(false) }
+                        )
+                    }
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+        } else {
+            Text("My Log Book", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Date Picker
-        // Date Picker Field
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onDateClick() } // Move click listener here
+        // --- UPDATED DATE FILTER ROW (START / END) ---
+        // [!code focus] Split into two columns
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = selectedDate,
-                onValueChange = {},
-                readOnly = true, // Keep it read-only so keyboard doesn't open
-                enabled = true,  // Keep it enabled so it remains visible and styled
-                label = { Text("Date") },
-                placeholder = { Text("All Time") },
-                trailingIcon = {
-                    if (selectedDate.isNotEmpty()) {
-                        IconButton(onClick = onClearDate) {
-                            Icon(Icons.Default.Close, null, tint = SubtextColor)
-                        }
-                    } else {
-                        Icon(Icons.Default.DateRange, null, tint = PrimaryColor)
-                    }
-                },
-                colors = filterTextFieldColors(),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
+            // Start Date Field
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = startDate,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("From") },
+                    placeholder = { Text("Start") },
+                    colors = filterTextFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onStartDateClick() }
+                )
+            }
 
-            // Transparent overlay to ensure the click is caught even if
-            // the TextField internals try to consume it
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(Color.Transparent)
-                    .clickable { onDateClick() }
-            )
+            // End Date Field
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = endDate,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("To") },
+                    placeholder = { Text("End") },
+                    colors = filterTextFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onEndDateClick() }
+                )
+            }
+
+            // Clear Button (Only shows if dates are selected)
+            if (startDate.isNotEmpty() || endDate.isNotEmpty()) {
+                IconButton(onClick = onClearDate) {
+                    Icon(Icons.Default.Close, null, tint = ErrorColor)
+                }
+            } else {
+                // Placeholder to keep alignment if needed, or just standard icon
+                Icon(Icons.Default.DateRange, null, tint = SubtextColor, modifier = Modifier.padding(start = 4.dp))
+            }
         }
+        // -------------------------------
+
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = "Leave dates blank to view today's logs",
+            color = SubtextColor.copy(alpha = 0.9f),
+            fontSize = 12.sp,
+            modifier = Modifier.padding(start = 4.dp)
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
+
+        if (isPowerUser) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Show calls with notes",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Switch(
+                    checked = showNotesOnly,
+                    onCheckedChange = onToggleShowNotes,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = PrimaryColor,
+                        uncheckedThumbColor = SubtextColor,
+                        uncheckedTrackColor = BackgroundColor
+                    )
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         Button(
             onClick = onSearch,
@@ -344,29 +500,22 @@ fun FilterSection(
     }
 }
 
-@Composable
-fun CallLogCard(log: CallLogResponse) {
-    // LOGIC: Treat null as Work. Only explicitly false is Personal.
-    val isPersonal = (log.isWork == false)
+// ... (Rest of UI components: ManagementCallLogCard, StandardCallLogCard, etc. remain unchanged) ...
 
-    // Colors & Styling
+@Composable
+fun ManagementCallLogCard(log: CallLogResponse) {
+    val isPersonal = (log.isWork == false)
+    val hasNotes = !log.notes.isNullOrBlank()
+    var showNotesPopup by remember { mutableStateOf(false) }
+
     val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
     val cardBorder = if (isPersonal) BorderStroke(1.dp, PersonalBorder.copy(alpha = 0.3f)) else null
 
-    // Icons
-    val (typeIcon, typeColor, typeBg) = when (log.type.lowercase()) {
-        "incoming" -> Triple(Icons.Rounded.CallReceived, PrimaryColor, PrimaryColor.copy(alpha = 0.15f))
-        "outgoing" -> Triple(Icons.Rounded.CallMade, SuccessColor, SuccessColor.copy(alpha = 0.15f))
-        "missed" -> Triple(Icons.Rounded.CallMissed, ErrorColor, ErrorColor.copy(alpha = 0.15f))
-        else -> Triple(Icons.Default.Phone, SubtextColor, SubtextColor.copy(alpha = 0.1f))
-    }
-
+    val (typeIcon, typeColor, typeBg) = getCallTypeStyles(log.type)
     val dateDisplay = remember(log.timestamp) { formatPrettyDate(log.timestamp) }
 
     Card(
-        modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .fillMaxWidth(),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = cardBackground),
         border = cardBorder,
@@ -374,31 +523,18 @@ fun CallLogCard(log: CallLogResponse) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 1. Icon Avatar
                 Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(typeBg),
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(typeBg),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(24.dp))
                 }
-
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // 2. Names & Details
                 Column(modifier = Modifier.weight(1f)) {
                     if (isPersonal) {
-                        // --- PERSONAL LAYOUT (Clean) ---
-                        Text(
-                            text = "Personal Call",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
+                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     } else {
-                        // --- WORK LAYOUT ---
                         Text(
                             text = log.callerName.ifBlank { "Unknown Caller" },
                             color = Color.White,
@@ -409,59 +545,36 @@ fun CallLogCard(log: CallLogResponse) {
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            // --- NEW LOGIC: Check for Employee ---
-                            val isEmployee = log.rshipManagerName?.equals("Employee", ignoreCase = true) == true
+                        // Tags
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            renderTags(log)
 
-                            if (isEmployee) {
-                                // 1. Employee Tag
-                                ContainerPill(
-                                    text = "Employee",
-                                    color = RolePillText,
-                                    bgColor = RolePillBg
-                                )
-
-                                // 2. Department Tag (Mapped from familyHead)
-                                if (!log.familyHead.isNullOrBlank()) {
-                                    ContainerPill(
-                                        text = "Department: ${log.familyHead}",
-                                        color = Color(0xFF60A5FA), // Blue tint for Department
-                                        bgColor = Color(0xFF60A5FA).copy(alpha = 0.15f)
-                                    )
-                                }
-                            } else {
-                                // --- STANDARD CLIENT VIEW ---
-
-                                // RM Pill
-                                ContainerPill(
-                                    text = "RM: ${log.rshipManagerName ?: "-"}",
-                                    color = RolePillText,
-                                    bgColor = RolePillBg
-                                )
-
-                                // Family Head Pill
-                                if (!log.familyHead.isNullOrBlank()) {
-                                    ContainerPill(
-                                        text = "FH: ${log.familyHead}",
-                                        color = Color(0xFFFCD34D),
-                                        bgColor = Color(0xFFFCD34D).copy(alpha = 0.15f)
-                                    )
+                            // View Notes Button (Popup)
+                            if (hasNotes) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box {
+                                    OutlinedButton(
+                                        onClick = { showNotesPopup = true },
+                                        border = BorderStroke(1.dp, NotesHighVisColor),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NotesHighVisColor),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.ChatBubbleOutline, null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("View Notes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    if (showNotesPopup) {
+                                        NotesPopup(log.notes ?: "", onDismiss = { showNotesPopup = false })
+                                    }
                                 }
                             }
                         }
                     }
                 }
-
-                // 3. Date (Top Right)
+                // Date Top Right
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = dateDisplay,
-                        color = SubtextColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+                    Text(dateDisplay, color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             }
 
@@ -469,14 +582,12 @@ fun CallLogCard(log: CallLogResponse) {
             HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 4. Bottom Row
+            // Bottom Row (Includes Uploaded By)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // ... (Bottom row code remains same) ...
-                // Left: Uploaded By
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.CloudUpload, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -489,36 +600,195 @@ fun CallLogCard(log: CallLogResponse) {
                         modifier = Modifier.widthIn(max = 100.dp)
                     )
                 }
-
-                // Middle: SIM SLOT
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.SimCard, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = log.simslot ?: "SIM ?",
-                        color = SubtextColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // Right: Duration
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Schedule, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = formatDuration(log.duration),
-                        color = SubtextColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                SimAndDurationRow(log)
             }
         }
     }
 }
 
-// --- HELPERS ---
+@Composable
+fun StandardCallLogCard(log: CallLogResponse) {
+    val isPersonal = (log.isWork == false)
+    val hasNotes = !log.notes.isNullOrBlank()
+
+    val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
+    val cardBorder = if (isPersonal) BorderStroke(1.dp, PersonalBorder.copy(alpha = 0.3f)) else null
+    val (typeIcon, typeColor, typeBg) = getCallTypeStyles(log.type)
+    val dateDisplay = remember(log.timestamp) { formatPrettyDate(log.timestamp) }
+
+    Card(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBackground),
+        border = cardBorder,
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Top Section
+            Row(verticalAlignment = Alignment.Top) {
+                Box(
+                    modifier = Modifier.size(48.dp).clip(CircleShape).background(typeBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(24.dp))
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    if (isPersonal) {
+                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    } else {
+                        Text(
+                            text = log.callerName.ifBlank { "Unknown Caller" },
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            renderTags(log)
+                        }
+                    }
+                }
+                Text(dateDisplay, color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            }
+
+            // Inline Notes (Standard Feature)
+            if (hasNotes) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF334155).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .border(1.dp, NotesHighVisColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ChatBubbleOutline, null, tint = NotesHighVisColor, modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("CALL NOTES", color = NotesHighVisColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = log.notes ?: "",
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 14.sp,
+                            lineHeight = 20.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Bottom Row (No Uploaded By)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End // Align everything to end
+            ) {
+                SimAndDurationRow(log)
+            }
+        }
+    }
+}
+
+// ... (Helpers: renderTags, SimAndDurationRow, NotesPopup, getCallTypeStyles, ContainerPill, EmptyStateMessage, formatDuration, formatPrettyDate, QuickFilterRow, FilterChip remain unchanged) ...
+
+@Composable
+fun renderTags(log: CallLogResponse) {
+    val isEmployee = log.rshipManagerName?.equals("Employee", ignoreCase = true) == true
+    if (isEmployee) {
+        ContainerPill("Employee", RolePillText, RolePillBg)
+        if (!log.familyHead.isNullOrBlank()) {
+            ContainerPill("Dept: ${log.familyHead}", Color(0xFF60A5FA), Color(0xFF60A5FA).copy(alpha = 0.15f))
+        }
+    } else {
+        ContainerPill("RM: ${log.rshipManagerName ?: "-"}", RolePillText, RolePillBg)
+        if (!log.familyHead.isNullOrBlank()) {
+            ContainerPill("FH: ${log.familyHead}", Color(0xFFFCD34D), Color(0xFFFCD34D).copy(alpha = 0.15f))
+        }
+    }
+}
+
+@Composable
+fun SimAndDurationRow(log: CallLogResponse) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.SimCard, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(log.simslot ?: "SIM ?", color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Icon(Icons.Rounded.Schedule, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(formatDuration(log.duration), color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun NotesPopup(notes: String, onDismiss: () -> Unit) {
+    Popup(
+        popupPositionProvider = remember {
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize
+                ): IntOffset {
+                    val x = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+                    val y = anchorBounds.top - popupContentSize.height - 10
+                    return IntOffset(x, y)
+                }
+            }
+        },
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier
+                    .width(280.dp)
+                    .heightIn(min = 100.dp, max = 300.dp)
+                    .shadow(12.dp, RoundedCornerShape(12.dp))
+                    .background(NotesPopupBg, RoundedCornerShape(12.dp))
+                    .padding(16.dp)
+            ) {
+                Text("Call Notes:", color = NotesHighVisColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 1.dp)
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(notes, color = Color.White.copy(alpha = 0.95f), fontSize = 13.sp, lineHeight = 20.sp)
+                }
+            }
+            Canvas(modifier = Modifier.size(width = 20.dp, height = 10.dp)) {
+                val path = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, 0f)
+                    lineTo(size.width / 2, size.height)
+                    close()
+                }
+                drawPath(path, color = NotesPopupBg)
+            }
+        }
+    }
+}
+
+fun getCallTypeStyles(type: String): Triple<ImageVector, Color, Color> {
+    return when (type.lowercase()) {
+        "incoming" -> Triple(Icons.Rounded.CallReceived, PrimaryColor, PrimaryColor.copy(alpha = 0.15f))
+        "outgoing" -> Triple(Icons.Rounded.CallMade, SuccessColor, SuccessColor.copy(alpha = 0.15f))
+        "missed" -> Triple(Icons.Rounded.CallMissed, ErrorColor, ErrorColor.copy(alpha = 0.15f))
+        else -> Triple(Icons.Default.Phone, SubtextColor, SubtextColor.copy(alpha = 0.1f))
+    }
+}
 
 @Composable
 fun ContainerPill(text: String, color: Color, bgColor: Color) {
@@ -593,62 +863,23 @@ fun QuickFilterRow(
     onFilterSelected: (String) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
-        // All Logs
-        FilterChip(
-            icon = Icons.Default.AllInbox,
-            isSelected = selectedFilter == "All",
-            selectedColor = PrimaryColor,
-            onClick = { onFilterSelected("All") }
-        )
-        // Personal (Green)
-        FilterChip(
-            icon = Icons.Default.Person,
-            isSelected = selectedFilter == "Personal",
-            selectedColor = PersonalBorder,
-            onClick = { onFilterSelected("Personal") }
-        )
-        // Incoming
-        FilterChip(
-            icon = Icons.Rounded.CallReceived,
-            isSelected = selectedFilter == "Incoming",
-            selectedColor = PrimaryColor,
-            onClick = { onFilterSelected("Incoming") }
-        )
-        // Outgoing
-        FilterChip(
-            icon = Icons.Rounded.CallMade,
-            isSelected = selectedFilter == "Outgoing",
-            selectedColor = SuccessColor,
-            onClick = { onFilterSelected("Outgoing") }
-        )
-        // Missed
-        FilterChip(
-            icon = Icons.Rounded.CallMissed,
-            isSelected = selectedFilter == "Missed",
-            selectedColor = ErrorColor,
-            onClick = { onFilterSelected("Missed") }
-        )
+        FilterChip(Icons.Default.AllInbox, selectedFilter == "All", PrimaryColor) { onFilterSelected("All") }
+        FilterChip(Icons.Default.Person, selectedFilter == "Personal", PersonalBorder) { onFilterSelected("Personal") }
+        FilterChip(Icons.Rounded.CallReceived, selectedFilter == "Incoming", PrimaryColor) { onFilterSelected("Incoming") }
+        FilterChip(Icons.Rounded.CallMade, selectedFilter == "Outgoing", SuccessColor) { onFilterSelected("Outgoing") }
+        FilterChip(Icons.Rounded.CallMissed, selectedFilter == "Missed", ErrorColor) { onFilterSelected("Missed") }
     }
 }
 
 @Composable
-fun FilterChip(
-    icon: ImageVector,
-    isSelected: Boolean,
-    selectedColor: Color,
-    onClick: () -> Unit
-) {
-    // 1. Logic for colors
+fun FilterChip(icon: ImageVector, isSelected: Boolean, selectedColor: Color, onClick: () -> Unit) {
     val backgroundColor = if (isSelected) selectedColor.copy(alpha = 0.2f) else CardColor
     val borderColor = if (isSelected) selectedColor else Color.Transparent
     val contentColor = if (isSelected) selectedColor else SubtextColor
 
-    // 2. Icon Only Box
     Box(
         modifier = Modifier
             .clip(CircleShape)
@@ -658,11 +889,6 @@ fun FilterChip(
             .padding(12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = contentColor,
-            modifier = Modifier.size(24.dp)
-        )
+        Icon(icon, null, tint = contentColor, modifier = Modifier.size(24.dp))
     }
 }

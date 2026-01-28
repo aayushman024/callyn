@@ -10,6 +10,7 @@ data class WorkCallLog(
     val familyHead: String,
     val number: String,
     val duration: Long,
+    val notes: String?,
     val timestamp: Long,
     val type: String,
     //val recordingPath: String? = null,

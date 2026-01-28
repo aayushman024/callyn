@@ -33,6 +33,7 @@ foundation = "1.10.1"
 uiTextVersion = "1.10.1"
 ui = "1.10.1"
 animationCoreVersion = "1.10.1"
+uiGraphics = "1.10.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -74,6 +75,7 @@ androidx-compose-foundation = { group = "androidx.compose.foundation", name = "f
 androidx-ui-text = { group = "androidx.compose.ui", name = "ui-text", version.ref = "uiTextVersion" }
 androidx-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "ui" }
 androidx-animation-core = { group = "androidx.compose.animation", name = "animation-core", version.ref = "animationCoreVersion" }
+androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "uiGraphics" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

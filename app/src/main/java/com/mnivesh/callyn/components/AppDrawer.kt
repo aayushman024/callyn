@@ -193,6 +193,20 @@ fun AppDrawer(
                     icon = { Icon(Icons.Default.Badge, null, Modifier.size(22.dp), tint = Color(0xFFF472B6)) }
                 ) { onShowDirectory() }
 
+//                if(department != "Management") {
+//                    drawerItem(
+//                        label = "View Call Notes",
+//                        icon = {
+//                            Icon(
+//                                Icons.Default.EditNote,
+//                                null,
+//                                Modifier.size(22.dp),
+//                                tint = Color(0xFF673AB7)
+//                            )
+//                        }
+//                    ) { onShowCallLogs() }
+//                }
+
                 if (department == "Management" || department == "IT Desk") {
                     drawerItem(
                         "User Status",

@@ -339,6 +339,9 @@ fun RecentCallsScreen(
     var activeFilter by remember { mutableStateOf(CallFilter.ALL) }
     var isRefreshing by remember { mutableStateOf(false) }
 
+    val authManager = remember { AuthManager(context) }
+    val department = remember { authManager.getDepartment() }
+
     // Sim Count State
     var isDualSim by remember { mutableStateOf(false) }
 
@@ -361,8 +364,9 @@ fun RecentCallsScreen(
     }
 
     // Merging Logic (Background)
-    LaunchedEffect(workLogs, systemLogs) {
+    LaunchedEffect(workLogs, systemLogs, department) {
         withContext(Dispatchers.Default) {
+            // 1. Convert Work Logs to UI items first
             val workUiLogs = workLogs.map {
                 val isIncomingCall = it.direction.equals("incoming", ignoreCase = true) ||
                         it.direction.equals("missed", ignoreCase = true)
@@ -379,8 +383,44 @@ fun RecentCallsScreen(
                     simSlot = it.simSlot
                 )
             }
-            val merged = (systemLogs + workUiLogs).sortedByDescending { it.date }
-            withContext(Dispatchers.Main) { allCalls = merged }
+
+            // 2. Helper to check if two logs represent the exact same call
+            fun areCallsDuplicate(item1: RecentCallUiItem, item2: RecentCallUiItem): Boolean {
+                // Normalize number (last 10 digits)
+                val n1 = item1.number.filter { it.isDigit() }.takeLast(10)
+                val n2 = item2.number.filter { it.isDigit() }.takeLast(10)
+                if (n1 != n2) return false
+
+                // Check Direction/Type
+                if (item1.isIncoming != item2.isIncoming) return false
+                if (item1.isMissed != item2.isMissed) return false
+
+                // Check Duration (Exact String match)
+                if (item1.duration != item2.duration) return false
+
+                // Check Time (Allow 5 second buffer for system vs db timestamp diffs)
+                val timeDiff = abs(item1.date - item2.date)
+                return timeDiff < 5000 // 5 seconds
+            }
+
+            val merged: List<RecentCallUiItem> = if (department == "Management") {
+                // PREFER SYSTEM LOGS
+                // Take all System logs. Add Work logs ONLY if they don't match a System log.
+                val uniqueWorkLogs = workUiLogs.filter { workItem ->
+                    systemLogs.none { sysItem -> areCallsDuplicate(sysItem, workItem) }
+                }
+                systemLogs + uniqueWorkLogs
+            } else {
+                // PREFER WORK LOGS
+                // Take all Work logs. Add System logs ONLY if they don't match a Work log.
+                val uniqueSystemLogs = systemLogs.filter { sysItem ->
+                    workUiLogs.none { workItem -> areCallsDuplicate(sysItem, workItem) }
+                }
+                workUiLogs + uniqueSystemLogs
+            }
+
+            val finalSorted = merged.sortedByDescending { it.date }
+            withContext(Dispatchers.Main) { allCalls = finalSorted }
         }
     }
 
@@ -391,9 +431,6 @@ fun RecentCallsScreen(
     var selectedEmployeeContact by remember { mutableStateOf<AppContact?>(null) }
 
     // Filtering
-    val authManager = remember { AuthManager(context) }
-    val department = remember { authManager.getDepartment() }
-
     val filteredCalls = remember(allCalls, searchQuery, activeFilter, department) {
         allCalls.filter { call ->
             val isWorkCall = call.type == "Work"
