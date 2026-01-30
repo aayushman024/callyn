@@ -53,4 +53,17 @@ interface ContactDao {
     @Query("UPDATE work_call_logs SET isSynced = 1 WHERE id = :logId")
     suspend fun markLogAsSynced(logId: Int)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCrmContacts(contacts: List<CrmContact>)
+
+    @Query("SELECT * FROM crm_contacts ORDER BY lastActivity DESC")
+    fun getAllCrmContacts(): Flow<List<CrmContact>>
+
+    @Query("DELETE FROM crm_contacts")
+    suspend fun deleteAllCrmContacts()
+
+    // Optional: Get by module if you want to filter tabs from DB
+    @Query("SELECT * FROM crm_contacts WHERE module = :moduleName ORDER BY lastActivity DESC")
+    fun getCrmContactsByModule(moduleName: String): Flow<List<CrmContact>>
+
 }

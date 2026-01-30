@@ -163,12 +163,39 @@ data class SmsLogResponse(
     val timestamp: String, // Or Long, depending on exact backend serialization
     val uploadedBy: String
 )
+
+//Zoho CRM Data
+data class CrmRecord(
+    @SerializedName("ClientName") val clientName: String?,
+    @SerializedName("ClientMobileNumber") val clientMobileNumber: String?,
+    @SerializedName("OwnerName") val ownerName: String?,
+    @SerializedName("ID") val id: String?,
+    @SerializedName("ModuleName") val moduleName: String?, // "Tickets", "Investment_leads", "Insurance_Leads"
+    @SerializedName("Product") val product: String?,
+    @SerializedName("LastActivity") val lastActivity: String?
+)
+
+data class CrmModuleData(
+    val fetchedCount: Int,
+    val uniqueCount: Int,
+    val data: List<CrmRecord>
+)
+
+data class CrmSyncData(
+    @SerializedName("Tickets") val tickets: CrmModuleData?,
+    @SerializedName("Investment_leads") val investmentLeads: CrmModuleData?,
+    @SerializedName("Insurance_Leads") val insuranceLeads: CrmModuleData?
+)
+
+data class CrmResponse(
+    val success: Boolean,
+    val message: String,
+    val data: CrmSyncData
+)
 // --- API SERVICE INTERFACE ---
 
 interface ApiService {
-
      // Calls your backend to get the Zoho OAuth URL.
-
     @GET("auth/zoho")
     suspend fun getZohoAuthUrl(): Response<AuthResponse>
 
@@ -253,5 +280,10 @@ interface ApiService {
     suspend fun getSmsLogs(
         @Header("Authorization") token: String
     ): Response<List<SmsLogResponse>>
+
+    @GET("getCRMData")
+    suspend fun getCrmData(
+        @Header("Authorization") token: String
+    ): Response<CrmResponse>
 }
 

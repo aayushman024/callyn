@@ -11,8 +11,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.mnivesh.callyn.screens.DeviceContact
-import com.mnivesh.callyn.screens.DeviceNumber
+import com.mnivesh.callyn.components.DeviceContact
+import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.AppContact
 import kotlinx.coroutines.Dispatchers

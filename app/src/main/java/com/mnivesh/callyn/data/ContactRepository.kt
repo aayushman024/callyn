@@ -9,6 +9,7 @@ import com.mnivesh.callyn.api.PersonalRequestData // <--- NEW IMPORT
 import com.mnivesh.callyn.api.UpdateRequestStatusBody
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.ContactDao
+import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.db.WorkCallLogDao
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,7 @@ class ContactRepository(
 
     val allContacts: Flow<List<AppContact>> = contactDao.getAllContacts()
     val allWorkLogs: Flow<List<WorkCallLog>> = workCallLogDao.getAllWorkLogs()
+    val crmContacts: Flow<List<CrmContact>> = contactDao.getAllCrmContacts()
 
     private var cachedEmployees: List<EmployeeDirectory>? = null
 
@@ -112,7 +114,9 @@ class ContactRepository(
             refreshContacts(token, managerName)
 
             // 2. Fetch Call Logs from API
-            val response = apiService.getCallLogs("Bearer $token", null, managerName)
+            val today = java.time.LocalDate.now().toString()
+
+            val response = apiService.getCallLogs("Bearer $token", null, managerName, endDate = today)
 
             if (response.isSuccessful && response.body() != null) {
                 val logs = response.body()!!.data
@@ -143,6 +147,7 @@ class ContactRepository(
                         workCallLogDao.insert(workLog)
                     }
                 }
+            } else {
                 Log.d(TAG, "Initial data sync completed successfully.")
             }
         } catch (e: Exception) {
@@ -161,6 +166,7 @@ class ContactRepository(
     suspend fun clearAllData() {
         contactDao.deleteAll()
         workCallLogDao.deleteAll()
+        contactDao.deleteAllCrmContacts()
     }
 
     suspend fun getUnsyncedLogs(): List<WorkCallLog> {
@@ -222,6 +228,58 @@ class ContactRepository(
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    /**
+     * Fetches CRM data from API, wipes old CRM table, and inserts new data.
+     */
+    suspend fun refreshCrmData(token: String): Result<Boolean> {
+        return try {
+            val response = apiService.getCrmData("Bearer $token")
+
+            if (response.isSuccessful && response.body() != null) {
+                val body = response.body()!!
+
+                if (body.success) {
+                    val syncData = body.data
+                    val allCrmContacts = mutableListOf<CrmContact>()
+
+                    // Helper to map API Record -> DB Entity
+                    fun mapToEntity(records: List<com.mnivesh.callyn.api.CrmRecord>, module: String) {
+                        records.forEach { record ->
+                            allCrmContacts.add(
+                                CrmContact(
+                                    recordId = record.id ?: "N/A",
+                                    name = record.clientName ?: "Unknown",
+                                    number = record.clientMobileNumber ?: "",
+                                    ownerName = record.ownerName ?: "N/A",
+                                    module = module,
+                                    product = record.product,
+                                    lastActivity = record.lastActivity
+                                )
+                            )
+                        }
+                    }
+
+                    // Map all modules
+                    syncData.tickets?.data?.let { mapToEntity(it, "Tickets") }
+                    syncData.investmentLeads?.data?.let { mapToEntity(it, "Investment_leads") }
+                    syncData.insuranceLeads?.data?.let { mapToEntity(it, "Insurance_Leads") }
+
+                    // Database Transaction
+                    contactDao.deleteAllCrmContacts()
+                    contactDao.insertCrmContacts(allCrmContacts)
+
+                    Result.success(true)
+                } else {
+                    Result.failure(Exception(body.message))
+                }
+            } else {
+                Result.failure(Exception("Failed to fetch CRM data: ${response.message()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

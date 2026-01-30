@@ -48,11 +48,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.mnivesh.callyn.CallynApplication
+import com.mnivesh.callyn.components.DeviceContact
+import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 // Ensure these managers exist in your project or comment them out if testing
 import com.mnivesh.callyn.managers.ViewLimitManager
+import com.mnivesh.callyn.sheets.ModernBottomSheet
+import com.mnivesh.callyn.sheets.ModernDeviceBottomSheet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

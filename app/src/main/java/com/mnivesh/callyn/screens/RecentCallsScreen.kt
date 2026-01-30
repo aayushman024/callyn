@@ -54,6 +54,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mnivesh.callyn.CallynApplication
+import com.mnivesh.callyn.components.DeviceContact
+import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.WorkCallLog

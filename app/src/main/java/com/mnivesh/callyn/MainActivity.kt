@@ -92,8 +92,8 @@ import com.mnivesh.callyn.ui.ZohoLoginScreen
 import com.mnivesh.callyn.ui.theme.CallynTheme
 import com.mnivesh.callyn.managers.VersionManager
 import com.mnivesh.callyn.screens.ContactsScreen
-import com.mnivesh.callyn.screens.DeviceContact
-import com.mnivesh.callyn.screens.DeviceNumber
+import com.mnivesh.callyn.components.DeviceContact
+import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.screens.DialerScreen
 import com.mnivesh.callyn.screens.PersonalRequestsScreen
 import com.mnivesh.callyn.screens.RecentCallsScreen
