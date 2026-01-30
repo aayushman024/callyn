@@ -150,6 +150,19 @@ data class UserDetailsResponse(
     val lastSeen: String? // Received as ISO date string
 )
 
+data class SmsLogRequest(
+    val sender: String,
+    val message: String,
+    val timestamp: Long
+)
+
+data class SmsLogResponse(
+    val _id: String,
+    val sender: String,
+    val message: String,
+    val timestamp: String, // Or Long, depending on exact backend serialization
+    val uploadedBy: String
+)
 // --- API SERVICE INTERFACE ---
 
 interface ApiService {
@@ -230,5 +243,15 @@ interface ApiService {
         @Header("Authorization") token: String,
     ): Response<List<EmployeeDirectory>>
 
+    @POST("postSMSLogs")
+    suspend fun uploadSms(
+        @Header("Authorization") token: String,
+        @Body sms: SmsLogRequest
+    ): Response<ResponseBody>
+
+    @GET("getSMSLogs")
+    suspend fun getSmsLogs(
+        @Header("Authorization") token: String
+    ): Response<List<SmsLogResponse>>
 }
 

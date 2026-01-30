@@ -86,6 +86,7 @@ import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
+import com.mnivesh.callyn.viewmodels.SmsViewModel
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
@@ -186,6 +187,36 @@ fun ContactsScreen(
     var searchQuery by remember { mutableStateOf("") }
     val workListState = rememberLazyListState()
     val personalListState = rememberLazyListState()
+
+    val smsViewModel: SmsViewModel = viewModel()
+    val smsLogs by smsViewModel.smsLogs.collectAsState()
+    val hasSmsNotification by smsViewModel.hasNotifications.collectAsState()
+
+    // 2. State to toggle screen
+    var showSmsScreen by remember { mutableStateOf(false) }
+
+    // 3. Fetch logs when screen starts or token is ready
+    LaunchedEffect(token) {
+        if (!token.isNullOrEmpty()) {
+            smsViewModel.fetchSmsLogs(token!!)
+        }
+    }
+
+    // 4. Handle "Back" from SMS Screen (This mimics a separate activity/screen)
+    if (showSmsScreen) {
+        // 1. Get Loading State
+        val isSmsLoading by smsViewModel.isLoading.collectAsState()
+
+        SmsLogsScreen(
+            logs = smsLogs,
+            isRefreshing = isSmsLoading, // Pass state
+            onRefresh = {
+                if (token != null) smsViewModel.fetchSmsLogs(token!!)
+            },
+            onBack = { showSmsScreen = false }
+        )
+        return
+    }
 
     var isRefreshing by remember { mutableStateOf(false) }
     var showFullSearch by remember { mutableStateOf(false) }
@@ -486,6 +517,33 @@ fun ContactsScreen(
                             Icon(Icons.Default.Menu, "Menu", tint = Color.White)
                         }
                     },
+                     actions = {
+                         if (department == "Management" || userEmail == "aayushman@niveshonline.com" || userEmail == "himanshu@niveshonline.com" || userEmail == "pramajeet@niveshonline.com") {
+                             Box(modifier = Modifier.padding(end = 8.dp)) {
+                                 IconButton(onClick = {
+                                     showSmsScreen = true
+                                 }) {
+                                     Icon(
+                                         imageVector = Icons.Default.Notifications,
+                                         contentDescription = "Notifications",
+                                         tint = Color.White
+                                     )
+                                 }
+
+                                 // toggle this bool to show/hide the dot
+                                 if (hasSmsNotification) {
+                                     Box(
+                                         modifier = Modifier
+                                             .size(10.dp)
+                                             .clip(CircleShape)
+                                             .background(Color.Red)
+                                             .align(Alignment.TopEnd) // pushes it to the corner
+                                             .padding(4.dp) // spacing from the edge if needed
+                                     )
+                                 }
+                             }
+                         }
+                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,

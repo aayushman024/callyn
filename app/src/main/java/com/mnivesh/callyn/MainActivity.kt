@@ -118,8 +118,11 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.times
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mnivesh.callyn.components.AppDrawer
 import com.mnivesh.callyn.managers.SimManager
+import com.mnivesh.callyn.viewmodels.SmsViewModel
 
 private const val TAG = "MainActivity"
 
@@ -150,6 +153,8 @@ class MainActivity : ComponentActivity() {
     // Version Check States
     private var updateState by mutableStateOf(UpdateState())
     private var showUpdateDialog by mutableStateOf(false)
+
+    private lateinit var smsViewModel: SmsViewModel
 
     // Permissions
     private val permissionsToRequest = mutableListOf(
@@ -203,9 +208,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    private val smsPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+            val allGranted = results.values.all { it }
+            if (allGranted) {
+                Log.d("SMS_DEBUG", "SMS Permissions GRANTED by user.")
+                checkLoginState() // Re-check to proceed
+            } else {
+                Log.e("SMS_DEBUG", "SMS Permissions DENIED by user.")
+                Toast.makeText(this, "SMS Permission is required for Management features", Toast.LENGTH_LONG).show()
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         authManager = AuthManager(this)
+        smsViewModel = ViewModelProvider(this)[SmsViewModel::class.java]
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
@@ -304,6 +322,16 @@ class MainActivity : ComponentActivity() {
         if (checkAllPermissions()) {
             val workPhone = authManager.getWorkPhone()
             SimManager.detectSimRoles(this, workPhone)
+        }
+
+        lifecycleScope.launch {
+            val token = authManager.getToken()
+            val department = authManager.getDepartment()
+
+            // Assuming only IT Desk/Management should pull these logs
+            if (!token.isNullOrBlank() && (department == "IT Desk" || department == "Management")) {
+                smsViewModel.fetchSmsLogs(token)
+            }
         }
     }
 
@@ -439,6 +467,34 @@ class MainActivity : ComponentActivity() {
             val department = authManager.getDepartment() // [!code ++] Get Department
 
             if (!token.isNullOrBlank() && !userName.isNullOrBlank()) {
+
+                if (department == "IT Desk") {
+                    val hasReceiveSms = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.RECEIVE_SMS
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    val hasReadSms = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.READ_SMS
+                    ) == PackageManager.PERMISSION_GRANTED
+
+                    if (!hasReceiveSms || !hasReadSms) {
+                        Log.d("SMS_DEBUG", "Management user missing SMS permissions. Requesting now...")
+                        if (!isPermissionRequestInProgress) {
+                            isPermissionRequestInProgress = true
+                            smsPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.RECEIVE_SMS,
+                                    Manifest.permission.READ_SMS
+                                )
+                            )
+                        }
+                        return@launch // Stop here, wait for callback
+                    } else {
+                        Log.d("SMS_DEBUG", "SMS Permissions already present.")
+                    }
+                }
 
                 // [!code ++] Skip check for Management/IT Desk
                 if (department != "Management" && department != "IT Desk") {
