@@ -56,14 +56,17 @@ interface ContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCrmContacts(contacts: List<CrmContact>)
 
-    @Query("SELECT * FROM crm_contacts ORDER BY lastActivity DESC")
+    @Query("SELECT * FROM crm_contacts")
     fun getAllCrmContacts(): Flow<List<CrmContact>>
+
+    @Query("SELECT * FROM crm_contacts WHERE number LIKE '%' || :normalizedNumber LIMIT 1")
+    suspend fun getCrmContactByNumber(normalizedNumber: String): CrmContact?
 
     @Query("DELETE FROM crm_contacts")
     suspend fun deleteAllCrmContacts()
 
     // Optional: Get by module if you want to filter tabs from DB
-    @Query("SELECT * FROM crm_contacts WHERE module = :moduleName ORDER BY lastActivity DESC")
+    @Query("SELECT * FROM crm_contacts WHERE module = :moduleName")
     fun getCrmContactsByModule(moduleName: String): Flow<List<CrmContact>>
 
 }

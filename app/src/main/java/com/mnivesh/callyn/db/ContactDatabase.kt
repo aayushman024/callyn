@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import net.sqlcipher.database.SupportFactory
 
-@Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class], version = 12, exportSchema = false)
+@Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class], version = 13, exportSchema = false)
 abstract class ContactDatabase : RoomDatabase() {
 
     abstract fun contactDao(): ContactDao

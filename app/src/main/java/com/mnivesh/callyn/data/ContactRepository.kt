@@ -12,7 +12,12 @@ import com.mnivesh.callyn.db.ContactDao
 import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.db.WorkCallLogDao
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.net.UnknownHostException
 import java.time.Instant
 
@@ -28,6 +33,9 @@ class ContactRepository(
     val crmContacts: Flow<List<CrmContact>> = contactDao.getAllCrmContacts()
 
     private var cachedEmployees: List<EmployeeDirectory>? = null
+
+    private val _isCrmLoading = MutableStateFlow(false)
+    val isCrmLoading = _isCrmLoading.asStateFlow()
 
     // [!code change] Updated getEmployees function
     suspend fun getEmployees(token: String, forceRefresh: Boolean = false): Result<List<EmployeeDirectory>> {
@@ -110,6 +118,11 @@ class ContactRepository(
 
     suspend fun syncInitialData(token: String, managerName: String) {
         try {
+            // [!code ++] Fire-and-Forget CRM Data Sync
+            // This runs on a separate thread and does NOT block the lines below
+            CoroutineScope(Dispatchers.IO).launch {
+                refreshCrmData(token)
+            }
             // 1. Refresh Contacts (Pre-load)
             refreshContacts(token, managerName)
 
@@ -157,6 +170,10 @@ class ContactRepository(
 
     suspend fun findWorkContactByNumber(normalizedNumber: String): AppContact? {
         return contactDao.getContactByNumber(normalizedNumber)
+    }
+
+    suspend fun findCrmContactByNumber(normalizedNumber: String): CrmContact? {
+        return contactDao.getCrmContactByNumber(normalizedNumber)
     }
 
     suspend fun insertWorkLog(log: WorkCallLog) {
@@ -235,6 +252,7 @@ class ContactRepository(
      * Fetches CRM data from API, wipes old CRM table, and inserts new data.
      */
     suspend fun refreshCrmData(token: String): Result<Boolean> {
+        _isCrmLoading.value = true
         return try {
             val response = apiService.getCrmData("Bearer $token")
 
@@ -256,7 +274,6 @@ class ContactRepository(
                                     ownerName = record.ownerName ?: "N/A",
                                     module = module,
                                     product = record.product,
-                                    lastActivity = record.lastActivity
                                 )
                             )
                         }
@@ -280,6 +297,8 @@ class ContactRepository(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        } finally {
+            _isCrmLoading.value = false
         }
     }
 }

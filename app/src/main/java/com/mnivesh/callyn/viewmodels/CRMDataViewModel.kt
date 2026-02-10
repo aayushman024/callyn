@@ -10,6 +10,7 @@ import com.mnivesh.callyn.db.CrmContact
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 // UI State now uses the DB entity 'CrmContact'
@@ -32,6 +33,11 @@ class CrmViewModel(
     init {
         // Automatically observe the DB when ViewModel is created
         observeDatabase()
+        viewModelScope.launch {
+            repository.isCrmLoading.collect { isLoading ->
+                _uiState.update { it.copy(isLoading = isLoading) }
+            }
+        }
     }
 
     private fun observeDatabase() {

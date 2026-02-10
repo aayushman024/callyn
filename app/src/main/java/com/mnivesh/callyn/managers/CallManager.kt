@@ -276,6 +276,13 @@ object CallManager {
                 resolvedName = workContact.name
             }
 
+            if (resolvedName == null) {
+                val crmContact = repository?.findCrmContactByNumber(normalized)
+                if (crmContact != null) {
+                    resolvedName = crmContact.name
+                }
+            }
+
             // 2. Device Contact (Fallback)
             if (resolvedName == null) {
                 resolvedName = findPersonalContactName(normalized)
@@ -324,6 +331,16 @@ object CallManager {
                     rshipManager = workContact.rshipManager
                     aum = workContact.aum
                     familyAum = workContact.familyAum
+                }
+            } else {
+                // [ADDED] 1.5 CRM Contact (Second priority)
+                val crmContact = repository?.findCrmContactByNumber(normalized)
+                if (crmContact != null) {
+                    resolvedName = crmContact.name
+                    type = "work" // Treat as work for UI/Logging consistency
+                    familyHead = crmContact.module // Map Module to FamilyHead
+                    rshipManager = crmContact.ownerName // Use Owner as R.M context
+                    aum = crmContact.product // Use Product as AUM context
                 }
             }
 
@@ -429,10 +446,18 @@ object CallManager {
                     workName = workContact.name
                     familyHead = workContact.familyHead
                 } else {
-                    // Only check device contacts if NOT in work DB
-                    val deviceName = findPersonalContactName(normalized)
-                    if (deviceName != null) {
-                        isWork = false // It's purely personal
+                    // [ADDED] Check CRM DB (treat as work)
+                    val crmContact = repository?.findCrmContactByNumber(normalized)
+                    if (crmContact != null) {
+                        isWork = true
+                        workName = crmContact.name
+                        familyHead = crmContact.product ?: "N/A" // Map OwnerName to FamilyHead
+                    } else {
+                        // Only check device contacts if NOT in work DB AND NOT in CRM DB
+                        val deviceName = findPersonalContactName(normalized)
+                        if (deviceName != null) {
+                            isWork = false // It's purely personal
+                        }
                     }
                 }
             }

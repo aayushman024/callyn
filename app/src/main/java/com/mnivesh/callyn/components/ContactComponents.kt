@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -83,12 +84,27 @@ fun getHighlightedText(text: String, query: String): AnnotatedString {
 // --- Shared UI Components ---
 
 @Composable
-fun CustomTabContent(text: String, icon: ImageVector, count: Int, isSelected: Boolean) {
+fun CustomTabContent(text: String, icon: Any, count: Int?, isSelected: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        Icon(icon, null, modifier = Modifier.size(18.dp))
+        if (icon is androidx.compose.ui.graphics.vector.ImageVector) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isSelected) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(18.dp)
+            )
+        } else if (icon is Painter) {
+        Icon(
+            painter = icon,
+            contentDescription = null,
+            tint = Color.Unspecified,
+            modifier = Modifier.size(28.dp)
+        )
+    }
         Spacer(modifier = Modifier.width(8.dp))
         Text(text, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, fontSize = 15.sp)
         Spacer(modifier = Modifier.width(8.dp))
+        if(count != null){
         Box(
             modifier = Modifier
                 .clip(CircleShape)
@@ -97,6 +113,7 @@ fun CustomTabContent(text: String, icon: ImageVector, count: Int, isSelected: Bo
         ) {
             Text(count.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f))
         }
+    }
     }
 }
 
