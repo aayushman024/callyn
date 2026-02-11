@@ -1,5 +1,8 @@
 package com.mnivesh.callyn.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import android.util.Log
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
@@ -140,23 +143,18 @@ fun ZohoLoginScreen() {
                 LoginButton(
                     isLoading = isLoading,
                     onClick = {
-                        if (!isLoading) {
-                            isLoading = true
-                            coroutineScope.launch {
-                                try {
-                                    val response = RetrofitInstance.api.getZohoAuthUrl()
-                                    if (response.isSuccessful && response.body() != null) {
-                                        val intent = CustomTabsIntent.Builder().build()
-                                        intent.launchUrl(context, response.body()!!.authUrl.toUri())
-                                    } else {
-                                        Log.e("ZohoLogin", "Auth failed: ${response.code()}")
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("ZohoLogin", "Network err: ${e.message}")
-                                } finally {
-                                    isLoading = false
-                                }
-                            }
+                        // Request login data from the mNivesh Store app
+                        // passing our own deep link as the callback
+                        val ssoUrl = "mniveshstore://sso/request?callback=callyn://auth/callback"
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ssoUrl)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+
+                        try {
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            // If the Intent fails, mNivesh Store is probably not installed
+                            Toast.makeText(context, "Please install mNivesh Store first", Toast.LENGTH_LONG).show()
                         }
                     }
                 )
@@ -332,9 +330,9 @@ fun LoginButton(isLoading: Boolean, onClick: () -> Unit) {
         if (isLoading) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF0F172A), strokeWidth = 2.5.dp)
         } else {
-            Image(painter = painterResource(id = R.drawable.zoho_logo), contentDescription = null, modifier = Modifier.size(32.dp))
+            Image(painter = painterResource(id = R.drawable.mnivesh_store), contentDescription = null, modifier = Modifier.size(32.dp))
             Spacer(modifier = Modifier.width(12.dp))
-            Text(text = "Continue with Zoho", fontSize = 17.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+            Text(text = "Login using mNivesh Store", fontSize = 17.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
         }
     }
 }

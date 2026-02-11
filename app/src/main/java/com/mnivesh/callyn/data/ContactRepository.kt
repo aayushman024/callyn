@@ -152,6 +152,7 @@ class ContactRepository(
                             number = contact.number, // Mapped from DB
                             duration = log.duration,
                             notes = log.notes,
+                            simSlot = log.simslot,
                             timestamp = timestampLong,
                             type = "work",
                             direction = log.type, // "incoming", "outgoing", "missed"

@@ -156,8 +156,7 @@ fun UpdateDialog(
                 Text(
                     text =
                         if (downloadUrl.isBlank()) "Unavailable"
-                        else if (isHardUpdate) "Contact Admin"
-                        else "Contact Admin"
+                        else "Download"
                 )
             }
         },

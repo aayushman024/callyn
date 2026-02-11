@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.BlockedNumberContract
 import android.provider.CallLog
+import android.provider.ContactsContract
 import android.telephony.SubscriptionManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -48,7 +50,7 @@ import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.AppContact
-import com.mnivesh.callyn.db.CrmContact // [!code ++]
+import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.screens.sheets.RecentCrmBottomSheet
@@ -58,10 +60,14 @@ import com.mnivesh.callyn.screens.sheets.RecentWorkBottomSheet
 import com.mnivesh.callyn.sheets.CrmBottomSheet
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.viewmodels.CrmUiState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -92,12 +98,22 @@ class RecentCallsViewModel(
     private val repository: ContactRepository
 ) : AndroidViewModel(application) {
 
+    // [!code ++] Auth details for filtering logic
+    val authManager = AuthManager(application)
+    val department = authManager.getDepartment()
+    val userName = authManager.getUserName() ?: ""
+
     // Main List State
     private val _systemLogs = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
     val systemLogs = _systemLogs.asStateFlow()
 
     private val _workLogs = MutableStateFlow<List<WorkCallLog>>(emptyList())
     val workLogs = _workLogs.asStateFlow()
+
+    // [!code ++] Merged State: Combines System + Work logs automatically
+    val mergedCalls = combine(_systemLogs, _workLogs) { system, work ->
+        mergeLogs(system, work)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
@@ -108,6 +124,19 @@ class RecentCallsViewModel(
 
     private val _isHistoryLoading = MutableStateFlow(false)
     val isHistoryLoading = _isHistoryLoading.asStateFlow()
+
+    // [!code ++] Contacts & CRM Data (Held here for SearchOverlay)
+    private val _deviceContacts = MutableStateFlow<List<DeviceContact>>(emptyList())
+    val deviceContacts = _deviceContacts.asStateFlow()
+
+    val workContacts = repository.allContacts.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    private val _crmUiState = MutableStateFlow(CrmUiState())
+    val crmUiState = _crmUiState.asStateFlow()
 
     // Pagination Flags
     private var endReached = false
@@ -127,6 +156,20 @@ class RecentCallsViewModel(
             repository.allWorkLogs.collect { _workLogs.value = it }
         }
 
+        // [!code ++] Observe CRM Contacts
+        viewModelScope.launch {
+            repository.crmContacts.collect { allContacts ->
+                _crmUiState.value = _crmUiState.value.copy(
+                    tickets = allContacts.filter { it.module == "Tickets" },
+                    investmentLeads = allContacts.filter { it.module == "Investment_leads" },
+                    insuranceLeads = allContacts.filter { it.module == "Insurance_Leads" }
+                )
+            }
+        }
+
+        // [!code ++] Fetch Device Contacts
+        viewModelScope.launch { fetchDeviceContactsInternal() }
+
         // Register Observer for System Call Log
         try {
             getApplication<Application>().contentResolver.registerContentObserver(
@@ -140,18 +183,114 @@ class RecentCallsViewModel(
         loadNextPage()
     }
 
-    /**
-     * Silent Refresh: Called when DB changes (e.g. marked as read).
-     */
+    // [!code ++] Merging Logic moved from UI to ViewModel
+    private fun mergeLogs(sysLogs: List<RecentCallUiItem>, dbLogs: List<WorkCallLog>): List<RecentCallUiItem> {
+        // 1. Convert Work Logs to UI items
+        val workUiLogs = dbLogs.map {
+            val isIncomingCall = it.direction.equals("incoming", ignoreCase = true) ||
+                    it.direction.equals("missed", ignoreCase = true)
+            RecentCallUiItem(
+                id = "w_${it.id}",
+                name = it.name,
+                number = it.number,
+                type = "Work",
+                date = it.timestamp,
+                duration = formatDuration(it.duration),
+                isIncoming = isIncomingCall,
+                isMissed = it.direction.equals("missed", ignoreCase = true),
+                simSlot = it.simSlot
+            )
+        }
+
+        // 2. Duplicate Check
+        fun areCallsDuplicate(item1: RecentCallUiItem, item2: RecentCallUiItem): Boolean {
+            // A. Normalize Numbers (Last 10 digits to ignore +91, 0, etc.)
+            val n1 = item1.number.filter { it.isDigit() }.takeLast(10)
+            val n2 = item2.number.filter { it.isDigit() }.takeLast(10)
+
+            // Basic mismatch checks
+            if (n1.isEmpty() || n2.isEmpty()) return false
+            if (n1 != n2) return false
+            if (item1.isIncoming != item2.isIncoming) return false
+            if (item1.isMissed != item2.isMissed) return false
+
+            // B. REMOVED strict duration check (item1.duration != item2.duration)
+            // Reasons: "1m 0s" vs "60s", or 1-second variance breaks the old logic.
+
+            // C. Time Check
+            val timeDiff = abs(item1.date - item2.date)
+            // Increased buffer to 10 seconds (10000ms) to handle slight DB write delays
+            return timeDiff < 10000
+        }
+
+        val merged = if (department == "Management") {
+            // Priority: System Logs.
+            // We check if a System Log has a matching Work Log. If yes, we can optionally mark it or just keep the system one.
+            // Here, we filter out Work logs that already exist in System logs to avoid duplicates.
+            val uniqueWorkLogs = workUiLogs.filter { workItem ->
+                sysLogs.none { sysItem -> areCallsDuplicate(sysItem, workItem) }
+            }
+            sysLogs + uniqueWorkLogs
+        } else {
+            // Priority: Work Logs.
+            // We filter out System logs that already exist in Work logs.
+            val uniqueSystemLogs = sysLogs.filter { sysItem ->
+                workUiLogs.none { workItem -> areCallsDuplicate(sysItem, workItem) }
+            }
+            workUiLogs + uniqueSystemLogs
+        }
+
+        return merged.sortedByDescending { it.date }
+    }
+
+    // [!code ++] Fetch Device Contacts Internal
+    private suspend fun fetchDeviceContactsInternal() {
+        withContext(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return@withContext
+
+                val contactsMap = mutableMapOf<String, DeviceContact>()
+                val cursor = context.contentResolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                    null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+                )
+
+                cursor?.use {
+                    val idIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+                    val nameIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                    val numIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+
+                    while (it.moveToNext()) {
+                        val id = it.getString(idIdx)
+                        val name = it.getString(nameIdx) ?: "Unknown"
+                        val rawNum = it.getString(numIdx)?.replace("\\s".toRegex(), "") ?: ""
+                        if (rawNum.isNotEmpty()) {
+                            val numObj = DeviceNumber(rawNum, isDefault = true)
+                            if (contactsMap.containsKey(id)) {
+                                val existing = contactsMap[id]!!
+                                if (existing.numbers.none { n -> n.number == rawNum }) {
+                                    contactsMap[id] = existing.copy(numbers = existing.numbers + numObj)
+                                }
+                            } else {
+                                contactsMap[id] = DeviceContact(id, name, listOf(numObj))
+                            }
+                        }
+                    }
+                }
+                _deviceContacts.value = contactsMap.values.sortedBy { it.name }
+            } catch (e: Exception) { e.printStackTrace() }
+        }
+    }
+
+    // --- Existing Functions (SilentRefresh, RefreshAll, LoadNext, etc.) ---
     fun silentRefresh() {
         if (_isLoading.value) return
-
         viewModelScope.launch(Dispatchers.IO) {
             val currentSize = _systemLogs.value.size
             val limitToFetch = if (currentSize < 50) 50 else currentSize
-
             val updatedLogs = fetchSystemCallLogs(getApplication(), limit = limitToFetch)
-
             withContext(Dispatchers.Main) {
                 if (_systemLogs.value != updatedLogs) {
                     _systemLogs.value = updatedLogs
@@ -160,9 +299,6 @@ class RecentCallsViewModel(
         }
     }
 
-    /**
-     * Pull-to-Refresh: Explicitly resets the list to the top 50.
-     */
     fun refreshAllSuspend() {
         endReached = false
         viewModelScope.launch(Dispatchers.IO) {
@@ -175,13 +311,11 @@ class RecentCallsViewModel(
 
     fun loadNextPage() {
         if (_isLoading.value || endReached) return
-
         _isLoading.value = true
         loadJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             val lastLogDate = _systemLogs.value.lastOrNull()?.date
             val newLogs = fetchSystemCallLogs(getApplication(), limit = 50, olderThan = lastLogDate)
-
             withContext(Dispatchers.Main) {
                 if (newLogs.isEmpty()) {
                     endReached = true
@@ -198,21 +332,12 @@ class RecentCallsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isHistoryLoading.value = true
             _selectedContactHistory.value = emptyList()
-
-            // 1. Fetch System Logs
             val sysLogs = fetchSystemCallLogs(getApplication(), numberFilter = number)
-
-            // 2. Filter Work Logs (Fixed Logic)
             val normalizedQuery = number.filter { it.isDigit() }.takeLast(10)
-
             val localWorkLogs = _workLogs.value.filter {
                 it.number.filter { c -> c.isDigit() }.takeLast(10) == normalizedQuery
             }.map { workLog ->
-                val isIncoming =
-                    workLog.direction.equals("incoming", true) || workLog.direction.equals(
-                        "missed",
-                        true
-                    )
+                val isIncoming = workLog.direction.equals("incoming", true) || workLog.direction.equals("missed", true)
                 RecentCallUiItem(
                     id = "w_hist_${workLog.id}",
                     name = workLog.name,
@@ -225,10 +350,7 @@ class RecentCallsViewModel(
                     simSlot = workLog.simSlot
                 )
             }
-
-            // 3. Merge and Sort
             val combined = (sysLogs + localWorkLogs).sortedByDescending { it.date }
-
             withContext(Dispatchers.Main) {
                 _selectedContactHistory.value = combined
                 _isHistoryLoading.value = false
@@ -236,57 +358,23 @@ class RecentCallsViewModel(
         }
     }
 
-    // Delete Log
     fun deleteLog(providerId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Fix: Use selection clause instead of appending ID to URI
                 val selection = "${CallLog.Calls._ID} = ?"
                 val selectionArgs = arrayOf(providerId.toString())
-
-                getApplication<Application>().contentResolver.delete(
-                    CallLog.Calls.CONTENT_URI,
-                    selection,
-                    selectionArgs
-                )
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    // Requires WRITE_CALL_LOG permission or Default Dialer status
-                    Toast.makeText(
-                        getApplication(),
-                        "Could not delete. Check permissions.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
+                getApplication<Application>().contentResolver.delete(CallLog.Calls.CONTENT_URI, selection, selectionArgs)
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
-    // Block Number
     fun blockNumber(number: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val values = ContentValues().apply {
-                    put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, number)
-                }
-                getApplication<Application>().contentResolver.insert(
-                    BlockedNumberContract.BlockedNumbers.CONTENT_URI,
-                    values
-                )
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(getApplication(), "Number blocked", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        getApplication(),
-                        "Failed to block. Ensure app is Default Dialer.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
+                val values = ContentValues().apply { put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, number) }
+                getApplication<Application>().contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI, values)
+                withContext(Dispatchers.Main) { Toast.makeText(getApplication(), "Number blocked", Toast.LENGTH_SHORT).show() }
+            } catch (e: Exception) { e.printStackTrace() }
         }
     }
 
@@ -296,8 +384,7 @@ class RecentCallsViewModel(
     }
 }
 
-class RecentCallsViewModelFactory(val app: Application, val repo: ContactRepository) :
-    ViewModelProvider.Factory {
+class RecentCallsViewModelFactory(val app: Application, val repo: ContactRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return RecentCallsViewModel(app, repo) as T
     }
@@ -312,7 +399,6 @@ fun RecentCallsScreen(
 ) {
     val context = LocalContext.current
     val application = context.applicationContext as CallynApplication
-
     val activity = LocalContext.current as ComponentActivity
     val viewModel: RecentCallsViewModel = viewModel(
         viewModelStoreOwner = activity,
@@ -323,167 +409,60 @@ fun RecentCallsScreen(
     LaunchedEffect(Unit) { onScreenEntry() }
 
     // --- State ---
-    val workLogs by viewModel.workLogs.collectAsState()
-    val systemLogs by viewModel.systemLogs.collectAsState()
+    // [!code ++] Use mergedCalls directly
+    val allCalls by viewModel.mergedCalls.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    val selectedContactHistory by viewModel.selectedContactHistory.collectAsState()
-    val isHistoryLoading by viewModel.isHistoryLoading.collectAsState()
+    // [!code ++] Overlay State
+    var showSearchOverlay by remember { mutableStateOf(false) }
 
-    var allCalls by remember { mutableStateOf<List<RecentCallUiItem>>(emptyList()) }
-    var searchQuery by remember { mutableStateOf("") }
     var activeFilter by remember { mutableStateOf(CallFilter.ALL) }
     var isRefreshing by remember { mutableStateOf(false) }
 
-    val authManager = remember { AuthManager(context) }
-    val department = remember { authManager.getDepartment() }
-
-    // Sim Count State
-    var isDualSim by remember { mutableStateOf(false) }
-
-    // Check SIM Status
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            try {
-                val subManager =
-                    context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-                val activeSims = subManager.activeSubscriptionInfoCount
-                isDualSim = activeSims > 1
-            } catch (e: Exception) {
-                isDualSim = false
-            }
-        }
-    }
-
-    // Merging Logic (Background)
-    LaunchedEffect(workLogs, systemLogs, department) {
-        withContext(Dispatchers.Default) {
-            // 1. Convert Work Logs to UI items first
-            val workUiLogs = workLogs.map {
-                val isIncomingCall = it.direction.equals("incoming", ignoreCase = true) ||
-                        it.direction.equals("missed", ignoreCase = true)
-
-                RecentCallUiItem(
-                    id = "w_${it.id}",
-                    name = it.name,
-                    number = it.number,
-                    type = "Work",
-                    date = it.timestamp,
-                    duration = formatDuration(it.duration),
-                    isIncoming = isIncomingCall,
-                    isMissed = it.direction.equals("missed", ignoreCase = true),
-                    simSlot = it.simSlot
-                )
-            }
-
-            // 2. Helper to check if two logs represent the exact same call
-            fun areCallsDuplicate(item1: RecentCallUiItem, item2: RecentCallUiItem): Boolean {
-                // Normalize number (last 10 digits)
-                val n1 = item1.number.filter { it.isDigit() }.takeLast(10)
-                val n2 = item2.number.filter { it.isDigit() }.takeLast(10)
-                if (n1 != n2) return false
-
-                // Check Direction/Type
-                if (item1.isIncoming != item2.isIncoming) return false
-                if (item1.isMissed != item2.isMissed) return false
-
-                // Check Duration (Exact String match)
-                if (item1.duration != item2.duration) return false
-
-                // Check Time (Allow 5 second buffer for system vs db timestamp diffs)
-                val timeDiff = abs(item1.date - item2.date)
-                return timeDiff < 5000 // 5 seconds
-            }
-
-            val merged: List<RecentCallUiItem> = if (department == "Management") {
-                // PREFER SYSTEM LOGS
-                // Take all System logs. Add Work logs ONLY if they don't match a System log.
-                val uniqueWorkLogs = workUiLogs.filter { workItem ->
-                    systemLogs.none { sysItem -> areCallsDuplicate(sysItem, workItem) }
-                }
-                systemLogs + uniqueWorkLogs
-            } else {
-                // PREFER WORK LOGS
-                // Take all Work logs. Add System logs ONLY if they don't match a Work log.
-                val uniqueSystemLogs = systemLogs.filter { sysItem ->
-                    workUiLogs.none { workItem -> areCallsDuplicate(sysItem, workItem) }
-                }
-                workUiLogs + uniqueSystemLogs
-            }
-
-            val finalSorted = merged.sortedByDescending { it.date }
-            withContext(Dispatchers.Main) { allCalls = finalSorted }
-        }
-    }
+    // [!code ++] Fixed: Collecting missing states here
+    val deviceContacts by viewModel.deviceContacts.collectAsState()
+    val workContacts by viewModel.workContacts.collectAsState()
+    val crmUiState by viewModel.crmUiState.collectAsState()
 
     // Bottom Sheet UI
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedWorkContact by remember { mutableStateOf<AppContact?>(null) }
     var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
     var selectedEmployeeContact by remember { mutableStateOf<AppContact?>(null) }
-    var selectedCrmContact by remember { mutableStateOf<CrmContact?>(null) } // [!code ++]
+    var selectedCrmContact by remember { mutableStateOf<CrmContact?>(null) }
 
-    // Filtering
-    val filteredCalls = remember(allCalls, searchQuery, activeFilter, department) {
-        allCalls.filter { call ->
-            val isWorkCall = call.type == "Work"
-            val matchesSearch = if (searchQuery.isBlank()) true else {
-                val nameMatch = call.name.contains(searchQuery, ignoreCase = true)
-                val numberMatch =
-                    if (isWorkCall && department != "Management") false else call.number.contains(
-                        searchQuery
-                    )
-                nameMatch || numberMatch
-            }
-            val matchesFilter = when (activeFilter) {
-                CallFilter.ALL -> true
-                CallFilter.PERSONAL -> call.type == "Personal"
-                CallFilter.WORK -> call.type == "Work"
-                CallFilter.MISSED -> call.isMissed
-            }
-            matchesSearch && matchesFilter
+    val selectedContactHistory by viewModel.selectedContactHistory.collectAsState()
+    val isHistoryLoading by viewModel.isHistoryLoading.collectAsState()
+
+    // [!code ++] Sim Count State
+    var isDualSim by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                isDualSim = subManager.activeSubscriptionInfoCount > 1
+            } catch (e: Exception) { isDualSim = false }
         }
     }
 
-    fun onItemClicked(item: RecentCallUiItem) {
+    // [!code ++] Click Handler reused for List and Search
+    fun handleItemClick(item: RecentCallUiItem) {
         scope.launch {
             viewModel.fetchHistoryForNumber(item.number)
             val numberStr = item.number.takeLast(10)
-
-            // 1. Try Work/Employee Contact
-            val workContact = withContext(Dispatchers.IO) {
-                application.repository.findWorkContactByNumber(numberStr)
-            }
+            val workContact = withContext(Dispatchers.IO) { application.repository.findWorkContactByNumber(numberStr) }
 
             if (workContact != null) {
-                // Check if it's an Employee or standard Work Contact
-                if (workContact.rshipManager.equals("Employee", ignoreCase = true)) {
-                    selectedEmployeeContact = workContact
-                } else {
-                    selectedWorkContact = workContact
-                }
+                if (workContact.rshipManager.equals("Employee", ignoreCase = true)) selectedEmployeeContact = workContact
+                else selectedWorkContact = workContact
                 sheetState.show()
             } else {
-                // 2. [!code ++] Try CRM Contact
-                // Ensure ContactRepository has findCrmContactByNumber(String)
-                val crmContact = withContext(Dispatchers.IO) {
-                    application.repository.findCrmContactByNumber(numberStr)
-                }
-
+                val crmContact = withContext(Dispatchers.IO) { application.repository.findCrmContactByNumber(numberStr) }
                 if (crmContact != null) {
                     selectedCrmContact = crmContact
                     sheetState.show()
                 } else {
-                    // 3. Fallback to Device Contact
-                    selectedDeviceContact = DeviceContact(
-                        id = item.id,
-                        name = item.name,
-                        numbers = listOf(DeviceNumber(item.number, isDefault = true))
-                    )
+                    selectedDeviceContact = DeviceContact(id = item.id, name = item.name, numbers = listOf(DeviceNumber(item.number, isDefault = true)))
                     sheetState.show()
                 }
             }
@@ -520,9 +499,7 @@ fun RecentCallsScreen(
                     isRefreshing = false
                 }
             },
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
+            modifier = Modifier.fillMaxSize().statusBarsPadding()
         ) {
             LazyColumn(
                 state = listState,
@@ -535,126 +512,73 @@ fun RecentCallsScreen(
                         fontSize = 24.ssp(),
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        modifier = Modifier.padding(
-                            top = 24.sdp(),
-                            bottom = 16.sdp(),
-                            start = 16.sdp(),
-                            end = 16.sdp()
-                        )
+                        modifier = Modifier.padding(top = 24.sdp(), bottom = 16.sdp(), start = 16.sdp(), end = 16.sdp())
                     )
                 }
 
+                // [!code ++] Fake Search Bar (Triggers Overlay)
                 item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.sdp())
-                            .padding(bottom = 4.sdp()),
-                        placeholder = {
-                            Text(
-                                "Search name or number...",
-                                color = Color.Gray,
-                                fontSize = 14.ssp()
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = null,
-                                tint = Color.Gray
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    searchQuery = ""
-                                }) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Clear",
-                                        tint = Color.Gray
-                                    )
-                                }
-                            }
-                        },
-                        shape = RoundedCornerShape(12.sdp()),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF3B82F6),
-                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            cursorColor = Color(0xFF3B82F6),
-                            focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                            unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
-                        ),
-                        singleLine = true
-                    )
+                            .padding(bottom = 4.sdp())
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(12.sdp()))
+                            .clickable { showSearchOverlay = true },
+                        color = Color.White.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(12.sdp())
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text("Search name or number...", color = Color.Gray, fontSize = 14.ssp())
+                        }
+                    }
                 }
 
                 stickyHeader {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF0F172A))
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF0F172A))) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 16.sdp(), horizontal = 16.sdp()),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.sdp(), horizontal = 16.sdp()),
                             horizontalArrangement = Arrangement.spacedBy(8.sdp())
                         ) {
-                            FilterChipItem("All", activeFilter == CallFilter.ALL) {
-                                activeFilter = CallFilter.ALL
-                            }
-                            FilterChipItem(
-                                label = "Missed",
-                                isSelected = activeFilter == CallFilter.MISSED,
-                                icon = Icons.Default.CallMissed,
-                                onClick = { activeFilter = CallFilter.MISSED })
-                            FilterChipItem(
-                                "Personal",
-                                activeFilter == CallFilter.PERSONAL
-                            ) { activeFilter = CallFilter.PERSONAL }
-                            FilterChipItem("Work", activeFilter == CallFilter.WORK) {
-                                activeFilter = CallFilter.WORK
-                            }
+                            FilterChipItem("All", activeFilter == CallFilter.ALL) { activeFilter = CallFilter.ALL }
+                            FilterChipItem(label = "Missed", isSelected = activeFilter == CallFilter.MISSED, icon = Icons.Default.CallMissed, onClick = { activeFilter = CallFilter.MISSED })
+                            FilterChipItem("Personal", activeFilter == CallFilter.PERSONAL) { activeFilter = CallFilter.PERSONAL }
+                            FilterChipItem("Work", activeFilter == CallFilter.WORK) { activeFilter = CallFilter.WORK }
                         }
                     }
                 }
 
-                if (filteredCalls.isEmpty() && !isLoading) {
+                // [!code ++] Simple Filtering (Merging is done in VM)
+                val displayLogs = allCalls.filter { call ->
+                    when (activeFilter) {
+                        CallFilter.ALL -> true
+                        CallFilter.PERSONAL -> call.type == "Personal"
+                        CallFilter.WORK -> call.type == "Work"
+                        CallFilter.MISSED -> call.isMissed
+                    }
+                }
+
+                if (displayLogs.isEmpty() && !isLoading) {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(400.sdp()),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth().height(400.sdp()), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.History,
-                                    contentDescription = null,
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(48.sdp())
-                                )
+                                Icon(Icons.Default.History, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.sdp()))
                                 Spacer(modifier = Modifier.height(16.sdp()))
-                                Text("No matching calls", color = Color.Gray, fontSize = 16.ssp())
+                                Text("No calls found", color = Color.Gray, fontSize = 16.ssp())
                             }
                         }
                     }
                 }
 
-                items(filteredCalls, key = { it.id }) { log ->
+                items(displayLogs, key = { it.id }) { log ->
                     Box(modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp())) {
                         RecentCallItem(
                             log = log,
-                            onBodyClick = { onItemClicked(log) },
-                            onCallClick = {
-                                val isWork = log.type.equals("Work", ignoreCase = true)
-                                onCallClick(log.number, isWork, null)
-                            },
+                            onBodyClick = { handleItemClick(log) },
+                            onCallClick = { onCallClick(log.number, log.type.equals("Work", ignoreCase = true), null) },
                             onDelete = { viewModel.deleteLog(log.providerId) },
                             onBlock = { viewModel.blockNumber(log.number) }
                         )
@@ -663,33 +587,63 @@ fun RecentCallsScreen(
 
                 if (isLoading) {
                     item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.sdp()),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.sdp()),
-                                color = Color.White.copy(alpha = 0.5f)
-                            )
+                        Box(modifier = Modifier.fillMaxWidth().padding(16.sdp()), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = Color.White.copy(alpha = 0.5f))
                         }
                     }
                 }
             }
         }
 
+        // [!code ++] Search Overlay
+        SearchOverlay(
+            visible = showSearchOverlay,
+            onDismiss = { showSearchOverlay = false },
+            // [!code ++] Pass lists explicitly
+            deviceContacts = deviceContacts,
+            workContacts = workContacts,
+            myContacts = workContacts,
+            crmUiState = crmUiState,
+            callLogs = allCalls, // [!code ++] Pass merged calls here
+
+            department = viewModel.department,
+            userName = viewModel.userName,
+
+            onSelectDeviceContact = { contact ->
+                selectedDeviceContact = contact
+                scope.launch { sheetState.show() }
+            },
+            onSelectWorkContact = { contact ->
+                selectedWorkContact = contact
+                scope.launch { sheetState.show() }
+            },
+            onSelectEmployeeContact = { contact ->
+                selectedEmployeeContact = contact
+                scope.launch { sheetState.show() }
+            },
+            onSelectCrmContact = { contact ->
+                selectedCrmContact = contact
+                scope.launch { sheetState.show() }
+            },
+            onCallLogClick = { log ->
+                handleItemClick(log)
+            },
+            onMakeCall = { number, isWork, simSlot ->
+                onCallClick(number, isWork, simSlot)
+                showSearchOverlay = false
+            }
+        )
+
         // --- Bottom Sheets ---
         if (selectedEmployeeContact != null) {
             RecentEmployeeBottomSheet(
                 contact = selectedEmployeeContact!!,
-                history = selectedContactHistory, // Pass history!
-                isLoading = isHistoryLoading,      // Pass loading state!
+                history = selectedContactHistory,
+                isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 isDualSim = isDualSim,
                 onDismiss = {
-                    scope.launch { sheetState.hide() }
-                        .invokeOnCompletion { selectedEmployeeContact = null }
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { selectedEmployeeContact = null }
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -708,8 +662,7 @@ fun RecentCallsScreen(
                 sheetState = sheetState,
                 isDualSim = isDualSim,
                 onDismiss = {
-                    scope.launch { sheetState.hide() }
-                        .invokeOnCompletion { selectedWorkContact = null }
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null }
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -724,13 +677,12 @@ fun RecentCallsScreen(
         if (selectedCrmContact != null) {
             RecentCrmBottomSheet(
                 contact = selectedCrmContact!!,
-                history = selectedContactHistory, // Pass history
-                isLoading = isHistoryLoading,      // Pass loading state
+                history = selectedContactHistory,
+                isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 isDualSim = isDualSim,
                 onDismiss = {
-                    scope.launch { sheetState.hide() }
-                        .invokeOnCompletion { selectedCrmContact = null }
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { selectedCrmContact = null }
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -749,16 +701,11 @@ fun RecentCallsScreen(
                 sheetState = sheetState,
                 isDualSim = isDualSim,
                 onDismiss = {
-                    scope.launch { sheetState.hide() }
-                        .invokeOnCompletion { selectedDeviceContact = null }
+                    scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null }
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onCallClick(
-                            selectedDeviceContact!!.numbers.first().number,
-                            false,
-                            slotIndex
-                        )
+                        onCallClick(selectedDeviceContact!!.numbers.first().number, false, slotIndex)
                         selectedDeviceContact = null
                     }
                 }
@@ -767,8 +714,7 @@ fun RecentCallsScreen(
     }
 }
 
-// ... (Rest of Helper functions and UI components)
-
+// ... (Rest of Helper functions: formatTime, formatDuration, fetchSystemCallLogs, UI Components)
 fun formatTime(millis: Long): String {
     val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
     return sdf.format(Date(millis))

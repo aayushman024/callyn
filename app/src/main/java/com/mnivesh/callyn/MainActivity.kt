@@ -536,9 +536,23 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?): Boolean {
         val data: Uri? = intent?.data
         if (data != null && "callyn" == data.scheme && "auth" == data.host) {
+
+            // 1. Check if the Store App sent an error
+            val error = data.getQueryParameter("error")
+            if (error != null) {
+                if (error == "not_logged_in") {
+                    Toast.makeText(this, "Please log into mNivesh Store first", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this, "Login failed: $error", Toast.LENGTH_LONG).show()
+                }
+                return false // Stop execution
+            }
+
+            // 2. Proceed with normal login handling
             val token = data.getQueryParameter("token")
             val department = data.getQueryParameter("department")
             val email = data.getQueryParameter("email")
+            // Note: The Store app doesn't save work_phone yet based on AuthManager, but we'll accept it if added later
             val workPhone = data.getQueryParameter("work_phone")
 
             if (!token.isNullOrEmpty()) {

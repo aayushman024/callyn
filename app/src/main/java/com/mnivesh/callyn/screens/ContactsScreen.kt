@@ -110,6 +110,11 @@ fun ContactsScreen(
     )
     val crmUiState by crmViewModel.uiState.collectAsState()
 
+    val recentCallsViewModel: RecentCallsViewModel = viewModel(
+        factory = RecentCallsViewModelFactory(application, application.repository)
+    )
+    val callLogs by recentCallsViewModel.mergedCalls.collectAsState()
+
     // --- AUTH & USER RETRIEVAL ---
     val authManager = remember { AuthManager(context) }
     val token by remember(authManager) { mutableStateOf(authManager.getToken()) }
@@ -224,21 +229,38 @@ fun ContactsScreen(
     val contentResolver = LocalContext.current.contentResolver
 
     // --- FILTER LOGIC ---
-    val myContacts = remember(workContacts, userName, department) {
+    val myContacts = remember(workContacts, userName, department, userEmail) {
         if (SimManager.workSimSlot == null) {
             emptyList()
         } else {
             workContacts.filter { contact ->
                 val rshipManager = contact.rshipManager ?: ""
+
+                // 1. Exclude "Employee" placeholder
                 if (rshipManager.equals("Employee", ignoreCase = true)) {
                     return@filter false
                 }
-                if (department == "Management" || department == "IT Desk" || department == "Operations Dept" || userEmail == "arbind@niveshonline.com") {
+
+                // 2. Filter Visibility
+                if (department == "Management" ||
+                    department == "IT Desk" ||
+                    department == "Operations Dept" ||
+                    userEmail == "arbind@niveshonline.com") {
                     true
                 } else {
                     rshipManager.equals(userName, ignoreCase = true)
                 }
-            }
+            }.sortedWith(
+                compareBy(
+                    // 3. Priority Sort: My Clients First
+                    { contact ->
+                        // Return 0 for my clients (top), 1 for others (bottom)
+                        if (contact.rshipManager.equals(userName, ignoreCase = true)) 0 else 1
+                    },
+                    // 4. Secondary Sort: Alphabetical Name
+                    { contact -> contact.name }
+                )
+            )
         }
     }
 
@@ -291,13 +313,17 @@ fun ContactsScreen(
                             (department == "Management" && it.number.contains(searchQuery)) ||
                             (isCodeSearch && it.uniqueCode.equals(searchQuery, ignoreCase = true))
                 }.sortedBy {
-                    if (isCodeSearch && it.uniqueCode.equals(
-                            searchQuery,
-                            ignoreCase = true
-                        )
-                    ) 0 else 1
+                    // Priority: Name > Family Head > PAN > Others (Code/Number)
+                    when {
+                        it.name.contains(searchQuery, true) -> 0
+                        it.familyHead.contains(searchQuery, true) -> 1
+                        it.pan.contains(searchQuery, true) -> 2
+                        else -> 3
+                    }
                 }
             }
+
+            // device logic remains untouched
             val deviceResult = if (searchQuery.isBlank()) {
                 deviceContacts
             } else {
@@ -306,6 +332,7 @@ fun ContactsScreen(
                             contact.numbers.any { it.number.contains(searchQuery) }
                 }.sortedBy { !it.name.startsWith(searchQuery, true) }
             }
+
             withContext(Dispatchers.Main) {
                 filteredWorkContacts = workResult
                 filteredDeviceContacts = deviceResult
@@ -334,6 +361,42 @@ fun ContactsScreen(
             modifier = Modifier.fillMaxSize()
                 .background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0F172A))))
         )
+
+        fun handleCallLogClick(item: RecentCallUiItem) {
+            scope.launch {
+                // Determine contact type for this number
+                val numberStr = item.number.takeLast(10)
+
+                val workContact = withContext(Dispatchers.IO) {
+                    application.repository.findWorkContactByNumber(numberStr)
+                }
+
+                if (workContact != null) {
+                    if (workContact.rshipManager.equals("Employee", ignoreCase = true)) {
+                        selectedEmployeeContact = workContact
+                    } else {
+                        selectedWorkContact = workContact
+                    }
+                    sheetState.show()
+                } else {
+                    val crmContact = withContext(Dispatchers.IO) {
+                        application.repository.findCrmContactByNumber(numberStr)
+                    }
+
+                    if (crmContact != null) {
+                        selectedCrmContact = crmContact
+                        sheetState.show()
+                    } else {
+                        selectedDeviceContact = DeviceContact(
+                            id = item.id,
+                            name = item.name,
+                            numbers = listOf(DeviceNumber(item.number, isDefault = true))
+                        )
+                        sheetState.show()
+                    }
+                }
+            }
+        }
 
         Scaffold(
             modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -928,12 +991,17 @@ fun ContactsScreen(
             deviceContacts = deviceContacts,
             workContacts = workContacts,
             myContacts = myContacts,
+            callLogs = callLogs,
             crmUiState = crmUiState,
             department = department,
             userName = userName,
             onSelectDeviceContact = { contact ->
                 selectedDeviceContact = contact
                 scope.launch { delay(100); sheetState.show() }
+            },
+            onCallLogClick = { log -> handleCallLogClick(log) },
+            onMakeCall = { number, isWork, simSlot ->
+                onContactClick(number, isWork, simSlot)
             },
             onSelectWorkContact = { contact ->
                 selectedWorkContact = contact
