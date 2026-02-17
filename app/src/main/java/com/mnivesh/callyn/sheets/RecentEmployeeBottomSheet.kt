@@ -56,212 +56,199 @@ fun RecentEmployeeBottomSheet(
         containerColor = backgroundColor,
         contentColor = textPrimary
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.sdp())
-                .padding(bottom = 16.sdp()),
-            horizontalAlignment = Alignment.CenterHorizontally
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            contentPadding = PaddingValues(start = 24.sdp(), end = 24.sdp(), bottom = 24.sdp())
         ) {
-            // --- Avatar ---
-            Box(
-                modifier = Modifier
-                    .size(110.sdp())
-                    .clip(CircleShape)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                getColorForName(contact.name),
-                                getColorForName(contact.name).copy(alpha = 0.6f)
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    getInitials(contact.name),
-                    color = Color.White,
-                    fontSize = 40.ssp(),
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.sdp()))
-
-            // --- Name ---
-            Text(
-                text = contact.name,
-                fontSize = 26.ssp(),
-                fontWeight = FontWeight.Bold,
-                color = textPrimary,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(12.sdp()))
-
-            // --- Employee Pill ---
-            Surface(
-                color = secondaryColor.copy(alpha = 0.15f),
-                shape = RoundedCornerShape(50),
-                modifier = Modifier.height(32.sdp())
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.sdp())
-                ) {
-                    Icon(
-                        Icons.Default.Badge,
-                        null,
-                        tint = secondaryColor,
-                        modifier = Modifier.size(14.sdp())
-                    )
-                    Spacer(modifier = Modifier.width(6.sdp()))
-                    Text(
-                        text = "Employee",
-                        fontSize = 13.ssp(),
-                        color = secondaryColor,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.sdp()))
-
-            // --- Contact Details (Mobile & Dept) ---
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    "CONTACT DETAILS",
-                    color = textSecondary,
-                    fontSize = 12.ssp(),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 8.sdp(), bottom = 8.sdp())
-                )
-
-                // Mobile Row
-                ContactDetailRow(
-                    icon = Icons.Default.Phone,
-                    label = "Mobile",
-                    value = contact.number,
-                    labelColor = Color(0xFF10B981)
-                )
-
-                Spacer(modifier = Modifier.height(8.sdp()))
-
-                // Department Row (Using familyHead)
-                ContactDetailRow(
-                    icon = Icons.Default.Apartment,
-                    label = "Department",
-                    value = contact.familyHead.ifBlank { "N/A" },
-                    labelColor = Color(0xFF8B5CF6)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.sdp()))
-
-            // --- Call Buttons (Dual SIM Logic) ---
-            val showDualButtons = isDualSim && SimManager.workSimSlot == null
-            if (showDualButtons) {
-                Row(
+            // 1. Static Header Content
+            item {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // SIM 1
-                    Button(
-                        onClick = { onCall(0) },
+                    Spacer(modifier = Modifier.height(16.sdp()))
+
+                    // --- Avatar ---
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(48.sdp())
-                            .shadow(
-                                8.sdp(),
-                                RoundedCornerShape(20.sdp()),
-                                ambientColor = Color(0xFF3B82F6),
-                                spotColor = Color(0xFF3B82F6)
+                            .size(110.sdp())
+                            .clip(CircleShape)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        getColorForName(contact.name),
+                                        getColorForName(contact.name).copy(alpha = 0.6f)
+                                    )
+                                )
                             ),
-                        shape = RoundedCornerShape(20.sdp()),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(horizontalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Phone, null)
-                            Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                        Text(
+                            getInitials(contact.name),
+                            color = Color.White,
+                            fontSize = 40.ssp(),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.sdp()))
+
+                    // --- Name ---
+                    Text(
+                        text = contact.name,
+                        fontSize = 26.ssp(),
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.sdp()))
+
+                    // --- Employee Pill ---
+                    Surface(
+                        color = secondaryColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.height(32.sdp())
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.sdp())
+                        ) {
+                            Icon(
+                                Icons.Default.Badge,
+                                null,
+                                tint = secondaryColor,
+                                modifier = Modifier.size(14.sdp())
+                            )
+                            Spacer(modifier = Modifier.width(6.sdp()))
+                            Text(
+                                text = "Employee",
+                                fontSize = 13.ssp(),
+                                color = secondaryColor,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
-                    // SIM 2
-                    Button(
-                        onClick = { onCall(1) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.sdp())
-                            .shadow(
-                                8.sdp(),
-                                RoundedCornerShape(20.sdp()),
-                                ambientColor = Color(0xFF10B981),
-                                spotColor = Color(0xFF10B981)
-                            ),
-                        shape = RoundedCornerShape(20.sdp()),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
-                    ) {
-                        Row(horizontalArrangement = Arrangement.Center) {
-                            Icon(Icons.Default.Phone, null)
-                            Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+
+                    Spacer(modifier = Modifier.height(24.sdp()))
+
+                    // --- Contact Details ---
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "CONTACT DETAILS",
+                            color = textSecondary,
+                            fontSize = 12.ssp(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(start = 8.sdp(), bottom = 8.sdp())
+                        )
+
+                        ContactDetailRow(
+                            icon = Icons.Default.Phone,
+                            label = "Mobile",
+                            value = contact.number,
+                            labelColor = Color(0xFF10B981)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.sdp()))
+
+                        ContactDetailRow(
+                            icon = Icons.Default.Apartment,
+                            label = "Department",
+                            value = contact.familyHead.ifBlank { "N/A" },
+                            labelColor = Color(0xFF8B5CF6)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.sdp()))
+
+                    // --- Call Buttons (Dual SIM Logic) ---
+                    val showDualButtons = isDualSim && SimManager.workSimSlot == null
+                    if (showDualButtons) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                        ) {
+                            Button(
+                                onClick = { onCall(0) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.sdp())
+                                    .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                                shape = RoundedCornerShape(20.sdp()),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
+                            ) {
+                                Icon(Icons.Default.Phone, null)
+                                Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { onCall(1) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.sdp())
+                                    .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                                shape = RoundedCornerShape(20.sdp()),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                            ) {
+                                Icon(Icons.Default.Phone, null)
+                                Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { onCall(null) },
+                            modifier = Modifier.fillMaxWidth().height(52.sdp()),
+                            shape = RoundedCornerShape(16.sdp()),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                        ) {
+                            Icon(Icons.Default.Phone, null, modifier = Modifier.size(24.sdp()))
+                            Spacer(modifier = Modifier.width(12.sdp()))
+                            Text(if(SimManager.workSimSlot != null) "Call (Work SIM)" else "Call Now")
                         }
                     }
-                }
-            } else {
-                Button(
-                    onClick = { onCall(null) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.sdp()),
-                    shape = RoundedCornerShape(16.sdp()),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                ) {
-                    Icon(Icons.Default.Phone, null, modifier = Modifier.size(24.sdp()))
-                    Spacer(modifier = Modifier.width(12.sdp()))
-                    Text(if(SimManager.workSimSlot != null) "Call (Work SIM)" else "Call Now")
+
+                    Spacer(modifier = Modifier.height(24.sdp()))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(16.sdp()))
+
+                    // History Title
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Previous Calls",
+                            color = textSecondary,
+                            fontSize = 14.ssp(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.sdp()))
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.sdp()))
-
-            // --- HISTORY SECTION ---
-            HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
-            Spacer(modifier = Modifier.height(16.sdp()))
-
-            Text(
-                text = "Previous Calls",
-                color = Color.White.copy(alpha = 0.7f),
-                fontSize = 14.ssp(),
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.Start)
-            )
-            Spacer(modifier = Modifier.height(8.sdp()))
-
+            // 2. Flattened Dynamic History List
             if (isLoading) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.sdp()), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(100.sdp()),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                    }
                 }
             } else if (history.isNotEmpty()) {
-                LazyColumn(modifier = Modifier.heightIn(max = 250.sdp())) {
-                    items(history) { log ->
-                        CallHistoryRow(log)
-                    }
+                items(history) { log ->
+                    CallHistoryRow(log)
                 }
             } else {
-                Text(
-                    "No recent history",
-                    color = Color.White.copy(alpha = 0.3f),
-                    fontSize = 12.ssp(),
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .padding(20.sdp())
-                )
+                item {
+                    Text(
+                        "No recent history",
+                        color = Color.White.copy(alpha = 0.3f),
+                        fontSize = 12.ssp(),
+                        modifier = Modifier.padding(20.sdp())
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.height(24.sdp()))
         }
     }
 }

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -36,8 +37,10 @@ import com.mnivesh.callyn.components.ModernDetailRow
 import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.db.CrmContact
+import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -54,7 +57,23 @@ fun CrmBottomSheet(
 
     // Number Hiding State
     var isNumberVisible by remember { mutableStateOf(false) }
-    var remainingViews by remember { mutableIntStateOf(ViewLimitManager.getRemainingViews()) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val authManager = remember { AuthManager(context) }
+    var isLoading by remember { mutableStateOf(false) }
+    var remainingViews by remember { mutableIntStateOf(0) } // Starts at 0, updated by LaunchedEffect
+
+// Fetch initial status when the bottom sheet opens
+    LaunchedEffect(Unit) {
+        try {
+            val response = ViewLimitManager.getStatus(authManager)
+            if (response.isSuccessful) {
+                remainingViews = response.body()?.remaining ?: 0
+            }
+        } catch (e: Exception) {
+            Log.e("ModernBottomSheet", "Failed to fetch initial status", e)
+        }
+    }
 
     // Theme Colors
     val backgroundColor = Color(0xFF0F172A)
@@ -348,53 +367,85 @@ fun CrmBottomSheet(
                                     // View Button
                                     Button(
                                         onClick = {
-                                            // Verify Storage Permission
-                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Permission required",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                            if (isLoading) return@Button
+                                            coroutineScope.launch {
+                                                isLoading = true
                                                 try {
-                                                    val intent =
-                                                        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                                                    intent.data =
-                                                        Uri.parse("package:${context.packageName}")
-                                                    context.startActivity(intent)
-                                                } catch (e: Exception) {
-                                                }
-                                                return@Button
-                                            }
+                                                    // 1. Check if user can view
+                                                    val statusRes =
+                                                        ViewLimitManager.getStatus(authManager)
+                                                    if (statusRes.isSuccessful) {
+                                                        val status = statusRes.body()
 
-                                            if (ViewLimitManager.canViewNumber()) {
-                                                ViewLimitManager.incrementViewCount()
-                                                remainingViews = ViewLimitManager.getRemainingViews()
-                                                isNumberVisible = true
-                                            } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Daily limit exhausted",
-                                                    Toast.LENGTH_LONG
-                                                ).show()
+                                                        if (status?.canView == true) {
+                                                            // 2. Perform the increment on server
+                                                            val incRes = ViewLimitManager.increment(
+                                                                authManager
+                                                            )
+                                                            if (incRes.isSuccessful) {
+                                                                isNumberVisible = true
+                                                                remainingViews =
+                                                                    incRes.body()?.remaining ?: 0
+                                                                Toast.makeText(
+                                                                    context,
+                                                                    "Remaining views for today: $remainingViews",
+                                                                    Toast.LENGTH_SHORT
+                                                                ).show()
+                                                            }
+                                                        } else {
+                                                            Toast.makeText(
+                                                                context,
+                                                                "You have exhausted daily view.",
+                                                                Toast.LENGTH_LONG
+                                                            ).show()
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "Server error. Please try again.",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Network error: ${e.message}",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } finally {
+                                                    isLoading = false
+                                                }
                                             }
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(
+                                                0xFF3B82F6
+                                            )
+                                        ),
                                         contentPadding = PaddingValues(
                                             horizontal = 16.dp,
                                             vertical = 0.dp
                                         ),
                                         shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp)
+                                        modifier = Modifier.height(36.dp),
+                                        enabled = !isLoading // Disable while loading
                                     ) {
-                                        Text(
-                                            "View ($remainingViews)",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+                                        if (isLoading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                color = Color.White,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text(
+                                                "View ($remainingViews)",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
                                     }
                                 }
                             }
-
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
                                 color = textSecondary.copy(alpha = 0.1f)

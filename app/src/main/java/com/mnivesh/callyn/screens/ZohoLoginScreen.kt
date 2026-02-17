@@ -3,8 +3,6 @@ package com.mnivesh.callyn.ui
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import android.util.Log
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
@@ -14,13 +12,24 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Contacts
+import androidx.compose.material.icons.rounded.Message
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.SdStorage
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -37,21 +47,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.mnivesh.callyn.R
-import com.mnivesh.callyn.api.RetrofitInstance
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
 fun ZohoLoginScreen() {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     var isLoading by remember { mutableStateOf(false) }
+    var showPermissionsDialog by remember { mutableStateOf(false) }
 
     // Start entrance anims immediately
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
+
+    if (showPermissionsDialog) {
+        PermissionsDialog(onDismiss = { showPermissionsDialog = false })
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Background Layer
@@ -78,7 +91,7 @@ fun ZohoLoginScreen() {
                         painter = painterResource(id = R.drawable.mnivesh),
                         contentDescription = "mNivesh",
                         modifier = Modifier
-                            .size(200.dp) // Adjusted size for standalone top position
+                            .size(200.dp)
                             .padding(bottom = 8.dp),
                         contentScale = ContentScale.Fit
                     )
@@ -135,31 +148,173 @@ fun ZohoLoginScreen() {
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // CTA Button
+            // CTA Button Area
             AnimatedVisibility(
                 visible = isVisible,
                 enter = fadeIn(tween(1000, delayMillis = 300)) + slideInVertically(initialOffsetY = { 100 })
             ) {
-                LoginButton(
-                    isLoading = isLoading,
-                    onClick = {
-                        // Request login data from the mNivesh Store app
-                        // passing our own deep link as the callback
-                        val ssoUrl = "mniveshstore://sso/request?callback=callyn://auth/callback"
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ssoUrl)).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    LoginButton(
+                        isLoading = isLoading,
+                        onClick = {
+                            val ssoUrl = "mniveshstore://sso/request?callback=callyn://auth/callback"
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ssoUrl)).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
 
-                        try {
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            // If the Intent fails, mNivesh Store is probably not installed
-                            Toast.makeText(context, "Please install mNivesh Store first", Toast.LENGTH_LONG).show()
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Please install mNivesh Store first", Toast.LENGTH_LONG).show()
+                            }
                         }
-                    }
-                )
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // --- New "Learn More" Button ---
+                    Text(
+                        text = "Learn more about permissions",
+                        color = Color.White.copy(alpha = 0.6f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showPermissionsDialog = true }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+// --- Permissions Dialog ---
+@Composable
+fun PermissionsDialog(onDismiss: () -> Unit) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF0F172A).copy(alpha = 0.95f), // Dark background matching theme
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxSize()
+            ) {
+                // Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Shield,
+                        contentDescription = null,
+                        tint = Color(0xFF818CF8), // Indigo
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "App Permissions",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+
+                Text(
+                    text = "Callyn requires specific permissions to function as your default dialer and business tool. All data is securely synced only with internal company servers.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(bottom = 24.dp)
+                )
+
+                // Scrollable List
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    PermissionItem(
+                        icon = Icons.Rounded.Call,
+                        title = "Phone & Calls",
+                        desc = "Core functionality to make, receive, and manage calls. Allows Callyn to act as your default dialer."
+                    )
+                    PermissionItem(
+                        icon = Icons.Rounded.Contacts,
+                        title = "Contacts",
+                        desc = "Required to display caller names and manage your business contact list effectively."
+                    )
+                    PermissionItem(
+                        icon = Icons.Rounded.Notifications,
+                        title = "Notifications",
+                        desc = "Ensures you never miss an important incoming call, even when the screen is locked."
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Close Button
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF334155),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Understood", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionItem(icon: ImageVector, title: String, desc: String) {
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(Color(0xFF1E293B), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color(0xFFA5B4FC), // Indigo-200
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = desc,
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.6f),
+                lineHeight = 18.sp
+            )
         }
     }
 }

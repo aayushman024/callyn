@@ -9,6 +9,7 @@ object RetrofitInstance {
 
     private const val BASE_URL_PROD = "https://callyn-backend-avh8cae5dpdnckg8.centralindia-01.azurewebsites.net/"
     private const val BASE_URL_LOCAL = "http://localhost:5500/"
+    private const val BASE_URL_IP = "http://192.168.1.26:5500/"
 
     // 1. Create a custom OkHttpClient with 2-minute timeouts
     private val client: OkHttpClient by lazy {

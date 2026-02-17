@@ -315,7 +315,7 @@ class MainActivity : ComponentActivity() {
         if (!isPermissionRequestInProgress && (uiState is MainActivityUiState.Loading || uiState is MainActivityUiState.LoggedOut)) {
             checkLoginState()
         }
-        checkStoragePermission()
+       // checkStoragePermission()
         checkForUpdates()
         syncDeviceDetails()
 

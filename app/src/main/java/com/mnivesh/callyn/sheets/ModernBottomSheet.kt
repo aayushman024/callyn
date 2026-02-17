@@ -4,9 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Environment
-import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import com.mnivesh.callyn.R
 import androidx.compose.foundation.*
@@ -36,8 +34,11 @@ import com.mnivesh.callyn.components.ModernDetailRow
 import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.db.AppContact
+import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableIntStateOf
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -58,7 +59,23 @@ fun ModernBottomSheet(
     val context = LocalContext.current
 
     var isNumberVisible by remember { mutableStateOf(false) }
-    var remainingViews by remember { mutableIntStateOf(ViewLimitManager.getRemainingViews()) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val authManager = remember { AuthManager(context) }
+    var isLoading by remember { mutableStateOf(false) }
+    var remainingViews by remember { mutableIntStateOf(0) } // Starts at 0, updated by LaunchedEffect
+
+// Fetch initial status when the bottom sheet opens
+    LaunchedEffect(Unit) {
+        try {
+            val response = ViewLimitManager.getStatus(authManager)
+            if (response.isSuccessful) {
+                remainingViews = response.body()?.remaining ?: 0
+            }
+        } catch (e: Exception) {
+            Log.e("ModernBottomSheet", "Failed to fetch initial status", e)
+        }
+    }
 
     // Automatically show number for Management or IT Desk
     LaunchedEffect(department) {
@@ -374,31 +391,30 @@ fun ModernBottomSheet(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            val context = LocalContext.current
                             val haptics = LocalHapticFeedback.current
 
+                            // --- 1. PHONE NUMBER SECTION (Conditional) ---
                             if (isNumberVisible) {
-                                // 1. VISIBLE STATE (Standard View)
+                                // State: Visible Number
                                 Box(
-                                    modifier = Modifier
-                                        .combinedClickable(
-                                            onClick = {},
-                                            onLongClick = {
-                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                val clipboard =
-                                                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                val clip = ClipData.newPlainText(
-                                                    "Phone Number",
-                                                    contact.number.takeLast(10)
-                                                )
-                                                clipboard.setPrimaryClip(clip)
-                                                Toast.makeText(
-                                                    context,
-                                                    "Number copied",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        )
+                                    modifier = Modifier.combinedClickable(
+                                        onClick = {},
+                                        onLongClick = {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            val clipboard =
+                                                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText(
+                                                "Phone Number",
+                                                contact.number.takeLast(10)
+                                            )
+                                            clipboard.setPrimaryClip(clip)
+                                            Toast.makeText(
+                                                context,
+                                                "Number copied",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    )
                                 ) {
                                     ModernDetailRow(
                                         Icons.Default.Phone,
@@ -407,27 +423,19 @@ fun ModernBottomSheet(
                                         Color(0xFF10B981)
                                     )
                                 }
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 12.dp),
-                                    color = textSecondary.copy(alpha = 0.1f)
-                                )
                             } else {
-                                // 2. MASKED STATE (Hidden with Button)
+                                // State: Masked Number + View Button
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    // Masked Info
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Box(
-                                            modifier = Modifier
-                                                .size(36.dp)
+                                            modifier = Modifier.size(36.dp)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .background(Color(0xFF10B981).copy(alpha = 0.15f)),
                                             contentAlignment = Alignment.Center
@@ -444,10 +452,9 @@ fun ModernBottomSheet(
                                             Text(
                                                 "Phone Number",
                                                 fontSize = 11.sp,
-                                                color = Color.White.copy(alpha = 0.5f),
+                                                color = textSecondary,
                                                 fontWeight = FontWeight.Medium
                                             )
-                                            // Show only last 2 digits
                                             val masked =
                                                 if (contact.number.length > 2) "******" + contact.number.takeLast(
                                                     2
@@ -455,45 +462,49 @@ fun ModernBottomSheet(
                                             Text(
                                                 masked,
                                                 fontSize = 16.sp,
-                                                color = Color.White,
+                                                color = textPrimary,
                                                 fontWeight = FontWeight.Medium
                                             )
                                         }
                                     }
 
-                                    // View Button
                                     Button(
                                         onClick = {
-                                            // Verify Storage Permission
-                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Permission required",
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
+                                            if (isLoading) return@Button
+                                            coroutineScope.launch {
+                                                isLoading = true
                                                 try {
-                                                    val intent =
-                                                        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                                                    intent.data =
-                                                        Uri.parse("package:${context.packageName}")
-                                                    context.startActivity(intent)
+                                                    val statusRes =
+                                                        ViewLimitManager.getStatus(authManager)
+                                                    if (statusRes.isSuccessful && statusRes.body()?.canView == true) {
+                                                        val incRes =
+                                                            ViewLimitManager.increment(authManager)
+                                                        if (incRes.isSuccessful) {
+                                                            isNumberVisible = true
+                                                            remainingViews =
+                                                                incRes.body()?.remaining ?: 0
+                                                            Toast.makeText(
+                                                                context,
+                                                                "Remaining views: $remainingViews",
+                                                                Toast.LENGTH_SHORT
+                                                            ).show()
+                                                        }
+                                                    } else {
+                                                        Toast.makeText(
+                                                            context,
+                                                            "Daily limit exhausted.",
+                                                            Toast.LENGTH_LONG
+                                                        ).show()
+                                                    }
                                                 } catch (e: Exception) {
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Network error",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                } finally {
+                                                    isLoading = false
                                                 }
-                                                return@Button
-                                            }
-
-                                            // Check Limit
-                                            if (ViewLimitManager.canViewNumber()) {
-                                                ViewLimitManager.incrementViewCount()
-                                                remainingViews =
-                                                    ViewLimitManager.getRemainingViews()
-                                                isNumberVisible = true
-                                            } else {
-                                                Toast.makeText(
-                                                    context,
-                                                    "Daily limit exhausted",
-                                                    Toast.LENGTH_LONG
-                                                ).show()
                                             }
                                         },
                                         colors = ButtonDefaults.buttonColors(
@@ -501,41 +512,54 @@ fun ModernBottomSheet(
                                                 0xFF3B82F6
                                             )
                                         ),
-                                        contentPadding = PaddingValues(
-                                            horizontal = 16.dp,
-                                            vertical = 0.dp
-                                        ),
                                         shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp)
+                                        modifier = Modifier.height(36.dp).wrapContentWidth(),
+                                        contentPadding = PaddingValues(horizontal = 12.dp),
+                                        enabled = !isLoading
                                     ) {
-                                        Text(
-                                            "View ($remainingViews)",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
+                                        if (isLoading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                color = textPrimary,
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Text(
+                                                "View ($remainingViews)",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
                                     }
                                 }
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(vertical = 12.dp),
-                                    color = textSecondary.copy(alpha = 0.1f)
-                                )
                             }
+
+                            // --- 2. COMMON FIELDS (Outside the IF/ELSE) ---
+                            // These fields will now remain visible regardless of the phone number's state.
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 12.dp),
+                                color = textSecondary.copy(alpha = 0.1f)
+                            )
+
                             ModernDetailRow(
                                 Icons.Default.CreditCard,
                                 "PAN",
                                 contact.pan,
                                 warningColor
                             )
+
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
                                 color = textSecondary.copy(alpha = 0.1f)
                             )
-                            Row(){
+
+                            Row(modifier = Modifier.fillMaxWidth()) {
                                 Box(modifier = Modifier.weight(1f)) {
                                     ModernDetailRow(
                                         Icons.Default.CurrencyRupee,
                                         "AUM",
-                                        "₹ " + contact.aum,
+                                        "₹ ${contact.aum}",
                                         Color(0xFF60A5FA)
                                     )
                                 }
@@ -543,25 +567,29 @@ fun ModernBottomSheet(
                                     ModernDetailRow(
                                         Icons.Default.Money,
                                         "Family AUM",
-                                        "₹ " + contact.familyAum,
+                                        "₹ ${contact.familyAum}",
                                         Color(0xFF60A5FA)
                                     )
                                 }
                             }
+
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
                                 color = textSecondary.copy(alpha = 0.1f)
                             )
+
                             ModernDetailRow(
                                 Icons.Default.FamilyRestroom,
                                 "Family Head",
                                 contact.familyHead,
                                 Color(0xFF81C784)
                             )
+
                             HorizontalDivider(
                                 modifier = Modifier.padding(vertical = 12.dp),
                                 color = textSecondary.copy(alpha = 0.1f)
                             )
+
                             ModernDetailRow(
                                 Icons.Default.AccountBox,
                                 "Relationship Manager",

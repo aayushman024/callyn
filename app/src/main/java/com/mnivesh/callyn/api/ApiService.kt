@@ -10,35 +10,19 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Query
 
-// --- DATA MODELS FOR API ---
-
-/**
- * Model for the response from `GET /auth/zoho`
- */
 data class AuthResponse(
     val authUrl: String
 )
 
-/**
- * Model for the response from `GET /auth/callback`
- * Includes token and user name.
- */
 data class LoginResponse(
     val token: String,
     val userName: String
 )
 
-/**
- * Model for the response from `GET /auth/me`
- */
 data class UserResponse(
     val name: String
 )
 
-/**
- * Model for the response from `GET /getLegacyData`
- * This must match the JSON your server sends.
- */
 data class ContactResponse(
     val name: String,
     val number: String,
@@ -50,9 +34,6 @@ data class ContactResponse(
     val familyAum: String
 )
 
-/**
- * Model for the request body of `POST /uploadCallLog`
- */
 data class CallLogRequest(
     val callerName: String,
     val familyHead: String,
@@ -162,6 +143,13 @@ data class SmsLogResponse(
     val message: String,
     val timestamp: String, // Or Long, depending on exact backend serialization
     val uploadedBy: String
+)
+
+data class ViewLimitResponse(
+    val canView: Boolean,
+    val remaining: Int,
+    val count: Int? = null,
+    val success: Boolean? = null
 )
 
 //Zoho CRM Data
@@ -285,5 +273,15 @@ interface ApiService {
     suspend fun getCrmData(
         @Header("Authorization") token: String
     ): Response<CrmResponse>
+
+    @GET("view-limit/status")
+    suspend fun getViewLimitStatus(
+        @Header("Authorization") token: String
+    ): Response<ViewLimitResponse>
+
+    @POST("view-limit/increment")
+    suspend fun incrementViewCount(
+        @Header("Authorization") token: String
+    ): Response<ViewLimitResponse>
 }
 
