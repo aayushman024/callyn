@@ -184,6 +184,7 @@ class RecentCallsViewModel(
     }
 
     // [!code ++] Merging Logic moved from UI to ViewModel
+    // [!code replace]
     private fun mergeLogs(sysLogs: List<RecentCallUiItem>, dbLogs: List<WorkCallLog>): List<RecentCallUiItem> {
         // 1. Convert Work Logs to UI items
         val workUiLogs = dbLogs.map {
@@ -202,40 +203,32 @@ class RecentCallsViewModel(
             )
         }
 
-        // 2. Duplicate Check
-        fun areCallsDuplicate(item1: RecentCallUiItem, item2: RecentCallUiItem): Boolean {
-            // A. Normalize Numbers (Last 10 digits to ignore +91, 0, etc.)
-            val n1 = item1.number.filter { it.isDigit() }.takeLast(10)
-            val n2 = item2.number.filter { it.isDigit() }.takeLast(10)
-
-            // Basic mismatch checks
-            if (n1.isEmpty() || n2.isEmpty()) return false
-            if (n1 != n2) return false
-            if (item1.isIncoming != item2.isIncoming) return false
-            if (item1.isMissed != item2.isMissed) return false
-
-            // B. REMOVED strict duration check (item1.duration != item2.duration)
-            // Reasons: "1m 0s" vs "60s", or 1-second variance breaks the old logic.
-
-            // C. Time Check
-            val timeDiff = abs(item1.date - item2.date)
-            // Increased buffer to 10 seconds (10000ms) to handle slight DB write delays
-            return timeDiff < 10000
+        // 2. Helper to generate a unique key for deduplication
+        // Key format: Number (last 10) + TimeBucket (10s) + Direction
+        fun generateKey(item: RecentCallUiItem): String {
+            val num = item.number.filter { it.isDigit() }.takeLast(10)
+            val timeBucket = item.date / 10000 // 10-second bucket
+            val dir = if (item.isIncoming) "in" else "out"
+            return "${num}_${timeBucket}_${dir}"
         }
 
+        // 3. Optimized Merge Logic using HashSet
         val merged = if (department == "Management") {
-            // Priority: System Logs.
-            // We check if a System Log has a matching Work Log. If yes, we can optionally mark it or just keep the system one.
-            // Here, we filter out Work logs that already exist in System logs to avoid duplicates.
+            // Priority: System Logs
+            val sysLogKeys = sysLogs.map { generateKey(it) }.toHashSet()
+
+            // Filter out Work logs that exist in System logs (O(1) lookup)
             val uniqueWorkLogs = workUiLogs.filter { workItem ->
-                sysLogs.none { sysItem -> areCallsDuplicate(sysItem, workItem) }
+                !sysLogKeys.contains(generateKey(workItem))
             }
             sysLogs + uniqueWorkLogs
         } else {
-            // Priority: Work Logs.
-            // We filter out System logs that already exist in Work logs.
+            // Priority: Work Logs
+            val workLogKeys = workUiLogs.map { generateKey(it) }.toHashSet()
+
+            // Filter out System logs that exist in Work logs (O(1) lookup)
             val uniqueSystemLogs = sysLogs.filter { sysItem ->
-                workUiLogs.none { workItem -> areCallsDuplicate(sysItem, workItem) }
+                !workLogKeys.contains(generateKey(sysItem))
             }
             workUiLogs + uniqueSystemLogs
         }
@@ -445,6 +438,17 @@ fun RecentCallsScreen(
         }
     }
 
+    val displayLogs = remember(allCalls, activeFilter) {
+        allCalls.filter { call ->
+            when (activeFilter) {
+                CallFilter.ALL -> true
+                CallFilter.PERSONAL -> call.type == "Personal"
+                CallFilter.WORK -> call.type == "Work"
+                CallFilter.MISSED -> call.isMissed
+            }
+        }
+    }
+
     // [!code ++] Click Handler reused for List and Search
     fun handleItemClick(item: RecentCallUiItem) {
         scope.launch {
@@ -551,15 +555,6 @@ fun RecentCallsScreen(
                     }
                 }
 
-                // [!code ++] Simple Filtering (Merging is done in VM)
-                val displayLogs = allCalls.filter { call ->
-                    when (activeFilter) {
-                        CallFilter.ALL -> true
-                        CallFilter.PERSONAL -> call.type == "Personal"
-                        CallFilter.WORK -> call.type == "Work"
-                        CallFilter.MISSED -> call.isMissed
-                    }
-                }
 
                 if (displayLogs.isEmpty() && !isLoading) {
                     item {

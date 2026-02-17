@@ -1,9 +1,16 @@
 package com.mnivesh.callyn.db
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "work_call_logs")
+@Entity(tableName = "work_call_logs",
+    indices = [
+        Index(value = ["timestamp"]), // Speeds up "ORDER BY timestamp DESC"
+        Index(value = ["number"]), // Speeds up filtering by number
+        Index(value = ["name"])
+    ]
+    )
 data class WorkCallLog(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val name: String,

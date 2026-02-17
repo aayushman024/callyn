@@ -267,6 +267,7 @@ class MainActivity : ComponentActivity() {
                             LoadingDetailsScreen(
                                 userName = state.userName,
                                 onFinished = {
+                                    authManager.setSetupCompleted(true)
                                     uiState = MainActivityUiState.LoggedIn(state.userName)
                                 },
                                 onConflictsFound = { conflicts, workContacts ->
@@ -525,7 +526,12 @@ class MainActivity : ComponentActivity() {
                 // Permissions granted (or not needed), proceed.
                 //uiState = MainActivityUiState.Preparing(userName)
 
-                uiState = MainActivityUiState.LoggedIn(userName) // Add this: Go directly to home
+                uiState = if (authManager.isSetupCompleted()) {
+
+                    MainActivityUiState.LoggedIn(userName)
+                } else {
+                    MainActivityUiState.Preparing(userName)
+                }
 
             } else {
                 uiState = MainActivityUiState.LoggedOut
@@ -552,22 +558,23 @@ class MainActivity : ComponentActivity() {
             val token = data.getQueryParameter("token")
             val department = data.getQueryParameter("department")
             val email = data.getQueryParameter("email")
+            val name = data.getQueryParameter("name")
             // Note: The Store app doesn't save work_phone yet based on AuthManager, but we'll accept it if added later
             val workPhone = data.getQueryParameter("work_phone")
 
             if (!token.isNullOrEmpty()) {
                 authManager.saveToken(token)
-
+                authManager.setSetupCompleted(false)
                 // Save Department if present
                 if (department != null) {
+                    authManager.saveUserName(name)
                     authManager.saveDepartment(department)
                     authManager.saveUserEmail(email)
                     authManager.saveWorkPhone(workPhone)
                 }
 
-                Log.d(TAG, "Saved details: Dept=$department, Email=$email, Phone=$workPhone")
+                Log.d(TAG, "Saved details: Name= $name Dept=$department, Email=$email, Phone=$workPhone")
 
-                fetchUserName("Bearer $token", isFreshLogin = true)
                 return true
             }
         }
@@ -848,6 +855,9 @@ fun LoadingDetailsScreen(
         val token = authManager.getToken()
         if (token != null) {
             // Sync Data
+            lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                app.repository.refreshCrmData(token)
+            }
             withContext(Dispatchers.IO) {
                 app.repository.syncInitialData(token, userName)
             }

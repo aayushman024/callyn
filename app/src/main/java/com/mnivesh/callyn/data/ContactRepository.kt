@@ -118,11 +118,6 @@ class ContactRepository(
 
     suspend fun syncInitialData(token: String, managerName: String) {
         try {
-            // [!code ++] Fire-and-Forget CRM Data Sync
-            // This runs on a separate thread and does NOT block the lines below
-            CoroutineScope(Dispatchers.IO).launch {
-                refreshCrmData(token)
-            }
             // 1. Refresh Contacts (Pre-load)
             refreshContacts(token, managerName)
 

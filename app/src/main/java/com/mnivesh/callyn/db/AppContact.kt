@@ -3,10 +3,15 @@ package com.mnivesh.callyn.db
 import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.Ignore
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Immutable
-@Entity(tableName = "contacts")
+@Entity(tableName = "contacts",
+    indices = [
+        Index(value = ["number"]), // Speeds up lookup by phone number
+        Index(value = ["name"])    // Speeds up sorting and searching by name
+    ])
 data class AppContact(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,

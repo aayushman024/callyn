@@ -20,7 +20,7 @@ class AuthManager(context: Context) {
     fun saveToken(token: String) = prefs.edit().putString(AUTH_TOKEN, token).apply()
     fun getToken(): String? = prefs.getString(AUTH_TOKEN, null)
 
-    fun saveUserName(name: String) = prefs.edit().putString(USER_NAME, name).apply()
+    fun saveUserName(name: String?) = prefs.edit().putString(USER_NAME, name).apply()
     fun getUserName(): String? = prefs.getString(USER_NAME, null)
 
     fun saveUserEmail(email: String?) = prefs.edit().putString(USER_EMAIL, email).apply()
@@ -39,6 +39,14 @@ class AuthManager(context: Context) {
     }
     fun getWorkPhone(): String? {
         return prefs.getString(WORK_PHONE, null)
+    }
+
+    private val KEY_SETUP_COMPLETED = "setup_completed"
+
+    fun isSetupCompleted(): Boolean = prefs.getBoolean(KEY_SETUP_COMPLETED, false)
+
+    fun setSetupCompleted(isCompleted: Boolean) {
+        prefs.edit().putBoolean(KEY_SETUP_COMPLETED, isCompleted).apply()
     }
     // Clears all saved data (token and username)
     fun logout() = prefs.edit().clear().apply()

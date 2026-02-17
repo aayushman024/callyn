@@ -3,22 +3,23 @@ package com.mnivesh.callyn.components
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,7 +30,31 @@ import androidx.compose.ui.unit.sp
 import com.mnivesh.callyn.MainActivity
 import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.managers.AuthManager
-import com.mnivesh.callyn.ui.theme.sdp
+
+// Define specific access lists outside the composable to prevent recreation.
+private val ADMIN_EMAILS = hashSetOf(
+    "aayushman@niveshonline.com",
+    "ishika@niveshonline.com",
+    "sagar@niveshonline.com",
+    "ved@niveshonline.com"
+)
+
+private val MANAGEMENT_ROLES = hashSetOf("Management", "IT Desk")
+
+// --- Data Model ---
+// Decoupling data from UI logic
+sealed class DrawerItemType {
+    data class Action(
+        val label: String,
+        val icon: ImageVector,
+        val tint: Color,
+        val isDestructive: Boolean = false,
+        val onClick: () -> Unit
+    ) : DrawerItemType()
+
+    data object Divider : DrawerItemType()
+    data object VersionInfo : DrawerItemType()
+}
 
 @Composable
 fun AppDrawer(
@@ -43,232 +68,257 @@ fun AppDrawer(
     onShowCallLogs: () -> Unit
 ) {
     val context = LocalContext.current
-    val department = remember { AuthManager(context).getDepartment() }
-    val email = remember { AuthManager(context).getUserEmail() }
+    val authManager = remember { AuthManager(context) }
+    // Fetch once and remember
+    val department = remember { authManager.getDepartment() ?: "" }
+    val email = remember { authManager.getUserEmail() ?: "" }
 
     val configuration = LocalConfiguration.current
-    val screenWidth = configuration.screenWidthDp.dp
-    val drawerWidth = min(320.dp, screenWidth * 0.85f)
-    val scrollState = rememberScrollState()
+    val drawerWidth = min(320.dp, configuration.screenWidthDp.dp * 0.85f)
+
+    // --- Logic Optimization ---
+    // Prepare the list in a derived state or remember block.
+    // This runs only when department or email changes, not on every recomposition.
+    val drawerItems = remember(department, email) {
+        val list = mutableListOf<DrawerItemType>()
+
+        // 1. Standard Items
+        list.add(
+            DrawerItemType.Action("Sync Work Contacts", Icons.Default.Refresh, Color(0xFF38BDF8)) {
+                Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
+                onSync()
+            }
+        )
+        list.add(
+            DrawerItemType.Action("Employee Directory", Icons.Default.Badge, Color(0xFFF472B6), onClick = onShowDirectory)
+        )
+
+        // 2. Role Based Items (O(1) Lookup)
+        if (MANAGEMENT_ROLES.contains(department)) {
+            list.add(
+                DrawerItemType.Action("User Status", Icons.Default.Group, Color(0xFFA5B4FC), onClick = onShowUserDetails)
+            )
+        }
+
+        // 3. Email/Dept Logic
+        val callLogLabel = if (department == "Management" || ADMIN_EMAILS.contains(email)) "View Call Logs" else "View Call Notes"
+        val callLogIcon = if (department == "Management" || ADMIN_EMAILS.contains(email)) Icons.Default.List else Icons.Default.EditNote
+        val callLogColor = if (department == "Management" || ADMIN_EMAILS.contains(email)) Color(0xFF34D399) else Color(0xFF673AB7)
+
+        list.add(
+            DrawerItemType.Action(callLogLabel, callLogIcon, callLogColor, onClick = onShowCallLogs)
+        )
+
+        list.add(
+            DrawerItemType.Action("Personal Contact Requests", Icons.Default.AssignmentInd, Color(0xFFFACC15), onClick = onShowRequests)
+        )
+
+        // 4. Footer Items
+        list.add(DrawerItemType.Divider)
+        list.add(
+            DrawerItemType.Action(
+                "Logout",
+                Icons.AutoMirrored.Filled.Logout,
+                Color(0xFFF44336),
+                isDestructive = true,
+                onClick = onLogout
+            )
+        )
+        list.add(DrawerItemType.VersionInfo)
+
+        list // Return the list
+    }
 
     ModalDrawerSheet(
         drawerContainerColor = Color(0xFF0B1220),
         drawerContentColor = Color.White,
         modifier = Modifier.width(drawerWidth)
-            .systemBarsPadding()
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header remains fixed at the top
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF020617), Color(0xFF0B1220), Color(0xFF111827))
+        // Use LazyColumn for efficient rendering (Windowing)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp) // Bottom padding for scrolling
+        ) {
+            // Header is a single item
+            item {
+                DrawerHeader(userName, email, department)
+            }
+
+            item {
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            }
+
+            // Render list items dynamically
+            items(drawerItems) { item ->
+                when (item) {
+                    is DrawerItemType.Action -> {
+                        DrawerActionItem(
+                            item = item,
+                            onClose = onClose
                         )
-                    )
-                    .padding(top = 40.dp, bottom = 25.dp, start = 24.dp, end = 24.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(70.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF2563EB), Color(0xFF60A5FA))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = userName,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFF1F5F9)
-                )
-
-                if (!email.isNullOrBlank() && email != "N/A") {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = email,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF9CA3AF),
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 1
-                    )
-                }
-
-                if (!department.isNullOrBlank() && department != "N/A") {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        color = Color(0xFF1F2937),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.BusinessCenter,
-                                null,
-                                tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = department,
-                                fontSize = 13.sp,
-                                color = Color(0xFFD1D5DB),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                    }
+                    is DrawerItemType.Divider -> {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(
+                            color = Color.White.copy(alpha = 0.08f),
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                    is DrawerItemType.VersionInfo -> {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        DrawerVersionItem()
                     }
                 }
             }
+        }
+    }
+}
 
-            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+// --- Extracted Composables for Smart Recomposition ---
 
-            // All items (Navigation + Actions + Version) are now in the scrollable list
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .systemBarsPadding()
-                    .padding(vertical = 12.dp, horizontal = 14.dp)
+@Composable
+private fun DrawerHeader(userName: String, email: String, department: String) {
+    // Memoize the background brush to avoid recreation on every frame
+    val bgBrush = remember {
+        Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0B1220), Color(0xFF111827)))
+    }
+    val avatarBrush = remember {
+        Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF60A5FA)))
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(bgBrush)
+            .statusBarsPadding() // Better than systemBarsPadding for top alignment
+            .padding(top = 24.dp, bottom = 25.dp, start = 24.dp, end = 24.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(70.dp)
+                .clip(CircleShape)
+                .background(avatarBrush),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Text(
+            text = userName,
+            fontSize = 21.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFFF1F5F9)
+        )
+
+        if (email.isNotBlank() && email != "N/A") {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = email,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF9CA3AF),
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1
+            )
+        }
+
+        if (department.isNotBlank() && department != "N/A") {
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                color = Color(0xFF1F2937),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
             ) {
-
-                @Composable
-                fun drawerItem(
-                    label: String,
-                    icon: @Composable () -> Unit,
-                    textColor: Color = Color.White.copy(alpha = 0.92f),
-                    iconColor: Color = Color.White.copy(alpha = 0.92f),
-                    containerColor: Color = Color.White.copy(alpha = 0.04f),
-                    onClick: () -> Unit
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NavigationDrawerItem(
-                        label = {
-                            Text(text = label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        },
-                        icon = icon,
-                        selected = false,
-                        onClick = {
-                            onClose()
-                            onClick()
-                        },
-                        shape = RoundedCornerShape(18.dp),
-                        colors = NavigationDrawerItemDefaults.colors(
-                            unselectedContainerColor = containerColor,
-                            unselectedTextColor = textColor,
-                            unselectedIconColor = iconColor,
-                        ),
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .fillMaxWidth()
+                    Icon(
+                        Icons.Default.BusinessCenter,
+                        null,
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = department,
+                        fontSize = 13.sp,
+                        color = Color(0xFFD1D5DB),
+                        fontWeight = FontWeight.Medium
                     )
                 }
+            }
+        }
+    }
+}
 
-                drawerItem(
-                    label = "Sync Work Contacts",
-                    icon = { Icon(Icons.Default.Refresh, null, Modifier.size(22.dp), tint = Color(0xFF38BDF8)) }
-                ) {
-                    Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
-                    onSync()
-                }
+@Composable
+private fun DrawerActionItem(
+    item: DrawerItemType.Action,
+    onClose: () -> Unit
+) {
+    val textColor = if (item.isDestructive) Color(0xFFF44336) else Color.White.copy(alpha = 0.92f)
+    val containerColor = if (item.isDestructive) Color(0xFFF44336).copy(alpha = 0.1f) else Color.White.copy(alpha = 0.04f)
 
-                drawerItem(
-                    label = "Employee Directory",
-                    icon = { Icon(Icons.Default.Badge, null, Modifier.size(22.dp), tint = Color(0xFFF472B6)) }
-                ) { onShowDirectory() }
+    NavigationDrawerItem(
+        label = {
+            Text(text = item.label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+        },
+        icon = {
+            Icon(item.icon, null, Modifier.size(22.dp), tint = if(item.isDestructive) item.tint else item.tint)
+        },
+        selected = false,
+        onClick = {
+            onClose()
+            item.onClick()
+        },
+        shape = RoundedCornerShape(18.dp),
+        colors = NavigationDrawerItemDefaults.colors(
+            unselectedContainerColor = containerColor,
+            unselectedTextColor = textColor,
+            unselectedIconColor = item.tint, // Use the specific tint from data
+        ),
+        modifier = Modifier
+            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .fillMaxWidth()
+    )
+}
 
-                if (department == "Management" || department == "IT Desk") {
-                    drawerItem(
-                        "User Status",
-                        { Icon(Icons.Default.Group, null, Modifier.size(22.dp), tint = Color(0xFFA5B4FC)) }
-                    ) { onShowUserDetails() }
-                }
-
-                if (department == "Management" || email == "aayushman@niveshonline.com" || email == "ishika@niveshonline.com" || email == "sagar@niveshonline.com" || email == "ved@niveshonline.com") {
-                    drawerItem(
-                        "View Call Logs",
-                        { Icon(Icons.Default.List, null, Modifier.size(22.dp), tint = Color(0xFF34D399)) }
-                    ) { onShowCallLogs() }
-                } else {
-                    drawerItem(
-                        label = "View Call Notes",
-                        icon = {
-                            Icon(
-                                Icons.Default.EditNote,
-                                null,
-                                Modifier.size(22.dp),
-                                tint = Color(0xFF673AB7)
-                            )
-                        }
-                    ) { onShowCallLogs() }
-                }
-
-                drawerItem(
-                    "Personal Contact Requests",
-                    { Icon(Icons.Default.AssignmentInd, null, Modifier.size(22.dp), tint = Color(0xFFFACC15)) }
-                ) { onShowRequests() }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f), modifier = Modifier.padding(horizontal = 8.dp))
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Logout moved into the list
-                drawerItem(
-                    label = "Logout",
-                    textColor = Color(0xFFF44336),
-                    iconColor = Color(0xFFF44336),
-                    containerColor = Color(0xFFF44336).copy(alpha = 0.1f),
-                    icon = { Icon(Icons.AutoMirrored.Filled.Logout, null, Modifier.size(22.dp)) }
-                ) { onLogout() }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Version info at the end of the scrollable list
-                Surface(
-                    onClick = { (context as? MainActivity)?.manualUpdateCheck() },
-                    shape = RoundedCornerShape(30),
-                    color = Color.White.copy(alpha = 0.06f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.SystemUpdate,
-                            null,
-                            tint = Color(0xFF93C5FD),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Callyn v$version",
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                // Extra padding for bottom visibility
-                Spacer(modifier = Modifier.height(40.dp))
+@Composable
+private fun DrawerVersionItem() {
+    val context = LocalContext.current
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Surface(
+            onClick = { (context as? MainActivity)?.manualUpdateCheck() },
+            shape = RoundedCornerShape(30),
+            color = Color.White.copy(alpha = 0.06f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.SystemUpdate,
+                    null,
+                    tint = Color(0xFF93C5FD),
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Callyn v$version",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
     }
