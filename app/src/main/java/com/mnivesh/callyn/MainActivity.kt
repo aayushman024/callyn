@@ -27,6 +27,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -97,6 +99,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import androidx.compose.ui.graphics.Color as ComposeColor
 
 private const val TAG = "MainActivity"
@@ -124,7 +127,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var authManager: AuthManager
     private var uiState by mutableStateOf<MainActivityUiState>(MainActivityUiState.Loading)
-
+    public var incomingDialNumber by mutableStateOf<String?>(null)
     // Version Check States
     private var updateState by mutableStateOf(UpdateState())
     private var showUpdateDialog by mutableStateOf(false)
@@ -513,6 +516,16 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?): Boolean {
         val data: Uri? = intent?.data
+
+        if (intent?.action == Intent.ACTION_DIAL || intent?.action == Intent.ACTION_VIEW) {
+            if (data?.scheme == "tel") {
+                // Extract number (e.g., tel:12345 -> 12345)
+                val number = Uri.decode(data.schemeSpecificPart)
+                incomingDialNumber = number
+                return true
+            }
+        }
+
         if (data != null && "callyn" == data.scheme && "auth" == data.host) {
 
             // 1. Check if the Store App sent an error
@@ -1342,7 +1355,7 @@ fun ModernConflictItem(
         ComposeColor(0xFF10B981), ComposeColor(0xFFF59E0B), ComposeColor(0xFFEF4444),
         ComposeColor(0xFF3B82F6), ComposeColor(0xFF14B8A6), ComposeColor(0xFFF97316)
     )
-    val avatarColor = palette[kotlin.math.abs(contact.name.hashCode()) % palette.size]
+    val avatarColor = palette[abs(contact.name.hashCode()) % palette.size]
 
     val initials = contact.name.split(" ")
         .mapNotNull { word -> word.firstOrNull { it.isLetter() }?.uppercaseChar() }
@@ -1409,7 +1422,7 @@ fun ModernConflictItem(
             } else {
                 OutlinedButton(
                     onClick = onRequestClick,
-                    border = androidx.compose.foundation.BorderStroke(
+                    border = BorderStroke(
                         1.sdp(),
                         ComposeColor(0xFF60A5FA)
                     ),
@@ -1456,6 +1469,8 @@ fun MainActivity.MainScreenWithDialerLogic(userName: String, onLogout: () -> Uni
 
     MainScreen(
         userName = userName,
+        incomingNumber = incomingDialNumber,
+        onConsumeIncomingNumber = { incomingDialNumber = null },
         hasAllPermissions = hasAllPermissions,
         isDefaultDialer = isDefaultDialer,
         missingPermissions = missingPermissions,
@@ -1484,6 +1499,8 @@ sealed class Screen(val route: String) {
 @Composable
 fun MainScreen(
     userName: String,
+    incomingNumber: String?,
+    onConsumeIncomingNumber: () -> Unit,
     hasAllPermissions: Boolean,
     isDefaultDialer: Boolean,
     missingPermissions: List<String>,
@@ -1511,7 +1528,15 @@ fun MainScreen(
             onRequestDefaultDialer = onRequestDefaultDialer
         )
     } else {
-        MainScreenContent(userName, onSmartDial, onLogout, missedCallCount, onResetMissedCount)
+        MainScreenContent(
+            userName,
+            onSmartDial,
+            onLogout,
+            incomingNumber,
+            onConsumeIncomingNumber,
+            missedCallCount,
+            onResetMissedCount
+        )
     }
 }
 
@@ -1521,6 +1546,8 @@ fun MainScreenContent(
     userName: String,
     onSmartDial: (String, Boolean, Int?) -> Unit,
     onLogout: () -> Unit,
+    incomingNumber: String?,
+    onConsumeIncomingNumber: () -> Unit,
     missedCallCount: Int,
     onResetMissedCount: () -> Unit
 ) {
@@ -1528,6 +1555,17 @@ fun MainScreenContent(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    LaunchedEffect(incomingNumber) {
+        if (!incomingNumber.isNullOrEmpty()) {
+            // 1. Switch to Dialer Tab
+            navController.navigate(Screen.Dialer.route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     // Move Drawer to the Root
     ModalNavigationDrawer(
@@ -1614,7 +1652,9 @@ fun MainScreenContent(
                 }
                 composable(Screen.Dialer.route) {
                     DialerScreen(
-                        onCallClick = { number, isWork, slot -> onSmartDial(number, isWork, slot) }
+                        onCallClick = { number, isWork, slot -> onSmartDial(number, isWork, slot)},
+                                incomingNumber = incomingNumber,
+                        onConsumeIncomingNumber = onConsumeIncomingNumber
                     )
                 }
                 composable(Screen.Requests.route) {

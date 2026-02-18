@@ -312,15 +312,15 @@ fun ErrorCard(message: String) {
 }
 
 @Composable
-fun ModernDetailRow(icon: ImageVector, label: String, value: String, iconColor: Color) {
+fun ModernDetailRow(icon: ImageVector, label: String?, value: String?, iconColor: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Box(modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(iconColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = iconColor, modifier = Modifier.size(18.sdp()))
         }
         Spacer(modifier = Modifier.width(16.sdp()))
         Column {
-            Text(label, fontSize = 11.ssp(), color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
-            Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 16.ssp(), color = Color.White, fontWeight = FontWeight.Medium)
+            Text(label ?: "N/A", fontSize = 11.ssp(), color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
+            Text(value ?: "N/A", maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 16.ssp(), color = Color.White, fontWeight = FontWeight.Medium)
         }
     }
 }

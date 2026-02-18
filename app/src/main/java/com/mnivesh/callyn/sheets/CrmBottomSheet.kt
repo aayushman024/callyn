@@ -14,6 +14,7 @@ import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,30 +43,37 @@ import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
+import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CrmBottomSheet(
     contact: CrmContact,
+    history: List<RecentCallUiItem>,
+    isLoading: Boolean,
     sheetState: SheetState,
     isDualSim: Boolean,
+    initialHistoryExpanded: Boolean = false,
     onDismiss: () -> Unit,
+    onShowHistory: () -> Unit,
     onCall: (Int?) -> Unit
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     var showShareCodeDialog by remember { mutableStateOf(false) }
+    var isHistoryExpanded by remember { mutableStateOf(initialHistoryExpanded) }
 
     // Number Hiding State
     var isNumberVisible by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val authManager = remember { AuthManager(context) }
-    var isLoading by remember { mutableStateOf(false) }
-    var remainingViews by remember { mutableIntStateOf(0) } // Starts at 0, updated by LaunchedEffect
+    var isViewLimitLoading by remember { mutableStateOf(false) } // Renamed to avoid conflict
+    var remainingViews by remember { mutableIntStateOf(0) }
 
-// Fetch initial status when the bottom sheet opens
+    // Fetch initial status when the bottom sheet opens
     LaunchedEffect(Unit) {
         try {
             val response = ViewLimitManager.getStatus(authManager)
@@ -101,7 +109,6 @@ fun CrmBottomSheet(
             )
         }
     ) {
-        // Changed Column to LazyColumn for full sheet scrolling
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -114,8 +121,6 @@ fun CrmBottomSheet(
                 ) {
                     // Header: WhatsApp + Avatar + Share Button
                     Box(modifier = Modifier.fillMaxWidth()) {
-
-                        // WhatsApp Button (Top Left)
                         IconButton(
                             onClick = {
                                 WhatsAppHelper.openChat(
@@ -139,7 +144,6 @@ fun CrmBottomSheet(
                             )
                         }
 
-                        // Share Code Button (Top Right)
                         IconButton(
                             onClick = { showShareCodeDialog = true },
                             modifier = Modifier
@@ -156,7 +160,6 @@ fun CrmBottomSheet(
                             )
                         }
 
-                        // Avatar (Center)
                         Box(
                             modifier = Modifier
                                 .size(90.sdp())
@@ -234,9 +237,7 @@ fun CrmBottomSheet(
                         ) {
                             Button(
                                 onClick = { onCall(0) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(64.sdp()),
+                                modifier = Modifier.weight(1f).height(64.sdp()),
                                 shape = RoundedCornerShape(20.sdp()),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
                             ) {
@@ -247,9 +248,7 @@ fun CrmBottomSheet(
                             }
                             Button(
                                 onClick = { onCall(1) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(64.sdp()),
+                                modifier = Modifier.weight(1f).height(64.sdp()),
                                 shape = RoundedCornerShape(20.sdp()),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                             ) {
@@ -265,12 +264,7 @@ fun CrmBottomSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(64.sdp())
-                                .shadow(
-                                    8.sdp(),
-                                    RoundedCornerShape(20.sdp()),
-                                    ambientColor = crmColor,
-                                    spotColor = crmColor
-                                ),
+                                .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = crmColor, spotColor = crmColor),
                             shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = crmColor)
                         ) {
@@ -293,21 +287,17 @@ fun CrmBottomSheet(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(16.sdp())) {
-
-                            // --- Masked Mobile Logic ---
+                            // Masked Mobile Logic
                             if (isNumberVisible) {
                                 Box(
                                     modifier = Modifier.combinedClickable(
                                         onClick = {},
                                         onLongClick = {
                                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            val clipboard =
-                                                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            val clip =
-                                                ClipData.newPlainText("Phone Number", contact.number)
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("Phone Number", contact.number)
                                             clipboard.setPrimaryClip(clip)
-                                            Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT)
-                                                .show()
+                                            Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
                                         }
                                     )
                                 ) {
@@ -326,7 +316,6 @@ fun CrmBottomSheet(
                                         .padding(vertical = 4.sdp()),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    // Masked Info
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.weight(1f)
@@ -353,10 +342,7 @@ fun CrmBottomSheet(
                                                 color = Color.White.copy(alpha = 0.5f),
                                                 fontWeight = FontWeight.Medium
                                             )
-                                            val masked =
-                                                if (contact.number.length > 2) "******" + contact.number.takeLast(
-                                                    2
-                                                ) else "******"
+                                            val masked = if (contact.number.length > 2) "******" + contact.number.takeLast(2) else "******"
                                             Text(
                                                 masked,
                                                 fontSize = 16.ssp(),
@@ -366,152 +352,123 @@ fun CrmBottomSheet(
                                         }
                                     }
 
-                                    // View Button
                                     Button(
                                         onClick = {
-                                            if (isLoading) return@Button
+                                            if (isViewLimitLoading) return@Button
                                             coroutineScope.launch {
-                                                isLoading = true
+                                                isViewLimitLoading = true
                                                 try {
-                                                    // 1. Check if user can view
-                                                    val statusRes =
-                                                        ViewLimitManager.getStatus(authManager)
+                                                    val statusRes = ViewLimitManager.getStatus(authManager)
                                                     if (statusRes.isSuccessful) {
                                                         val status = statusRes.body()
-
                                                         if (status?.canView == true) {
-                                                            // 2. Perform the increment on server
-                                                            val incRes = ViewLimitManager.increment(
-                                                                authManager
-                                                            )
+                                                            val incRes = ViewLimitManager.increment(authManager)
                                                             if (incRes.isSuccessful) {
                                                                 isNumberVisible = true
-                                                                remainingViews =
-                                                                    incRes.body()?.remaining ?: 0
-                                                                Toast.makeText(
-                                                                    context,
-                                                                    "Remaining views for today: $remainingViews",
-                                                                    Toast.LENGTH_SHORT
-                                                                ).show()
+                                                                remainingViews = incRes.body()?.remaining ?: 0
+                                                                Toast.makeText(context, "Remaining views for today: $remainingViews", Toast.LENGTH_SHORT).show()
                                                             }
                                                         } else {
-                                                            Toast.makeText(
-                                                                context,
-                                                                "You have exhausted daily view.",
-                                                                Toast.LENGTH_LONG
-                                                            ).show()
+                                                            Toast.makeText(context, "You have exhausted daily view.", Toast.LENGTH_LONG).show()
                                                         }
                                                     } else {
-                                                        Toast.makeText(
-                                                            context,
-                                                            "Server error. Please try again.",
-                                                            Toast.LENGTH_SHORT
-                                                        ).show()
+                                                        Toast.makeText(context, "Server error. Please try again.", Toast.LENGTH_SHORT).show()
                                                     }
                                                 } catch (e: Exception) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "Network error: ${e.message}",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
+                                                    Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
                                                 } finally {
-                                                    isLoading = false
+                                                    isViewLimitLoading = false
                                                 }
                                             }
                                         },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(
-                                                0xFF3B82F6
-                                            )
-                                        ),
-                                        contentPadding = PaddingValues(
-                                            horizontal = 16.sdp(),
-                                            vertical = 0.sdp()
-                                        ),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
+                                        contentPadding = PaddingValues(horizontal = 16.sdp(), vertical = 0.sdp()),
                                         shape = RoundedCornerShape(8.sdp()),
                                         modifier = Modifier.height(36.sdp()),
-                                        enabled = !isLoading // Disable while loading
+                                        enabled = !isViewLimitLoading
                                     ) {
-                                        if (isLoading) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(18.sdp()),
-                                                color = Color.White,
-                                                strokeWidth = 2.sdp()
-                                            )
+                                        if (isViewLimitLoading) {
+                                            CircularProgressIndicator(modifier = Modifier.size(18.sdp()), color = Color.White, strokeWidth = 2.sdp())
                                         } else {
-                                            Text(
-                                                "View ($remainingViews)",
-                                                fontSize = 13.ssp(),
-                                                fontWeight = FontWeight.SemiBold
-                                            )
+                                            Text("View ($remainingViews)", fontSize = 13.ssp(), fontWeight = FontWeight.SemiBold)
                                         }
                                     }
                                 }
                             }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.sdp()),
-                                color = textSecondary.copy(alpha = 0.1f)
-                            )
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
 
-                            // CRM ID
-                            ModernDetailRow(
-                                Icons.Default.ConfirmationNumber,
-                                "CRM ID",
-                                contact.recordId,
-                                Color(0xFFFFB74D)
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.sdp()),
-                                color = textSecondary.copy(alpha = 0.1f)
-                            )
+                            ModernDetailRow(Icons.Default.ConfirmationNumber, "CRM ID", contact.recordId, Color(0xFFFFB74D))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
 
-                            // Custom Multi-line Row for Product/Subject
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                                 Box(
-                                    modifier = Modifier
-                                        .size(36.sdp())
-                                        .clip(RoundedCornerShape(10.sdp()))
-                                        .background(Color(0xFF60A5FA).copy(alpha = 0.15f)),
+                                    modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(Color(0xFF60A5FA).copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(
-                                        Icons.Default.Inventory,
-                                        null,
-                                        tint = Color(0xFF60A5FA),
-                                        modifier = Modifier.size(18.sdp())
-                                    )
+                                    Icon(Icons.Default.Inventory, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(18.sdp()))
                                 }
                                 Spacer(modifier = Modifier.width(16.sdp()))
                                 Column {
-                                    Text(
-                                        "Product / Subject",
-                                        fontSize = 11.ssp(),
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        text = contact.product ?: "N/A",
-                                        fontSize = 16.ssp(),
-                                        color = Color.White,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    Text("Product / Subject", fontSize = 11.ssp(), color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
+                                    Text(text = contact.product ?: "N/A", fontSize = 16.ssp(), color = Color.White, fontWeight = FontWeight.Medium)
                                 }
                             }
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
 
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.sdp()),
-                                color = textSecondary.copy(alpha = 0.1f)
-                            )
+                            ModernDetailRow(Icons.Default.PersonOutline, "Owner", contact.ownerName, Color(0xFFF472B6))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.sdp()))
+            }
 
-                            // Owner
-                            ModernDetailRow(
-                                Icons.Default.PersonOutline,
-                                "Owner",
-                                contact.ownerName,
-                                Color(0xFFF472B6)
+            // --- History Toggle Section ---
+            item {
+                HorizontalDivider(color = textSecondary.copy(alpha = 0.1f))
+                Spacer(modifier = Modifier.height(16.sdp()))
+
+                OutlinedButton(
+                    onClick = {
+                        isHistoryExpanded = !isHistoryExpanded
+                        if (isHistoryExpanded) {
+                            onShowHistory()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(40.sdp()),
+                    border = BorderStroke(1.sdp(), textSecondary.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = textSecondary)
+                ) {
+                    Text(
+                        if (isHistoryExpanded) "Hide Call History" else "Show Call History",
+                        fontSize = 14.ssp()
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.sdp()))
+            }
+
+            // --- History Content ---
+            if (isHistoryExpanded) {
+                if (isLoading) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(80.sdp()),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = textSecondary)
+                        }
+                    }
+                } else {
+                    if (history.isNotEmpty()) {
+                        items(history) { log ->
+                            CallHistoryRow(log)
+                        }
+                    } else {
+                        item {
+                            Text(
+                                "No recent history",
+                                color = textSecondary.copy(alpha = 0.5f),
+                                fontSize = 13.ssp(),
+                                modifier = Modifier.padding(top = 16.sdp(), bottom = 32.sdp())
                             )
                         }
                     }
@@ -534,30 +491,16 @@ fun CrmBottomSheet(
                         shape = RoundedCornerShape(12.sdp()),
                         border = BorderStroke(1.sdp(), crmColor.copy(alpha = 0.3f)),
                         onClick = {
-                            val clipboard =
-                                context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText("CRM ID", contact.recordId)
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "Copied!", Toast.LENGTH_SHORT).show()
                         }
                     ) {
-                        Row(
-                            modifier = Modifier.padding(16.sdp()),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                contact.recordId,
-                                fontSize = 20.ssp(),
-                                fontWeight = FontWeight.Bold,
-                                color = crmColor
-                            )
+                        Row(modifier = Modifier.padding(16.sdp()), verticalAlignment = Alignment.CenterVertically) {
+                            Text(contact.recordId, fontSize = 20.ssp(), fontWeight = FontWeight.Bold, color = crmColor)
                             Spacer(modifier = Modifier.width(12.sdp()))
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                null,
-                                tint = textSecondary,
-                                modifier = Modifier.size(16.sdp())
-                            )
+                            Icon(Icons.Default.ContentCopy, null, tint = textSecondary, modifier = Modifier.size(16.sdp()))
                         }
                     }
                     Spacer(modifier = Modifier.height(16.sdp()))
@@ -569,10 +512,7 @@ fun CrmBottomSheet(
                     onClick = {
                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(
-                                Intent.EXTRA_TEXT,
-                                "CRM Record ID: ${contact.recordId}\nName: ${contact.name}"
-                            )
+                            putExtra(Intent.EXTRA_TEXT, "CRM Record ID: ${contact.recordId}\nName: ${contact.name}")
                         }
                         context.startActivity(Intent.createChooser(shareIntent, "Share CRM ID"))
                     },
@@ -580,12 +520,7 @@ fun CrmBottomSheet(
                 ) { Text("Share") }
             },
             dismissButton = {
-                TextButton(onClick = { showShareCodeDialog = false }) {
-                    Text(
-                        "Close",
-                        color = textSecondary
-                    )
-                }
+                TextButton(onClick = { showShareCodeDialog = false }) { Text("Close", color = textSecondary) }
             }
         )
     }

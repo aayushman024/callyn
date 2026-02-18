@@ -229,6 +229,8 @@ fun ContactsScreen(
     val workContacts by viewModel.localContacts.collectAsState()
     val deviceContacts by viewModel.deviceContacts.collectAsState()
     val contentResolver = LocalContext.current.contentResolver
+    val history by viewModel.contactHistory.collectAsState()
+    val isHistoryLoading by viewModel.isHistoryLoading.collectAsState()
 
     // --- FILTER LOGIC ---
     val myContacts = remember(workContacts, userName, department, userEmail) {
@@ -698,6 +700,7 @@ fun ContactsScreen(
                 onDismiss = {
                     scope.launch { sheetState.hide() }
                         .invokeOnCompletion { selectedWorkContact = null }
+                    viewModel.clearCallHistory()
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -710,6 +713,11 @@ fun ContactsScreen(
                 },
                 isWorkContact = true,
                 isDualSim = isDualSim,
+                history = history,
+                isLoading = isHistoryLoading,
+                onShowHistory = {
+                    viewModel.fetchCallHistory(selectedWorkContact!!.number, isWork = true)
+                },
                 onRequestSubmit = { reason ->
                     if (token != null) {
                         viewModel.submitPersonalRequest(
@@ -733,6 +741,13 @@ fun ContactsScreen(
                 onDismiss = {
                     scope.launch { sheetState.hide() }
                         .invokeOnCompletion { selectedDeviceContact = null }
+                    viewModel.clearCallHistory()
+                },
+                history = history,
+                isLoading = isHistoryLoading,
+                onShowHistory = {
+                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
+                    viewModel.fetchCallHistory(number, isWork = false)
                 },
                 onCall = { number, slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -753,7 +768,14 @@ fun ContactsScreen(
                 onDismiss = {
                     scope.launch { sheetState.hide() }
                         .invokeOnCompletion { selectedEmployeeContact = null }
+                    viewModel.clearCallHistory()
                 },
+                onShowHistory = {
+                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
+                    viewModel.fetchCallHistory(number, isWork = false)
+                },
+                history = history,
+                isLoading = isHistoryLoading,
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                         onContactClick(
@@ -773,7 +795,14 @@ fun ContactsScreen(
                 onDismiss = {
                     scope.launch { sheetState.hide() }
                         .invokeOnCompletion { selectedCrmContact = null }
+                    viewModel.clearCallHistory()
                 },
+                onShowHistory = {
+                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
+                    viewModel.fetchCallHistory(number, isWork = false)
+                },
+                history = history,
+                isLoading = isHistoryLoading,
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                         onContactClick(

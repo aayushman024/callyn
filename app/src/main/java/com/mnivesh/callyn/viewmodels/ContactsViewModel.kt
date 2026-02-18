@@ -24,6 +24,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.provider.CallLog
+import kotlinx.coroutines.flow.first
+import com.mnivesh.callyn.screens.RecentCallUiItem
+import java.util.Date
 
 // UI State for the ContactsScreen
 data class ContactsUiState(
@@ -129,6 +133,124 @@ class ContactsViewModel(
         }
     }
 
+    // --- History State ---
+    private val _contactHistory = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
+    val contactHistory: StateFlow<List<RecentCallUiItem>> = _contactHistory.asStateFlow()
+
+    private val _isHistoryLoading = MutableStateFlow(false)
+    val isHistoryLoading: StateFlow<Boolean> = _isHistoryLoading.asStateFlow()
+
+    // --- Fetch Logic matching RecentCallUiItem types ---
+    fun fetchCallHistory(number: String, isWork: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isHistoryLoading.value = true
+            _contactHistory.value = emptyList()
+
+            val sanitizedQuery = number.takeLast(10).replace(Regex("[^0-9]"), "")
+            val logs = mutableListOf<RecentCallUiItem>()
+
+            if (isWork) {
+                // 1. FETCH FROM WORK DB
+                // We grab the current list from the flow without observing forever
+                val allLogs = repository.allWorkLogs.first()
+
+                val filtered = allLogs.filter {
+                    it.number.replace(Regex("[^0-9]"), "").endsWith(sanitizedQuery)
+                }.sortedByDescending { it.timestamp }
+
+                filtered.forEach { workLog ->
+                    val isIncoming = workLog.direction.equals("incoming", true) || workLog.direction.equals("missed", true)
+                    logs.add(
+                        RecentCallUiItem(
+                            id = "w_hist_${workLog.id}", // String ID
+                            name = workLog.name,
+                            number = workLog.number,
+                            type = "Work", // String Type
+                            date = workLog.timestamp,
+                            rawDuration = workLog.duration,
+                            duration = formatDuration(workLog.duration),
+                            isIncoming = isIncoming,
+                            isMissed = workLog.direction.equals("missed", true),
+                            simSlot = workLog.simSlot
+                        )
+                    )
+                }
+            } else {
+                // 2. FETCH FROM SYSTEM LOGS (PERSONAL)
+                if (ContextCompat.checkSelfPermission(application, android.Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        val cursor = application.contentResolver.query(
+                            CallLog.Calls.CONTENT_URI,
+                            arrayOf(
+                                CallLog.Calls._ID,
+                                CallLog.Calls.NUMBER,
+                                CallLog.Calls.CACHED_NAME,
+                                CallLog.Calls.TYPE,
+                                CallLog.Calls.DATE,
+                                CallLog.Calls.DURATION,
+                                CallLog.Calls.PHONE_ACCOUNT_ID
+                            ),
+                            "${CallLog.Calls.NUMBER} LIKE ?",
+                            arrayOf("%$sanitizedQuery%"),
+                            "${CallLog.Calls.DATE} DESC"
+                        )
+
+                        cursor?.use {
+                            val idIdx = it.getColumnIndex(CallLog.Calls._ID)
+                            val nameIdx = it.getColumnIndex(CallLog.Calls.CACHED_NAME)
+                            val numIdx = it.getColumnIndex(CallLog.Calls.NUMBER)
+                            val typeIdx = it.getColumnIndex(CallLog.Calls.TYPE)
+                            val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
+                            val durIdx = it.getColumnIndex(CallLog.Calls.DURATION)
+                            val accIdx = it.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
+
+                            while (it.moveToNext()) {
+                                val callId = it.getLong(idIdx)
+                                val callType = it.getInt(typeIdx)
+                                val durationSec = it.getLong(durIdx)
+                                val accId = it.getString(accIdx) // Basic SIM ID check
+
+                                val isIncoming = callType == CallLog.Calls.INCOMING_TYPE || callType == CallLog.Calls.MISSED_TYPE
+                                val isMissed = callType == CallLog.Calls.MISSED_TYPE
+
+                                // Simple logic to detect SIM 1/2 from account ID string
+                                val simLabel = if (accId?.contains("2") == true) "SIM 2" else "SIM 1"
+
+                                logs.add(
+                                    RecentCallUiItem(
+                                        id = "s_${it.getLong(dateIdx)}_${callId}", // String ID
+                                        providerId = callId,
+                                        name = it.getString(nameIdx) ?: "Unknown",
+                                        number = it.getString(numIdx) ?: "",
+                                        type = "Personal", // String Type
+                                        date = it.getLong(dateIdx),
+                                        rawDuration = durationSec,
+                                        duration = formatDuration(durationSec),
+                                        isIncoming = isIncoming,
+                                        isMissed = isMissed,
+                                        simSlot = simLabel
+                                    )
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                _contactHistory.value = logs
+                _isHistoryLoading.value = false
+            }
+        }
+    }
+
+    fun clearCallHistory() {
+        _contactHistory.value = emptyList()
+        _isHistoryLoading.value = false
+    }
+
     fun submitPersonalRequest(token: String, contactName: String, userName: String, reason: String) {
         viewModelScope.launch {
             repository.submitPersonalRequest(token, contactName, userName, reason)
@@ -164,6 +286,12 @@ class ContactsViewModel(
     override fun onCleared() {
         application.contentResolver.unregisterContentObserver(contactsObserver)
         super.onCleared()
+    }
+
+    private fun formatDuration(seconds: Long): String {
+        val m = seconds / 60
+        val s = seconds % 60
+        return if (m > 0) "${m}m ${s}s" else "${s}s"
     }
 }
 

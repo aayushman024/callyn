@@ -1,29 +1,20 @@
 package com.mnivesh.callyn.screens
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Environment
+import android.provider.CallLog
 import android.provider.ContactsContract
-import android.provider.Settings
 import android.telephony.SubscriptionManager
 import android.widget.Toast
-import com.mnivesh.callyn.ui.theme.sdp
-import com.mnivesh.callyn.ui.theme.ssp
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -45,48 +36,57 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.DpOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.db.AppContact
+import com.mnivesh.callyn.db.CrmContact // [!code ++]
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
-// Ensure these managers exist in your project or comment them out if testing
-import com.mnivesh.callyn.managers.ViewLimitManager
+import com.mnivesh.callyn.sheets.CrmBottomSheet // [!code ++] 8750756516
 import com.mnivesh.callyn.sheets.ModernBottomSheet
 import com.mnivesh.callyn.sheets.ModernDeviceBottomSheet
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.platform.LocalClipboardManager // [!code ++]
+
 
 // --- SEARCH RESULT SEALED CLASS ---
 sealed class DialerSearchResult {
     data class Work(val contact: AppContact) : DialerSearchResult()
+    data class Crm(val contact: CrmContact) : DialerSearchResult() // [!code ++]
     data class Device(val contact: DeviceContact) : DialerSearchResult()
 }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun DialerScreen(
-    onCallClick: (String, Boolean, Int?) -> Unit
+    onCallClick: (String, Boolean, Int?) -> Unit,
+    incomingNumber: String? = null,
+    onConsumeIncomingNumber: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val application = context.applicationContext as CallynApplication
-
+    val clipboardManager = LocalClipboardManager.current // [!code ++]
     // Auth & Work Contacts Setup
     val authManager = remember { AuthManager(context) }
     val department = remember { authManager.getDepartment() }
-    val workContacts by application.repository.allContacts.collectAsState(initial = emptyList<AppContact>())
+    val workContacts by application.repository.allContacts.collectAsState(initial = emptyList())
+    // [!code ++] CRM Contacts
+    val crmContacts by application.repository.crmContacts.collectAsState(initial = emptyList())
+
+    // [!code ++] Prefs for CRM
+    val sharedPrefs = remember { context.getSharedPreferences("callyn_prefs", Context.MODE_PRIVATE) }
+    val isCrmSearchEnabled = remember { sharedPrefs.getBoolean("pref_crm_search_enabled", false) }
 
     var phoneNumber by remember { mutableStateOf("") }
-
-    // Updated to use Sealed Class
     var searchResults by remember { mutableStateOf<List<DialerSearchResult>>(emptyList()) }
 
     // --- Bottom Sheet States ---
@@ -96,28 +96,138 @@ fun DialerScreen(
     val deviceSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
 
+    // [!code ++] CRM Sheet State
+    val crmSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var selectedCrmContact by remember { mutableStateOf<CrmContact?>(null) }
+
     // SIM sheet (Manual Dial)
     var showSimSheet by remember { mutableStateOf(false) }
     val simSheetState = rememberModalBottomSheetState()
 
-    // Sim Count State
     var isDualSim by remember { mutableStateOf(false) }
 
-    // Check SIM Status
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
-                val activeSims = subManager.activeSubscriptionInfoCount
-                isDualSim = activeSims > 1
-            } catch (e: Exception) {
-                isDualSim = false
+    // --- History State ---
+    var history by remember { mutableStateOf<List<RecentCallUiItem>>(emptyList()) }
+    var isHistoryLoading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(incomingNumber) {
+        if (!incomingNumber.isNullOrEmpty()) {
+            phoneNumber = incomingNumber
+            onConsumeIncomingNumber() // Clear it so it doesn't trigger again
+        }
+    }
+
+    fun formatDuration(seconds: Long): String {
+        val m = seconds / 60
+        val s = seconds % 60
+        return if (m > 0) "${m}m ${s}s" else "${s}s"
+    }
+
+    fun fetchHistory(number: String, isWork: Boolean) {
+        scope.launch(Dispatchers.IO) {
+            isHistoryLoading = true
+            history = emptyList()
+
+            val sanitizedQuery = number.takeLast(10).replace(Regex("[^0-9]"), "")
+            val logs = mutableListOf<RecentCallUiItem>()
+
+            if (isWork) {
+                // --- WORK DB ---
+                val allLogs = application.repository.allWorkLogs.first()
+                val filtered = allLogs.filter {
+                    it.number.replace(Regex("[^0-9]"), "").endsWith(sanitizedQuery)
+                }.sortedByDescending { it.timestamp }
+
+                filtered.forEach { workLog ->
+                    val isIncoming = workLog.direction.equals("incoming", true) || workLog.direction.equals("missed", true)
+                    logs.add(
+                        RecentCallUiItem(
+                            id = "w_hist_${workLog.id}",
+                            name = workLog.name,
+                            number = workLog.number,
+                            type = "Work",
+                            date = workLog.timestamp,
+                            rawDuration = workLog.duration,
+                            duration = formatDuration(workLog.duration),
+                            isIncoming = isIncoming,
+                            isMissed = workLog.direction.equals("missed", true),
+                            simSlot = workLog.simSlot
+                        )
+                    )
+                }
+            } else {
+                // --- SYSTEM LOGS ---
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED) {
+                    try {
+                        val cursor = context.contentResolver.query(
+                            CallLog.Calls.CONTENT_URI,
+                            arrayOf(
+                                CallLog.Calls._ID,
+                                CallLog.Calls.NUMBER,
+                                CallLog.Calls.CACHED_NAME,
+                                CallLog.Calls.TYPE,
+                                CallLog.Calls.DATE,
+                                CallLog.Calls.DURATION,
+                                CallLog.Calls.PHONE_ACCOUNT_ID
+                            ),
+                            "${CallLog.Calls.NUMBER} LIKE ?",
+                            arrayOf("%$sanitizedQuery%"),
+                            "${CallLog.Calls.DATE} DESC"
+                        )
+
+                        cursor?.use {
+                            val idIdx = it.getColumnIndex(CallLog.Calls._ID)
+                            val nameIdx = it.getColumnIndex(CallLog.Calls.CACHED_NAME)
+                            val numIdx = it.getColumnIndex(CallLog.Calls.NUMBER)
+                            val typeIdx = it.getColumnIndex(CallLog.Calls.TYPE)
+                            val dateIdx = it.getColumnIndex(CallLog.Calls.DATE)
+                            val durIdx = it.getColumnIndex(CallLog.Calls.DURATION)
+                            val accIdx = it.getColumnIndex(CallLog.Calls.PHONE_ACCOUNT_ID)
+
+                            while (it.moveToNext()) {
+                                val type = it.getInt(typeIdx)
+                                val durationSec = it.getLong(durIdx)
+                                val accId = it.getString(accIdx)
+                                val simLabel = if (accId?.contains("2") == true) "SIM 2" else "SIM 1"
+
+                                logs.add(
+                                    RecentCallUiItem(
+                                        id = "s_${it.getLong(dateIdx)}_${it.getLong(idIdx)}",
+                                        providerId = it.getLong(idIdx),
+                                        name = it.getString(nameIdx) ?: "Unknown",
+                                        number = it.getString(numIdx) ?: "",
+                                        type = "Personal",
+                                        date = it.getLong(dateIdx),
+                                        rawDuration = durationSec,
+                                        duration = formatDuration(durationSec),
+                                        isIncoming = type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.MISSED_TYPE,
+                                        isMissed = type == CallLog.Calls.MISSED_TYPE,
+                                        simSlot = simLabel
+                                    )
+                                )
+                            }
+                        }
+                    } catch (e: Exception) { e.printStackTrace() }
+                }
+            }
+            withContext(Dispatchers.Main) {
+                history = logs
+                isHistoryLoading = false
             }
         }
     }
 
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+                isDualSim = subManager.activeSubscriptionInfoCount > 1
+            } catch (e: Exception) { isDualSim = false }
+        }
+    }
+
     // ---------------- SEARCH LOGIC ----------------
-    LaunchedEffect(phoneNumber, workContacts) {
+    LaunchedEffect(phoneNumber, workContacts, crmContacts, isCrmSearchEnabled) { // [!code ++] Trigger on CRM changes
         if (phoneNumber.isEmpty()) {
             searchResults = emptyList()
             return@LaunchedEffect
@@ -127,18 +237,16 @@ fun DialerScreen(
             val combinedResults = mutableListOf<DialerSearchResult>()
             val seenNumbers = mutableSetOf<String>()
 
-            // Helper to normalize phone numbers
             fun normalizeNumber(number: String): String {
                 return number.filter { it.isDigit() }.takeLast(10)
             }
 
-            // 1. Search Work Contacts First (If Management)
+            // 1. Search Work Contacts
             if (department == "Management" || department == "IT Desk") {
                 val matches = workContacts.filter {
                     it.name.contains(phoneNumber, ignoreCase = true) ||
                             it.number.contains(phoneNumber)
                 }
-
                 matches.forEach { appContact ->
                     val normalized = normalizeNumber(appContact.number)
                     if (normalized !in seenNumbers) {
@@ -148,10 +256,24 @@ fun DialerScreen(
                 }
             }
 
-            // 2. Search Device Contacts
+            // [!code ++] 2. Search CRM Contacts (If Enabled)
+            if (isCrmSearchEnabled) {
+                val crmMatches = crmContacts.filter {
+                    it.name.contains(phoneNumber, ignoreCase = true) ||
+                            it.number.contains(phoneNumber)
+                }
+                crmMatches.forEach { crmContact ->
+                    val normalized = normalizeNumber(crmContact.number)
+                    if (normalized !in seenNumbers) {
+                        seenNumbers.add(normalized)
+                        combinedResults.add(DialerSearchResult.Crm(crmContact))
+                    }
+                }
+            }
+
+            // 3. Search Device Contacts
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
                 try {
-                    // Added CONTACT_ID projection to support Edit/View actions
                     val cursor = context.contentResolver.query(
                         ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                         arrayOf(
@@ -175,8 +297,6 @@ fun DialerScreen(
 
                             if (normalized !in seenNumbers) {
                                 seenNumbers.add(normalized)
-
-                                // Create DeviceContact object on the fly
                                 val contactId = it.getLong(idIdx).toString()
                                 val name = it.getString(nameIdx) ?: "Unknown"
 
@@ -192,7 +312,6 @@ fun DialerScreen(
                 } catch (_: Exception) { }
             }
 
-            // Update State - limit to top 6 results
             searchResults = combinedResults.take(6)
         }
     }
@@ -201,18 +320,15 @@ fun DialerScreen(
     fun initiateCall() {
         if (phoneNumber.isBlank()) return
 
-        // 1. Check if the typed number exists in the Work Database
         val cleanInput = phoneNumber.filter { it.isDigit() }
-        val isWorkMatch = workContacts.any { contact ->
-            val cleanContact = contact.number.filter { it.isDigit() }
-            if (cleanContact.length >= 10 && cleanInput.length >= 10) {
-                cleanContact.takeLast(10) == cleanInput.takeLast(10)
-            } else {
-                cleanContact == cleanInput
-            }
-        }
 
-        // 2. Logic: If Work Match + Work SIM -> Auto Dial. Else if Dual SIM -> Show Sheet.
+        // Check Work & CRM for matches to decide SIM logic
+        val isWorkMatch = workContacts.any {
+            it.number.filter { c -> c.isDigit() }.endsWith(cleanInput.takeLast(10))
+        } || (isCrmSearchEnabled && crmContacts.any {
+            it.number.filter { c -> c.isDigit() }.endsWith(cleanInput.takeLast(10))
+        })
+
         if (isWorkMatch && SimManager.workSimSlot != null) {
             onCallClick(phoneNumber, true, SimManager.workSimSlot)
         } else if (isDualSim) {
@@ -244,10 +360,11 @@ fun DialerScreen(
                 contentPadding = PaddingValues(bottom = 20.sdp())
             ) {
                 items(searchResults) { result ->
-                    // Extract display data
-                    val (name, number, isWork) = when(result) {
-                        is DialerSearchResult.Work -> Triple(result.contact.name, result.contact.number, true)
-                        is DialerSearchResult.Device -> Triple(result.contact.name, result.contact.numbers.first().number, false)
+                    // [!code ++] Handle CRM type
+                    val (name, number, isWork, isCrm) = when(result) {
+                        is DialerSearchResult.Work -> Triple(result.contact.name, result.contact.number, true).let { Quad(it.first, it.second, it.third, false) }
+                        is DialerSearchResult.Crm -> Triple(result.contact.name, result.contact.number, true).let { Quad(it.first, it.second, it.third, true) }
+                        is DialerSearchResult.Device -> Triple(result.contact.name, result.contact.numbers.first().number, false).let { Quad(it.first, it.second, it.third, false) }
                     }
 
                     Surface(
@@ -255,22 +372,14 @@ fun DialerScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.sdp()))
                             .clickable {
-                                // 1. Save to History
                                 scope.launch(Dispatchers.IO) {
                                     SearchHistoryManager.addSearch(context, number)
                                 }
-
-                                // 2. Open Sheet OR Populate Number
                                 when (result) {
-                                    is DialerSearchResult.Work -> {
-                                        selectedWorkContact = result.contact
-                                    }
-                                    is DialerSearchResult.Device -> {
-                                        selectedDeviceContact = result.contact
-                                    }
+                                    is DialerSearchResult.Work -> selectedWorkContact = result.contact
+                                    is DialerSearchResult.Crm -> selectedCrmContact = result.contact // [!code ++]
+                                    is DialerSearchResult.Device -> selectedDeviceContact = result.contact
                                 }
-
-                                // Optional: Populate the keypad too for consistency
                                 phoneNumber = number
                             },
                         color = if (isWork) Color(0xFF1E293B) else Color(0xFF1A1A1A),
@@ -282,13 +391,14 @@ fun DialerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
 
-                            // Avatar
                             Box(
                                 modifier = Modifier
                                     .size(48.sdp())
                                     .background(
                                         if (isWork) {
-                                            Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))
+                                            // [!code ++] Distinct gradient for CRM? Using same Blue for now, or maybe different shade.
+                                            if (isCrm) Brush.linearGradient(listOf(Color(0xFF2C7BE5), Color(0xFF1E40AF)))
+                                            else Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))
                                         } else {
                                             Brush.linearGradient(listOf(Color(0xFF2D2D2D), Color(0xFF242424)))
                                         },
@@ -320,7 +430,6 @@ fun DialerScreen(
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f, fill = false)
                                     )
-                                    // Work Badge
                                     if (isWork) {
                                         Spacer(modifier = Modifier.width(8.sdp()))
                                         Surface(
@@ -328,7 +437,7 @@ fun DialerScreen(
                                             shape = RoundedCornerShape(6.sdp())
                                         ) {
                                             Text(
-                                                text = "Work",
+                                                text = if (isCrm) "CRM" else "Work", // [!code ++]
                                                 fontSize = 10.ssp(),
                                                 color = Color(0xFF60A5FA),
                                                 fontWeight = FontWeight.Bold,
@@ -356,7 +465,6 @@ fun DialerScreen(
                 }
             }
 
-            // -------- EDITABLE NUMBER DISPLAY --------
             BasicTextField(
                 value = phoneNumber,
                 onValueChange = { phoneNumber = it },
@@ -385,6 +493,27 @@ fun DialerScreen(
                             )
                         }
                         innerTextField()
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .combinedClickable(
+                                    onClick = {
+                                        // Optional: Handle cursor positioning or focus here if needed
+                                    },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        val pastedText = clipboardManager.getText()?.text
+                                        if (!pastedText.isNullOrBlank()) {
+                                            // Sanitize: Keep only valid dialer characters
+                                            val sanitized = pastedText.filter { it.isDigit() || "+*#".contains(it) }
+                                            if (sanitized.isNotEmpty()) {
+                                                phoneNumber += sanitized
+                                                Toast.makeText(context, "Pasted", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                )
+                        )
                     }
                 }
             )
@@ -417,7 +546,6 @@ fun DialerScreen(
 
                 Spacer(Modifier.height(16.sdp()))
 
-                // -------- ACTION ROW --------
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -426,7 +554,6 @@ fun DialerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
 
-                    // Add Contact Button
                     Box(
                         modifier = Modifier
                             .size(64.sdp())
@@ -460,7 +587,6 @@ fun DialerScreen(
                         )
                     }
 
-                    // Call Button
                     Box(
                         modifier = Modifier
                             .size(80.sdp())
@@ -490,7 +616,6 @@ fun DialerScreen(
                         )
                     }
 
-                    // Backspace Button
                     Box(
                         modifier = Modifier
                             .size(64.sdp())
@@ -533,23 +658,49 @@ fun DialerScreen(
             ModernBottomSheet(
                 contact = selectedWorkContact!!,
                 sheetState = workSheetState,
-                onDismiss = { selectedWorkContact = null },
+                onDismiss = { selectedWorkContact = null; history = emptyList() },
                 onCall = { simSlot ->
-                    // Close sheet then call
                     scope.launch { workSheetState.hide() }.invokeOnCompletion {
-                        // Keep a reference to number before nulling
                         val num = selectedWorkContact?.number ?: ""
                         selectedWorkContact = null
+                        history = emptyList()
                         onCallClick(num, true, simSlot)
                     }
                 },
                 isWorkContact = true,
                 isDualSim = isDualSim,
                 department = department,
+                onShowHistory = {
+                    fetchHistory(selectedWorkContact!!.number, isWork = true)
+                },
+                history = history,
+                isLoading = isHistoryLoading,
                 onRequestSubmit = {
-                    // Handle request Logic here
                     Toast.makeText(context, "Request Submitted: $it", Toast.LENGTH_SHORT).show()
                 }
+            )
+        }
+
+        // ---------------- SHEET: CRM CONTACT [!code ++] ----------------
+        if (selectedCrmContact != null) {
+            CrmBottomSheet(
+                contact = selectedCrmContact!!,
+                sheetState = crmSheetState,
+                onDismiss = { selectedCrmContact = null; history = emptyList() },
+                onCall = { simSlot ->
+                    scope.launch { crmSheetState.hide() }.invokeOnCompletion {
+                        val num = selectedCrmContact?.number ?: ""
+                        selectedCrmContact = null
+                        history = emptyList()
+                        onCallClick(num, true, simSlot)
+                    }
+                },
+                isDualSim = isDualSim,
+                onShowHistory = {
+                    fetchHistory(selectedCrmContact!!.number, isWork = true)
+                },
+                history = history,
+                isLoading = isHistoryLoading
             )
         }
 
@@ -559,10 +710,17 @@ fun DialerScreen(
                 contact = selectedDeviceContact!!,
                 sheetState = deviceSheetState,
                 isDualSim = isDualSim,
-                onDismiss = { selectedDeviceContact = null },
+                onDismiss = { selectedDeviceContact = null; history = emptyList()},
+                onShowHistory = {
+                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
+                    fetchHistory(number, isWork = false)
+                },
+                history = history,
+                isLoading = isHistoryLoading,
                 onCall = { number, simSlot ->
                     scope.launch { deviceSheetState.hide() }.invokeOnCompletion {
                         selectedDeviceContact = null
+                        history = emptyList()
                         onCallClick(number, false, simSlot)
                     }
                 }
@@ -577,6 +735,7 @@ fun DialerScreen(
                 containerColor = Color(0xFF1E293B),
                 contentColor = Color.White
             ) {
+                // ... (Keep existing SIM selection UI)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -597,7 +756,6 @@ fun DialerScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.sdp())
                     ) {
-                        // SIM 1 Button
                         Button(
                             onClick = {
                                 scope.launch { simSheetState.hide() }.invokeOnCompletion {
@@ -605,21 +763,13 @@ fun DialerScreen(
                                     onCallClick(phoneNumber, false, 0)
                                 }
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(64.sdp())
-                                .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            modifier = Modifier.weight(1f).height(64.sdp()),
                             shape = RoundedCornerShape(20.sdp()),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
                         ) {
-                            Row(horizontalArrangement = Arrangement.Center) {
-                                Icon(Icons.Default.Phone, contentDescription = null)
-                                Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
-                            }
+                            Text("SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                         }
 
-                        // SIM 2 Button
                         Button(
                             onClick = {
                                 scope.launch { simSheetState.hide() }.invokeOnCompletion {
@@ -627,18 +777,11 @@ fun DialerScreen(
                                     onCallClick(phoneNumber, false, 1)
                                 }
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(64.sdp())
-                                .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            modifier = Modifier.weight(1f).height(64.sdp()),
                             shape = RoundedCornerShape(20.sdp()),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                         ) {
-                            Row(horizontalArrangement = Arrangement.Center) {
-                                Icon(Icons.Default.Phone, contentDescription = null)
-                                Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
-                            }
+                            Text("SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -646,6 +789,9 @@ fun DialerScreen(
         }
     }
 }
+
+// Helper Tuple
+data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 // ---------------- DIALER BUTTON ----------------
 @OptIn(ExperimentalFoundationApi::class)

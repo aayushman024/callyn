@@ -59,6 +59,9 @@ import com.mnivesh.callyn.screens.sheets.RecentDeviceBottomSheet
 import com.mnivesh.callyn.screens.sheets.RecentEmployeeBottomSheet
 import com.mnivesh.callyn.screens.sheets.RecentWorkBottomSheet
 import com.mnivesh.callyn.sheets.CrmBottomSheet
+import com.mnivesh.callyn.sheets.EmployeeBottomSheet
+import com.mnivesh.callyn.sheets.ModernBottomSheet
+import com.mnivesh.callyn.sheets.ModernDeviceBottomSheet
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import com.mnivesh.callyn.viewmodels.CrmUiState
@@ -183,6 +186,23 @@ class RecentCallsViewModel(
 
         // Initial Load
         loadNextPage()
+    }
+
+    // [!code ++] Add 'token' property near other auth properties
+    private val token = authManager.getToken()
+
+    // [!code ++] Add this function (needed for ModernBottomSheet)
+    fun submitPersonalRequest(contactName: String, reason: String) {
+        if (token.isNullOrBlank()) return
+        viewModelScope.launch {
+            repository.submitPersonalRequest(token, contactName, userName, reason)
+        }
+    }
+
+    // [!code ++] Add this function to clear history when sheet closes
+    fun clearCallHistory() {
+        _selectedContactHistory.value = emptyList()
+        _isHistoryLoading.value = false
     }
 
     // [!code replace]
@@ -681,14 +701,17 @@ fun RecentCallsScreen(
 
         // --- Bottom Sheets ---
         if (selectedEmployeeContact != null) {
-            RecentEmployeeBottomSheet(
+            EmployeeBottomSheet(
                 contact = selectedEmployeeContact!!,
                 history = selectedContactHistory,
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
+                initialHistoryExpanded = true,
                 isDualSim = isDualSim,
+                onShowHistory = { viewModel.fetchHistoryForNumber(selectedEmployeeContact!!.number) },
                 onDismiss = {
                     scope.launch { sheetState.hide() }.invokeOnCompletion { selectedEmployeeContact = null }
+                    viewModel.clearCallHistory()
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -700,15 +723,23 @@ fun RecentCallsScreen(
         }
 
         if (selectedWorkContact != null) {
-            RecentWorkBottomSheet(
+            ModernBottomSheet(
                 contact = selectedWorkContact!!,
                 history = selectedContactHistory,
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
+                isWorkContact = true,
+                initialHistoryExpanded = true,
+                department = viewModel.department,
+                onRequestSubmit = { reason ->     // [!code ++] Handle Request
+                    viewModel.submitPersonalRequest(selectedWorkContact!!.name, reason)
+                    Toast.makeText(context, "Request Submitted", Toast.LENGTH_SHORT).show()
+                },
                 isDualSim = isDualSim,
                 onDismiss = {
                     scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null }
                 },
+                onShowHistory = { viewModel.fetchHistoryForNumber(selectedEmployeeContact!!.number) },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                         onCallClick(selectedWorkContact!!.number, true, slotIndex)
@@ -720,14 +751,17 @@ fun RecentCallsScreen(
 
         //CRM Bottom Sheet
         if (selectedCrmContact != null) {
-            RecentCrmBottomSheet(
+            CrmBottomSheet(
                 contact = selectedCrmContact!!,
                 history = selectedContactHistory,
                 isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 isDualSim = isDualSim,
+                initialHistoryExpanded = true,
+                onShowHistory = { viewModel.fetchHistoryForNumber(selectedCrmContact!!.number) },
                 onDismiss = {
                     scope.launch { sheetState.hide() }.invokeOnCompletion { selectedCrmContact = null }
+                    viewModel.clearCallHistory()
                 },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
@@ -739,18 +773,26 @@ fun RecentCallsScreen(
         }
 
         if (selectedDeviceContact != null) {
-            RecentDeviceBottomSheet(
+            ModernDeviceBottomSheet(
                 contact = selectedDeviceContact!!,
-                history = selectedContactHistory,
-                isLoading = isHistoryLoading,
+                history = selectedContactHistory, // [!code ++]
+                isLoading = isHistoryLoading,     // [!code ++]
                 sheetState = sheetState,
                 isDualSim = isDualSim,
-                onDismiss = {
-                    scope.launch { sheetState.hide() }.invokeOnCompletion { selectedDeviceContact = null }
+                initialHistoryExpanded = true,    // [!code ++] Auto-expand
+                onShowHistory = {
+                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
+                    viewModel.fetchHistoryForNumber(number)
                 },
-                onCall = { slotIndex ->
+                onDismiss = {
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
-                        onCallClick(selectedDeviceContact!!.numbers.first().number, false, slotIndex)
+                        selectedDeviceContact = null
+                        viewModel.clearCallHistory() // [!code ++] Clear on close
+                    }
+                },
+                onCall = { number, slotIndex ->
+                    scope.launch { sheetState.hide() }.invokeOnCompletion {
+                        onCallClick(number, false, slotIndex)
                         selectedDeviceContact = null
                     }
                 }
