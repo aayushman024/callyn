@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudUpload
@@ -76,7 +78,7 @@ fun SmsLogsScreen(
                             Text(
                                 "Refreshing...",
                                 color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 12.sp
+                                fontSize = 12.ssp()
                             )
                         }
                     }
@@ -100,9 +102,9 @@ fun SmsLogsScreen(
                     IconButton(onClick = onRefresh, enabled = !isRefreshing) {
                         if (isRefreshing) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(20.sdp()),
                                 color = Color.White,
-                                strokeWidth = 2.dp
+                                strokeWidth = 2.sdp()
                             )
                         } else {
                             Icon(Icons.Default.Refresh, "Refresh", tint = Color.White)
@@ -129,9 +131,9 @@ fun SmsLogsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
+                    .padding(horizontal = 16.sdp()),
+                verticalArrangement = Arrangement.spacedBy(16.sdp()),
+                contentPadding = PaddingValues(bottom = 24.sdp())
             ) {
                 items(logs) { log ->
                     SmsBubbleItem(log, bubbleColor, primaryColor)
@@ -170,13 +172,13 @@ fun WhitelistSenderDialog(
                     label = { Text("Sender Header (e.g. HDFC-T)") },
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.sdp()))
                 // Subtext requirement
                 Text(
                     text = "New messages from this sender will be visible to respective users for 5 mins.",
-                    fontSize = 12.sp,
+                    fontSize = 12.ssp(),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    lineHeight = 16.sp
+                    lineHeight = 16.ssp()
                 )
             }
         },
@@ -222,7 +224,7 @@ fun SmsBubbleItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.sdp()),
         horizontalAlignment = Alignment.Start
     ) {
 
@@ -230,47 +232,47 @@ fun SmsBubbleItem(
         Text(
             text = log.uploadedBy,
             color = primaryColor,
-            fontSize = 13.sp,
+            fontSize = 13.ssp(),
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 8.dp, bottom = 2.dp)
+            modifier = Modifier.padding(start = 8.sdp(), bottom = 2.sdp())
         )
 
         Surface(
             color = bubbleColor,
-            tonalElevation = 2.dp,
+            tonalElevation = 2.sdp(),
             shape = RoundedCornerShape(
-                topStart = 6.dp,
-                topEnd = 16.dp,
-                bottomEnd = 16.dp,
-                bottomStart = 16.dp
+                topStart = 6.sdp(),
+                topEnd = 16.sdp(),
+                bottomEnd = 16.sdp(),
+                bottomStart = 16.sdp()
             ),
             modifier = Modifier
                 .fillMaxWidth(0.92f)
         ) {
 
             Column(
-                modifier = Modifier.padding(14.dp)
+                modifier = Modifier.padding(14.sdp())
             ) {
 
                 // Sender (Secondary Info)
                 Text(
                     text = log.sender,
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
+                    fontSize = 11.ssp(),
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(6.sdp()))
 
                 // Message
                 Text(
                     text = log.message,
                     color = Color.White,
-                    fontSize = 15.sp,
-                    lineHeight = 22.sp
+                    fontSize = 15.ssp(),
+                    lineHeight = 22.ssp()
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(10.sdp()))
 
                 // Footer
                 Row(
@@ -282,7 +284,7 @@ fun SmsBubbleItem(
                     Text(
                         text = formatTimestamp(log.timestamp),
                         color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 10.sp
+                        fontSize = 10.ssp()
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
@@ -292,16 +294,16 @@ fun SmsBubbleItem(
                         Icons.Default.CloudUpload,
                         null,
                         tint = Color.White.copy(alpha = 0.5f),
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(12.sdp())
                     )
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(4.sdp()))
 
                     // Uploaded By (Repeat for emphasis)
                     Text(
                         text = log.uploadedBy,
                         color = primaryColor,
-                        fontSize = 11.sp,
+                        fontSize = 11.ssp(),
                         fontWeight = FontWeight.Medium
                     )
                 }

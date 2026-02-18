@@ -9,6 +9,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -233,7 +235,7 @@ fun CallLogsContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Call History", fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+                title = { Text("Call History", fontWeight = FontWeight.Bold, fontSize = 20.ssp()) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -252,7 +254,7 @@ fun CallLogsContent(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 100.dp)
+            contentPadding = PaddingValues(bottom = 100.sdp())
         ) {
             // Section 1: Filters
             item {
@@ -289,7 +291,7 @@ fun CallLogsContent(
             when (uiState) {
                 is CallLogsUiState.Idle -> item { EmptyStateMessage("Adjust filters to view logs.") }
                 is CallLogsUiState.Loading -> item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(40.sdp()), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = PrimaryColor)
                     }
                 }
@@ -302,8 +304,8 @@ fun CallLogsContent(
                             Text(
                                 text = "Found ${filteredLogs.size} records",
                                 color = SubtextColor,
-                                fontSize = 13.sp,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                                fontSize = 13.ssp(),
+                                modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp())
                             )
                         }
                         items(filteredLogs) { log ->
@@ -344,14 +346,14 @@ fun FilterSection(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .padding(16.sdp())
+            .clip(RoundedCornerShape(24.sdp()))
             .background(CardColor)
-            .padding(16.dp)
+            .padding(16.sdp())
     ) {
         if (isPowerUser) {
-            Text("Filter Logs", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-            Spacer(modifier = Modifier.height(16.dp))
+            Text("Filter Logs", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.ssp())
+            Spacer(modifier = Modifier.height(16.sdp()))
 
             // Username Dropdown
             ExposedDropdownMenuBox(
@@ -366,7 +368,7 @@ fun FilterSection(
                     placeholder = { Text("Select User") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showDropdown) },
                     colors = filterTextFieldColors(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(12.sdp()),
                     modifier = Modifier.menuAnchor().fillMaxWidth()
                 )
                 ExposedDropdownMenu(
@@ -386,17 +388,17 @@ fun FilterSection(
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
         } else {
-            Text("My Log Book", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
-            Spacer(modifier = Modifier.height(16.dp))
+            Text("My Log Book", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.ssp())
+            Spacer(modifier = Modifier.height(16.sdp()))
         }
 
         // --- UPDATED DATE FILTER ROW (START / END) ---
         // [!code focus] Split into two columns
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Start Date Field
@@ -408,13 +410,13 @@ fun FilterSection(
                     label = { Text("From") },
                     placeholder = { Text("Start") },
                     colors = filterTextFieldColors(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(12.sdp()),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.sdp()))
                         .clickable { onStartDateClick() }
                 )
             }
@@ -428,13 +430,13 @@ fun FilterSection(
                     label = { Text("To") },
                     placeholder = { Text("End") },
                     colors = filterTextFieldColors(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(12.sdp()),
                     modifier = Modifier.fillMaxWidth()
                 )
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.sdp()))
                         .clickable { onEndDateClick() }
                 )
             }
@@ -446,31 +448,31 @@ fun FilterSection(
                 }
             } else {
                 // Placeholder to keep alignment if needed, or just standard icon
-                Icon(Icons.Default.DateRange, null, tint = SubtextColor, modifier = Modifier.padding(start = 4.dp))
+                Icon(Icons.Default.DateRange, null, tint = SubtextColor, modifier = Modifier.padding(start = 4.sdp()))
             }
         }
         // -------------------------------
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(6.sdp()))
         Text(
             text = "Leave dates blank to view today's logs",
             color = SubtextColor.copy(alpha = 0.9f),
-            fontSize = 12.sp,
-            modifier = Modifier.padding(start = 4.dp)
+            fontSize = 12.ssp(),
+            modifier = Modifier.padding(start = 4.sdp())
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(20.sdp()))
 
         if (isPowerUser) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp, horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.sdp(), horizontal = 8.sdp()),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
                     text = "Show calls with notes",
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = 15.ssp(),
                     fontWeight = FontWeight.Medium
                 )
                 Switch(
@@ -484,18 +486,18 @@ fun FilterSection(
                     )
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
         }
 
         Button(
             onClick = onSearch,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().height(50.sdp()),
             colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.sdp())
         ) {
-            Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Show Results", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Icon(Icons.Default.Search, null, modifier = Modifier.size(20.sdp()))
+            Spacer(modifier = Modifier.width(8.sdp()))
+            Text("Show Results", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -509,60 +511,60 @@ fun ManagementCallLogCard(log: CallLogResponse) {
     var showNotesPopup by remember { mutableStateOf(false) }
 
     val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
-    val cardBorder = if (isPersonal) BorderStroke(1.dp, PersonalBorder.copy(alpha = 0.3f)) else null
+    val cardBorder = if (isPersonal) BorderStroke(1.sdp(), PersonalBorder.copy(alpha = 0.3f)) else null
 
     val (typeIcon, typeColor, typeBg) = getCallTypeStyles(log.type)
     val dateDisplay = remember(log.timestamp) { formatPrettyDate(log.timestamp) }
 
     Card(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()).fillMaxWidth(),
+        shape = RoundedCornerShape(16.sdp()),
         colors = CardDefaults.cardColors(containerColor = cardBackground),
         border = cardBorder,
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(2.sdp())
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.sdp())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier.size(48.dp).clip(CircleShape).background(typeBg),
+                    modifier = Modifier.size(48.sdp()).clip(CircleShape).background(typeBg),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(24.dp))
+                    Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(24.sdp()))
                 }
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.sdp()))
 
                 Column(modifier = Modifier.weight(1f)) {
                     if (isPersonal) {
-                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.ssp())
                     } else {
                         Text(
                             text = log.callerName.ifBlank { "Unknown Caller" },
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
+                            fontSize = 16.ssp(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(6.sdp()))
 
                         // Tags
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.sdp())) {
                             renderTags(log)
 
                             // View Notes Button (Popup)
                             if (hasNotes) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(8.sdp()))
                                 Box {
                                     OutlinedButton(
                                         onClick = { showNotesPopup = true },
-                                        border = BorderStroke(1.dp, NotesHighVisColor),
+                                        border = BorderStroke(1.sdp(), NotesHighVisColor),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = NotesHighVisColor),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                                        modifier = Modifier.height(32.dp)
+                                        contentPadding = PaddingValues(horizontal = 12.sdp(), vertical = 0.sdp()),
+                                        modifier = Modifier.height(32.sdp())
                                     ) {
-                                        Icon(Icons.Default.ChatBubbleOutline, null, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("View Notes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Icon(Icons.Default.ChatBubbleOutline, null, modifier = Modifier.size(14.sdp()))
+                                        Spacer(modifier = Modifier.width(6.sdp()))
+                                        Text("View Notes", fontSize = 12.ssp(), fontWeight = FontWeight.Bold)
                                     }
                                     if (showNotesPopup) {
                                         NotesPopup(log.notes ?: "", onDismiss = { showNotesPopup = false })
@@ -574,13 +576,13 @@ fun ManagementCallLogCard(log: CallLogResponse) {
                 }
                 // Date Top Right
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(dateDisplay, color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(dateDisplay, color = SubtextColor, fontSize = 12.ssp(), fontWeight = FontWeight.Medium)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
             HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
 
             // Bottom Row (Includes Uploaded By)
             Row(
@@ -589,15 +591,15 @@ fun ManagementCallLogCard(log: CallLogResponse) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CloudUpload, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(Icons.Default.CloudUpload, null, tint = SubtextColor, modifier = Modifier.size(14.sdp()))
+                    Spacer(modifier = Modifier.width(6.sdp()))
                     Text(
                         text = log.uploadedBy ?: "System",
                         color = SubtextColor,
-                        fontSize = 12.sp,
+                        fontSize = 12.ssp(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 100.dp)
+                        modifier = Modifier.widthIn(max = 100.sdp())
                     )
                 }
                 SimAndDurationRow(log)
@@ -612,79 +614,79 @@ fun StandardCallLogCard(log: CallLogResponse) {
     val hasNotes = !log.notes.isNullOrBlank()
 
     val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
-    val cardBorder = if (isPersonal) BorderStroke(1.dp, PersonalBorder.copy(alpha = 0.3f)) else null
+    val cardBorder = if (isPersonal) BorderStroke(1.sdp(), PersonalBorder.copy(alpha = 0.3f)) else null
     val (typeIcon, typeColor, typeBg) = getCallTypeStyles(log.type)
     val dateDisplay = remember(log.timestamp) { formatPrettyDate(log.timestamp) }
 
     Card(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()).fillMaxWidth(),
+        shape = RoundedCornerShape(16.sdp()),
         colors = CardDefaults.cardColors(containerColor = cardBackground),
         border = cardBorder,
-        elevation = CardDefaults.cardElevation(2.dp)
+        elevation = CardDefaults.cardElevation(2.sdp())
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.sdp())) {
             // Top Section
             Row(verticalAlignment = Alignment.Top) {
                 Box(
-                    modifier = Modifier.size(48.dp).clip(CircleShape).background(typeBg),
+                    modifier = Modifier.size(48.sdp()).clip(CircleShape).background(typeBg),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(24.dp))
+                    Icon(typeIcon, null, tint = typeColor, modifier = Modifier.size(24.sdp()))
                 }
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.sdp()))
 
                 Column(modifier = Modifier.weight(1f)) {
                     if (isPersonal) {
-                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.ssp())
                     } else {
                         Text(
                             text = log.callerName.ifBlank { "Unknown Caller" },
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
+                            fontSize = 16.ssp(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Spacer(modifier = Modifier.height(6.sdp()))
+                        Column(verticalArrangement = Arrangement.spacedBy(6.sdp())) {
                             renderTags(log)
                         }
                     }
                 }
-                Text(dateDisplay, color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                Text(dateDisplay, color = SubtextColor, fontSize = 12.ssp(), fontWeight = FontWeight.Medium)
             }
 
             // Inline Notes (Standard Feature)
             if (hasNotes) {
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.sdp()))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF334155).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                        .border(1.dp, NotesHighVisColor.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                        .padding(12.dp)
+                        .background(Color(0xFF334155).copy(alpha = 0.5f), RoundedCornerShape(8.sdp()))
+                        .border(1.sdp(), NotesHighVisColor.copy(alpha = 0.3f), RoundedCornerShape(8.sdp()))
+                        .padding(12.sdp())
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ChatBubbleOutline, null, tint = NotesHighVisColor, modifier = Modifier.size(12.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("CALL NOTES", color = NotesHighVisColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.ChatBubbleOutline, null, tint = NotesHighVisColor, modifier = Modifier.size(12.sdp()))
+                            Spacer(modifier = Modifier.width(6.sdp()))
+                            Text("CALL NOTES", color = NotesHighVisColor, fontSize = 11.ssp(), fontWeight = FontWeight.Bold)
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(4.sdp()))
                         Text(
                             text = log.notes ?: "",
                             color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp
+                            fontSize = 14.ssp(),
+                            lineHeight = 20.ssp()
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
             HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
 
             // Bottom Row (No Uploaded By)
             Row(
@@ -719,15 +721,15 @@ fun renderTags(log: CallLogResponse) {
 @Composable
 fun SimAndDurationRow(log: CallLogResponse) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Default.SimCard, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(log.simslot ?: "SIM ?", color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Icon(Icons.Default.SimCard, null, tint = SubtextColor, modifier = Modifier.size(14.sdp()))
+        Spacer(modifier = Modifier.width(4.sdp()))
+        Text(log.simslot ?: "SIM ?", color = SubtextColor, fontSize = 12.ssp(), fontWeight = FontWeight.Medium)
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(16.sdp()))
 
-        Icon(Icons.Rounded.Schedule, null, tint = SubtextColor, modifier = Modifier.size(14.dp))
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(formatDuration(log.duration), color = SubtextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Icon(Icons.Rounded.Schedule, null, tint = SubtextColor, modifier = Modifier.size(14.sdp()))
+        Spacer(modifier = Modifier.width(4.sdp()))
+        Text(formatDuration(log.duration), color = SubtextColor, fontSize = 12.ssp(), fontWeight = FontWeight.Medium)
     }
 }
 
@@ -754,21 +756,21 @@ fun NotesPopup(notes: String, onDismiss: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Column(
                 modifier = Modifier
-                    .width(280.dp)
-                    .heightIn(min = 100.dp, max = 300.dp)
-                    .shadow(12.dp, RoundedCornerShape(12.dp))
-                    .background(NotesPopupBg, RoundedCornerShape(12.dp))
-                    .padding(16.dp)
+                    .width(280.sdp())
+                    .heightIn(min = 100.sdp(), max = 300.sdp())
+                    .shadow(12.sdp(), RoundedCornerShape(12.sdp()))
+                    .background(NotesPopupBg, RoundedCornerShape(12.sdp()))
+                    .padding(16.sdp())
             ) {
-                Text("Call Notes:", color = NotesHighVisColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 1.dp)
-                Spacer(modifier = Modifier.height(10.dp))
+                Text("Call Notes:", color = NotesHighVisColor, fontSize = 14.ssp(), fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.sdp()))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 1.sdp())
+                Spacer(modifier = Modifier.height(10.sdp()))
                 Box(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(notes, color = Color.White.copy(alpha = 0.95f), fontSize = 13.sp, lineHeight = 20.sp)
+                    Text(notes, color = Color.White.copy(alpha = 0.95f), fontSize = 13.ssp(), lineHeight = 20.ssp())
                 }
             }
-            Canvas(modifier = Modifier.size(width = 20.dp, height = 10.dp)) {
+            Canvas(modifier = Modifier.size(width = 20.sdp(), height = 10.sdp())) {
                 val path = Path().apply {
                     moveTo(0f, 0f)
                     lineTo(size.width, 0f)
@@ -794,27 +796,27 @@ fun getCallTypeStyles(type: String): Triple<ImageVector, Color, Color> {
 fun ContainerPill(text: String, color: Color, bgColor: Color) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(4.sdp()))
             .background(bgColor)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = 8.sdp(), vertical = 3.sdp())
     ) {
-        Text(text = text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = text, color = color, fontSize = 11.ssp(), fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 fun EmptyStateMessage(msg: String, isError: Boolean = false) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 60.sdp()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             if(isError) Icons.Default.Warning else Icons.Default.Search,
             null,
             tint = if(isError) ErrorColor else SubtextColor,
-            modifier = Modifier.size(48.dp)
+            modifier = Modifier.size(48.sdp())
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.sdp()))
         Text(msg, color = SubtextColor)
     }
 }
@@ -863,7 +865,7 @@ fun QuickFilterRow(
     onFilterSelected: (String) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.sdp(), vertical = 8.sdp()),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         FilterChip(Icons.Default.AllInbox, selectedFilter == "All", PrimaryColor) { onFilterSelected("All") }
@@ -884,11 +886,11 @@ fun FilterChip(icon: ImageVector, isSelected: Boolean, selectedColor: Color, onC
         modifier = Modifier
             .clip(CircleShape)
             .background(backgroundColor)
-            .border(1.dp, borderColor, CircleShape)
+            .border(1.sdp(), borderColor, CircleShape)
             .clickable { onClick() }
-            .padding(12.dp),
+            .padding(12.sdp()),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = contentColor, modifier = Modifier.size(24.dp))
+        Icon(icon, null, tint = contentColor, modifier = Modifier.size(24.sdp()))
     }
 }

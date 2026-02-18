@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BusinessCenter
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,8 +43,8 @@ fun WorkTabContent(
     } else {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(top = 8.sdp(), bottom = 100.sdp()),
+            verticalArrangement = Arrangement.spacedBy(12.sdp())
         ) {
             items(filteredWorkContacts, key = { it.id }) { contact ->
                 ModernWorkContactCard(contact, onClick = { onContactSelected(contact) })

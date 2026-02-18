@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,30 +86,30 @@ fun UserDetailsScreen(
                 is UserDetailsUiState.Error -> {
                     // Error Content (Kept same as original)
                     Column(
-                        modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                        modifier = Modifier.align(Alignment.Center).padding(24.sdp()),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(80.dp)
+                                .size(80.sdp())
                                 .clip(CircleShape)
                                 .background(Color(0xFFEF4444).copy(alpha = 0.1f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.CloudOff, null, tint = Color(0xFFEF4444), modifier = Modifier.size(40.dp))
+                            Icon(Icons.Default.CloudOff, null, tint = Color(0xFFEF4444), modifier = Modifier.size(40.sdp()))
                         }
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Text(uiState.message, color = Text1, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                        Spacer(modifier = Modifier.height(32.dp))
+                        Spacer(modifier = Modifier.height(24.sdp()))
+                        Text(uiState.message, color = Text1, fontSize = 16.ssp(), fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(32.sdp()))
                         Button(
                             onClick = { authManager.getToken()?.let { viewModel.fetchUserDetails(it) } },
                             colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(48.dp)
+                            shape = RoundedCornerShape(12.sdp()),
+                            modifier = Modifier.height(48.sdp())
                         ) {
-                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Retry Connection", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(20.sdp()))
+                            Spacer(modifier = Modifier.width(8.sdp()))
+                            Text("Retry Connection", fontSize = 15.ssp(), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -132,7 +134,7 @@ fun UserDetailsScreen(
                     }
 
                     LazyColumn(
-                        contentPadding = PaddingValues(bottom = 100.dp),
+                        contentPadding = PaddingValues(bottom = 100.sdp()),
                         modifier = Modifier.fillMaxSize()
                     ) {
                         // 1. Header (Scrolls Away)
@@ -140,25 +142,25 @@ fun UserDetailsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 12.dp, top = 16.dp, bottom = 16.dp),
+                                    .padding(start = 12.sdp(), top = 16.sdp(), bottom = 16.sdp()),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = onNavigateBack) {
                                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                                 }
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(4.sdp()))
                                 Icon(
                                     Icons.Default.Group,
                                     contentDescription = null,
                                     tint = AccentBlue,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(24.sdp())
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(8.sdp()))
                                 Text(
                                     "Team Status",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 22.sp
+                                    fontSize = 22.ssp()
                                 )
                             }
                         }
@@ -172,9 +174,9 @@ fun UserDetailsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                                        .padding(horizontal = 20.sdp(), vertical = 12.sdp()),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
                                 ) {
                                     // Search Bar (Takes available width)
                                     SearchBar(
@@ -189,19 +191,19 @@ fun UserDetailsScreen(
                                         Surface(
                                             onClick = { showSortMenu = true },
                                             color = CardBg,
-                                            shape = RoundedCornerShape(12.dp),
-                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
-                                            modifier = Modifier.height(50.dp) // Match search bar height roughly
+                                            shape = RoundedCornerShape(12.sdp()),
+                                            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f)),
+                                            modifier = Modifier.height(50.sdp()) // Match search bar height roughly
                                         ) {
                                             Box(
                                                 contentAlignment = Alignment.Center,
-                                                modifier = Modifier.padding(horizontal = 12.dp)
+                                                modifier = Modifier.padding(horizontal = 12.sdp())
                                             ) {
                                                 Icon(
                                                     Icons.Default.Sort,
                                                     contentDescription = "Sort",
                                                     tint = AccentBlue,
-                                                    modifier = Modifier.size(22.dp)
+                                                    modifier = Modifier.size(22.sdp())
                                                 )
                                             }
                                         }
@@ -232,9 +234,9 @@ fun UserDetailsScreen(
                             Text(
                                 text = "${filteredAndSortedUsers.size} user${if (filteredAndSortedUsers.size != 1) "s" else ""}",
                                 color = Text2,
-                                fontSize = 14.sp,
+                                fontSize = 14.ssp(),
                                 fontWeight = FontWeight.Medium,
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                                modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp())
                             )
                         }
 
@@ -244,17 +246,17 @@ fun UserDetailsScreen(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 40.dp),
+                                        .padding(top = 40.sdp()),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    Icon(Icons.Default.SearchOff, null, tint = AccentBlue, modifier = Modifier.size(40.dp))
-                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Icon(Icons.Default.SearchOff, null, tint = AccentBlue, modifier = Modifier.size(40.sdp()))
+                                    Spacer(modifier = Modifier.height(16.sdp()))
                                     Text("No results found", color = Text1)
                                 }
                             }
                         } else {
                             items(filteredAndSortedUsers) { user ->
-                                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp)) {
+                                Box(modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 10.sdp())) {
                                     UserDetailCard(user)
                                 }
                             }
@@ -275,22 +277,22 @@ fun SearchBar(
 ) {
     Surface(
         modifier = modifier, // Use passed modifier here
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(16.sdp()),
         color = CardBg,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 14.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 Icons.Default.Search,
                 contentDescription = "Search",
                 tint = AccentBlue,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(22.sdp())
             )
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(12.sdp()))
 
             BasicTextField(
                 value = query,
@@ -298,7 +300,7 @@ fun SearchBar(
                 modifier = Modifier.weight(1f),
                 textStyle = TextStyle(
                     color = Text1,
-                    fontSize = 15.sp,
+                    fontSize = 15.ssp(),
                     fontWeight = FontWeight.Medium
                 ),
                 cursorBrush = SolidColor(AccentBlue),
@@ -308,7 +310,7 @@ fun SearchBar(
                         Text(
                             "Search...",
                             color = Text2,
-                            fontSize = 15.sp,
+                            fontSize = 15.ssp(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -320,13 +322,13 @@ fun SearchBar(
             if (query.isNotEmpty()) {
                 IconButton(
                     onClick = onClear,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.sdp())
                 ) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Clear",
                         tint = Text2,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.sdp())
                     )
                 }
             }
@@ -344,13 +346,13 @@ fun UserDetailCard(user: UserDetailsResponse) {
     }
 
     Card(
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.sdp()),
+        shape = RoundedCornerShape(24.sdp()),
         colors = CardDefaults.cardColors(containerColor = CardBg),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+        border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f)),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
+        Column(modifier = Modifier.padding(24.sdp())) {
 
             // --- HEADER SECTION ---
             Row(
@@ -360,7 +362,7 @@ fun UserDetailCard(user: UserDetailsResponse) {
                 // Avatar with gradient
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(64.sdp())
                         .background(
                             Brush.linearGradient(
                                 listOf(AccentBlue, AccentPurple)
@@ -373,34 +375,34 @@ fun UserDetailCard(user: UserDetailsResponse) {
                         text = user.username.firstOrNull()?.uppercase() ?: "?",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 26.sp
+                        fontSize = 26.ssp()
                     )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.sdp()))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = user.username,
                         color = Text1,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
+                        fontSize = 20.ssp()
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.sdp()))
 
                     // Department Pill
                     Surface(
                         color = DeptChipBg,
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(20.sdp()),
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 6.sdp()),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = user.department ?: "General",
                                 color = Color(0xFFCBD5E1),
-                                fontSize = 13.sp,
+                                fontSize = 13.ssp(),
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -408,12 +410,12 @@ fun UserDetailCard(user: UserDetailsResponse) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.sdp()))
 
             // --- STATUS PILLS ROW ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.sdp())
             ) {
                 // Version Pill (smaller, fixed size)
                 StatusPill(
@@ -432,16 +434,16 @@ fun UserDetailCard(user: UserDetailsResponse) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.sdp()))
 
             // --- INFO SECTION ---
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.sdp()))
                     .background(Color(0xFF0F172A).copy(alpha = 0.6f))
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(16.sdp()),
+                verticalArrangement = Arrangement.spacedBy(12.sdp())
             ) {
                 // OS Info
                 InfoRowModern(
@@ -453,7 +455,7 @@ fun UserDetailCard(user: UserDetailsResponse) {
 
                 HorizontalDivider(
                     color = Color.White.copy(alpha = 0.05f),
-                    thickness = 1.dp
+                    thickness = 1.sdp()
                 )
 
                 // Last Seen
@@ -478,24 +480,24 @@ fun StatusPill(
     Surface(
         modifier = modifier,
         color = color.copy(alpha = 0.15f),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+        shape = RoundedCornerShape(12.sdp()),
+        border = BorderStroke(1.sdp(), color.copy(alpha = 0.3f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 10.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 icon,
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(18.sdp())
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(8.sdp()))
             Text(
                 text = label,
                 color = Text1,
-                fontSize = 13.sp,
+                fontSize = 13.ssp(),
                 fontWeight = FontWeight.SemiBold,
                 overflow = TextOverflow.Ellipsis
             )
@@ -516,8 +518,8 @@ fun InfoRowModern(
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .size(36.sdp())
+                .clip(RoundedCornerShape(10.sdp()))
                 .background(color.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
@@ -525,25 +527,25 @@ fun InfoRowModern(
                 icon,
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.sdp())
             )
         }
 
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(12.sdp()))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
                 color = Text2,
-                fontSize = 11.sp,
+                fontSize = 11.ssp(),
                 fontWeight = FontWeight.Medium,
                 letterSpacing = 0.5.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(2.sdp()))
             Text(
                 text = value,
                 color = Text1,
-                fontSize = 14.sp,
+                fontSize = 14.ssp(),
                 fontWeight = FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis

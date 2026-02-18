@@ -10,8 +10,8 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
 import android.os.Bundle
+import android.os.Environment
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.Settings
@@ -25,21 +25,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -57,12 +45,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -84,21 +71,26 @@ import com.airbnb.lottie.compose.rememberLottieComposition
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.VersionResponse
 import com.mnivesh.callyn.api.version
-import com.mnivesh.callyn.db.AppContact
-import com.mnivesh.callyn.managers.AuthManager
-import com.mnivesh.callyn.ui.EmployeeDirectoryScreen
-import com.mnivesh.callyn.ui.UpdateDialog
-import com.mnivesh.callyn.ui.ZohoLoginScreen
-import com.mnivesh.callyn.ui.theme.CallynTheme
-import com.mnivesh.callyn.managers.VersionManager
-import com.mnivesh.callyn.screens.ContactsScreen
+import com.mnivesh.callyn.components.AppDrawer
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.DeviceNumber
+import com.mnivesh.callyn.db.AppContact
+import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.SimManager
+import com.mnivesh.callyn.managers.VersionManager
+import com.mnivesh.callyn.screens.ContactsScreen
 import com.mnivesh.callyn.screens.DialerScreen
 import com.mnivesh.callyn.screens.PersonalRequestsScreen
 import com.mnivesh.callyn.screens.RecentCallsScreen
 import com.mnivesh.callyn.screens.ShowCallLogsScreen
 import com.mnivesh.callyn.screens.UserDetailsScreen
+import com.mnivesh.callyn.ui.EmployeeDirectoryScreen
+import com.mnivesh.callyn.ui.UpdateDialog
+import com.mnivesh.callyn.ui.ZohoLoginScreen
+import com.mnivesh.callyn.ui.theme.CallynTheme
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.viewmodels.SmsViewModel
 import com.mnivesh.callyn.workers.SyncUserDetailsWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -106,23 +98,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.unit.times
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.mnivesh.callyn.components.AppDrawer
-import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.viewmodels.SmsViewModel
 
 private const val TAG = "MainActivity"
 
@@ -164,11 +139,8 @@ class MainActivity : ComponentActivity() {
         Manifest.permission.READ_PHONE_STATE,
         Manifest.permission.READ_CALL_LOG,
         Manifest.permission.WRITE_CALL_LOG,
-        Manifest.permission.RECORD_AUDIO
     ).apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            add(Manifest.permission.READ_PHONE_NUMBERS)
-        }
+        add(Manifest.permission.READ_PHONE_NUMBERS)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -208,17 +180,17 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    private val smsPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
-            val allGranted = results.values.all { it }
-            if (allGranted) {
-                Log.d("SMS_DEBUG", "SMS Permissions GRANTED by user.")
-                checkLoginState() // Re-check to proceed
-            } else {
-                Log.e("SMS_DEBUG", "SMS Permissions DENIED by user.")
-                Toast.makeText(this, "SMS Permission is required for Management features", Toast.LENGTH_LONG).show()
-            }
-        }
+//    private val smsPermissionLauncher =
+//        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+//            val allGranted = results.values.all { it }
+//            if (allGranted) {
+//                Log.d("SMS_DEBUG", "SMS Permissions GRANTED by user.")
+//                checkLoginState() // Re-check to proceed
+//            } else {
+//                Log.e("SMS_DEBUG", "SMS Permissions DENIED by user.")
+//                Toast.makeText(this, "SMS Permission is required for Management features", Toast.LENGTH_LONG).show()
+//            }
+//        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -469,33 +441,33 @@ class MainActivity : ComponentActivity() {
 
             if (!token.isNullOrBlank() && !userName.isNullOrBlank()) {
 
-                if (department == "IT Desk") {
-                    val hasReceiveSms = ContextCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.RECEIVE_SMS
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    val hasReadSms = ContextCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.READ_SMS
-                    ) == PackageManager.PERMISSION_GRANTED
-
-                    if (!hasReceiveSms || !hasReadSms) {
-                        Log.d("SMS_DEBUG", "Management user missing SMS permissions. Requesting now...")
-                        if (!isPermissionRequestInProgress) {
-                            isPermissionRequestInProgress = true
-                            smsPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.RECEIVE_SMS,
-                                    Manifest.permission.READ_SMS
-                                )
-                            )
-                        }
-                        return@launch // Stop here, wait for callback
-                    } else {
-                        Log.d("SMS_DEBUG", "SMS Permissions already present.")
-                    }
-                }
+//                if (department == "IT Desk") {
+//                    val hasReceiveSms = ContextCompat.checkSelfPermission(
+//                        this@MainActivity,
+//                        Manifest.permission.RECEIVE_SMS
+//                    ) == PackageManager.PERMISSION_GRANTED
+//
+//                    val hasReadSms = ContextCompat.checkSelfPermission(
+//                        this@MainActivity,
+//                        Manifest.permission.READ_SMS
+//                    ) == PackageManager.PERMISSION_GRANTED
+//
+//                    if (!hasReceiveSms || !hasReadSms) {
+//                        Log.d("SMS_DEBUG", "Management user missing SMS permissions. Requesting now...")
+//                        if (!isPermissionRequestInProgress) {
+//                            isPermissionRequestInProgress = true
+//                            smsPermissionLauncher.launch(
+//                                arrayOf(
+//                                    Manifest.permission.RECEIVE_SMS,
+//                                    Manifest.permission.READ_SMS
+//                                )
+//                            )
+//                        }
+//                        return@launch // Stop here, wait for callback
+//                    } else {
+//                        Log.d("SMS_DEBUG", "SMS Permissions already present.")
+//                    }
+//                }
 
                 // [!code ++] Skip check for Management/IT Desk
                 if (department != "Management" && department != "IT Desk") {
@@ -913,19 +885,19 @@ fun LoadingDetailsScreen(
         LottieAnimation(
             composition = composition,
             progress = { progress },
-            modifier = Modifier.size(200.dp)
+            modifier = Modifier.size(200.sdp())
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(24.sdp()))
         Text(
             "Loading your details...",
-            fontSize = 18.sp,
+            fontSize = 18.ssp(),
             fontWeight = FontWeight.Medium,
             color = ComposeColor.White
         )
 
         if (!arePermissionsGranted) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("Waiting for permissions...", fontSize = 14.sp, color = ComposeColor(0xFFF59E0B))
+            Spacer(modifier = Modifier.height(8.sdp()))
+            Text("Waiting for permissions...", fontSize = 14.ssp(), color = ComposeColor(0xFFF59E0B))
         }
     }
 }
@@ -987,28 +959,28 @@ fun ConflictResolutionScreen(
                     .fillMaxWidth()
                     .background(ComposeColor(0xFF0F172A))
                     .systemBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 26.dp)
+                    .padding(horizontal = 24.sdp(), vertical = 26.sdp())
             ) {
                 Text(
                     "Resolve Conflicts",
-                    fontSize = 25.sp,
+                    fontSize = 25.ssp(),
                     fontWeight = FontWeight.Bold,
                     color = ComposeColor.White
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.sdp()))
                 Text(
                     "We found ${conflicts.size} contacts that are already assigned by your company. Please delete the duplicates from your device.",
-                    fontSize = 14.sp,
+                    fontSize = 14.ssp(),
                     color = ComposeColor.White.copy(alpha = 0.7f)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.sdp()))
 
                 TextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp)),
+                        .clip(RoundedCornerShape(16.sdp())),
                     placeholder = {
                         Text(
                             "Search conflicts...",
@@ -1049,7 +1021,7 @@ fun ConflictResolutionScreen(
         bottomBar = {
             Column(modifier = Modifier
                 .background(ComposeColor(0xFF0F172A))
-                .padding(44.dp)) {
+                .padding(44.sdp())) {
                 Button(
                     onClick = {
                         if (ContextCompat.checkSelfPermission(
@@ -1064,17 +1036,17 @@ fun ConflictResolutionScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
+                        .height(56.sdp()),
+                    shape = RoundedCornerShape(16.sdp()),
                     colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFFEF4444))
                 ) {
                     if (isDeleting) CircularProgressIndicator(
                         color = ComposeColor.White,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(24.sdp())
                     )
                     else Text(
                         "Delete All (${conflicts.size})",
-                        fontSize = 16.sp,
+                        fontSize = 16.ssp(),
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -1084,9 +1056,9 @@ fun ConflictResolutionScreen(
         LazyColumn(
             modifier = Modifier
                 .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp)
+                .padding(horizontal = 16.sdp()),
+            verticalArrangement = Arrangement.spacedBy(12.sdp()),
+            contentPadding = PaddingValues(top = 16.sdp(), bottom = 16.sdp())
         ) {
             items(filteredConflicts) { contact ->
                 ModernConflictItem(
@@ -1113,7 +1085,7 @@ fun ConflictResolutionScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(40.dp),
+                            .padding(40.sdp()),
                         contentAlignment = Alignment.Center
                     ) {
                         Text("No conflicts found", color = ComposeColor.White.copy(alpha = 0.5f))
@@ -1200,8 +1172,8 @@ fun ConflictResolutionScreen(
                         Text(
                             "Why should ${contactNameForRequest ?: "this contact"} remain on your device as Personal?",
                             color = ComposeColor.White.copy(alpha = 0.8f),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(bottom = 16.dp)
+                            fontSize = 14.ssp(),
+                            modifier = Modifier.padding(bottom = 16.sdp())
                         )
                         OutlinedTextField(
                             value = requestReason,
@@ -1222,7 +1194,7 @@ fun ConflictResolutionScreen(
                                 focusedContainerColor = ComposeColor.White.copy(alpha = 0.05f),
                                 unfocusedContainerColor = ComposeColor.White.copy(alpha = 0.05f)
                             ),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(12.sdp()),
                             minLines = 3,
                             maxLines = 5
                         )
@@ -1380,16 +1352,16 @@ fun ModernConflictItem(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(16.sdp()),
         colors = CardDefaults.cardColors(containerColor = ComposeColor.White.copy(alpha = 0.08f))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(12.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(48.sdp())
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
@@ -1404,24 +1376,24 @@ fun ModernConflictItem(
                 Text(
                     initials,
                     color = ComposeColor.White,
-                    fontSize = 18.sp,
+                    fontSize = 18.ssp(),
                     fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(16.sdp()))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     contact.name,
                     color = ComposeColor.White,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp
+                    fontSize = 16.ssp()
                 )
 //                Text(
 //                    contact.numbers.firstOrNull()?.number ?: "",
 //                    color = ComposeColor.White.copy(alpha = 0.6f),
-//                    fontSize = 13.sp
+//                    fontSize = 13.ssp()
 //                )
             }
 
@@ -1431,14 +1403,14 @@ fun ModernConflictItem(
                     contentDescription = "Sent",
                     tint = ComposeColor(0xFF10B981),
                     modifier = Modifier
-                        .size(28.dp)
-                        .padding(end = 8.dp)
+                        .size(28.sdp())
+                        .padding(end = 8.sdp())
                 )
             } else {
                 OutlinedButton(
                     onClick = onRequestClick,
                     border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
+                        1.sdp(),
                         ComposeColor(0xFF60A5FA)
                     ),
                     colors = ButtonDefaults.outlinedButtonColors(
@@ -1446,10 +1418,10 @@ fun ModernConflictItem(
                             0xFF60A5FA
                         )
                     ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    shape = RoundedCornerShape(8.sdp()),
+                    contentPadding = PaddingValues(horizontal = 12.sdp(), vertical = 8.sdp())
                 ) {
-                    Text("Mark Personal", fontSize = 11.sp)
+                    Text("Mark Personal", fontSize = 11.ssp())
                 }
             }
         }
@@ -1684,7 +1656,7 @@ fun BottomNavigationBar(navController: NavController, missedCallCount: Int) {
     NavigationBar(
         containerColor = ComposeColor(0xFF080C17),
         contentColor = ComposeColor.White,
-        tonalElevation = 0.dp
+        tonalElevation = 0.sdp()
     ) {
         items.forEach { screen ->
             val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
@@ -1770,17 +1742,17 @@ private fun SetupScreen(
     ) {
         Column(
             modifier = Modifier
-                .padding(24.dp)
+                .padding(24.sdp())
                 .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 "Callyn",
-                fontSize = 48.sp,
+                fontSize = 48.ssp(),
                 fontWeight = FontWeight.Bold,
                 color = ComposeColor.White
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.sdp()))
 
             if (!isDefaultDialer) {
                 SetupCard(
@@ -1791,7 +1763,7 @@ private fun SetupScreen(
                 )
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.sdp()))
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1800,42 +1772,42 @@ private fun SetupScreen(
                                 alpha = 0.15f
                             )
                         ),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(16.sdp()),
                         border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
+                            1.sdp(),
                             ComposeColor(0xFFF59E0B).copy(alpha = 0.5f)
                         )
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(16.sdp()),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Warning,
                                 contentDescription = "Warning",
                                 tint = ComposeColor(0xFFF59E0B),
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.sdp())
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.sdp()))
                             Text(
                                 text = "Blocked by Android?",
                                 fontWeight = FontWeight.Bold,
                                 color = ComposeColor(0xFFF59E0B),
-                                fontSize = 16.sp
+                                fontSize = 16.ssp()
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.sdp()))
                             Text(
                                 text = "If you are unable to set this app as default, you likely need to allow 'Restricted Settings'.",
                                 color = ComposeColor.White.copy(alpha = 0.8f),
-                                fontSize = 13.sp,
+                                fontSize = 13.ssp(),
                                 textAlign = TextAlign.Center
                             )
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.sdp()))
 
                             OutlinedButton(
                                 onClick = openAppSettings,
                                 border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
+                                    1.sdp(),
                                     ComposeColor(0xFFF59E0B)
                                 ),
                                 colors = ButtonDefaults.outlinedButtonColors(
@@ -1848,13 +1820,13 @@ private fun SetupScreen(
                                 Text("1. Open Settings")
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(8.sdp()))
                             Text(
                                 text = "Go to 'App Info' > Tap 3 dots (top right) > 'Allow restricted settings', then come back here.",
                                 color = ComposeColor.White.copy(alpha = 0.6f),
-                                fontSize = 11.sp,
+                                fontSize = 11.ssp(),
                                 textAlign = TextAlign.Center,
-                                lineHeight = 14.sp
+                                lineHeight = 14.ssp()
                             )
                         }
                     }
@@ -1901,31 +1873,31 @@ private fun SetupCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(ComposeColor(0xFF12223E).copy(alpha = 0.6f), RoundedCornerShape(24.dp))
-            .padding(24.dp),
+            .background(ComposeColor(0xFF12223E).copy(alpha = 0.6f), RoundedCornerShape(24.sdp()))
+            .padding(24.sdp()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             title,
-            fontSize = 22.sp,
+            fontSize = 22.ssp(),
             fontWeight = FontWeight.Bold,
             color = ComposeColor.White,
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.padding(bottom = 12.sdp())
         )
         Text(
             text = description,
-            fontSize = 14.sp,
+            fontSize = 14.ssp(),
             color = ComposeColor.White.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 24.dp)
+            modifier = Modifier.padding(bottom = 24.sdp())
         )
         Button(
             onClick = onClick,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(12.sdp()),
             colors = ButtonDefaults.buttonColors(containerColor = ComposeColor(0xFF3B82F6))
         ) {
-            Text(buttonText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(buttonText, fontSize = 16.ssp(), fontWeight = FontWeight.SemiBold)
         }
     }
 }

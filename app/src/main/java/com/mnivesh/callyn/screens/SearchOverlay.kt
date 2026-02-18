@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -269,30 +271,30 @@ fun SearchOverlay(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset(x = 0, y = filtersOffsetPx.roundToInt()) },
-                contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = bottomPadding),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(top = topPadding, start = 16.sdp(), end = 16.sdp(), bottom = bottomPadding),
+                verticalArrangement = Arrangement.spacedBy(12.sdp())
             ) {
                 if (internalQuery.isBlank()) {
                     if (searchHistory.isNotEmpty()) {
                         item {
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 15.dp),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 15.sdp()),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Recent Searches", color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text("Clear All", color = Color(0xFF60A5FA), fontSize = 12.sp, modifier = Modifier.clickable { SearchHistoryManager.clearHistory(context); searchHistory = emptyList() })
+                                Text("Recent Searches", color = Color.White.copy(alpha = 0.5f), fontSize = 13.ssp(), fontWeight = FontWeight.Bold)
+                                Text("Clear All", color = Color(0xFF60A5FA), fontSize = 12.ssp(), modifier = Modifier.clickable { SearchHistoryManager.clearHistory(context); searchHistory = emptyList() })
                             }
                         }
                         items(searchHistory) { historyItem ->
                             Row(
-                                modifier = Modifier.fillMaxWidth().clickable { internalQuery = historyItem }.padding(vertical = 12.dp),
+                                modifier = Modifier.fillMaxWidth().clickable { internalQuery = historyItem }.padding(vertical = 12.sdp()),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.History, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(historyItem, color = Color.White.copy(alpha = 0.9f), fontSize = 16.sp, modifier = Modifier.weight(1f))
-                                Icon(Icons.Default.NorthWest, null, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.History, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(20.sdp()))
+                                Spacer(modifier = Modifier.width(16.sdp()))
+                                Text(historyItem, color = Color.White.copy(alpha = 0.9f), fontSize = 16.ssp(), modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.NorthWest, null, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(16.sdp()))
                             }
                         }
                     }
@@ -309,7 +311,7 @@ fun SearchOverlay(
                             // [!code ++] Header Row with Dropdown
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(bottom = 8.dp)
+                                modifier = Modifier.padding(bottom = 8.sdp())
                             ) {
                                 // Call Logs Pill
                                 Surface(
@@ -319,34 +321,34 @@ fun SearchOverlay(
                                     Text(
                                         text = "Call Logs",
                                         color = Color(0xFF3B82F6),
-                                        fontSize = 11.sp,
+                                        fontSize = 11.ssp(),
                                         fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        modifier = Modifier.padding(horizontal = 10.sdp(), vertical = 4.sdp())
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(12.sdp()))
 
                                 // [!code ++] Call Type Dropdown
                                 Box {
                                     Row(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(RoundedCornerShape(8.sdp()))
                                             .clickable { isCallFilterExpanded = true }
-                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                            .padding(horizontal = 4.sdp(), vertical = 2.sdp()),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text = callTypeFilter,
                                             color = Color.White.copy(alpha = 0.7f),
-                                            fontSize = 12.sp,
+                                            fontSize = 12.ssp(),
                                             fontWeight = FontWeight.Medium
                                         )
                                         Icon(
                                             imageVector = Icons.Default.ArrowDropDown,
                                             contentDescription = null,
                                             tint = Color.White.copy(alpha = 0.7f),
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(18.sdp())
                                         )
                                     }
 
@@ -354,7 +356,7 @@ fun SearchOverlay(
                                         expanded = isCallFilterExpanded,
                                         onDismissRequest = { isCallFilterExpanded = false },
                                         containerColor = Color(0xFF1E293B),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                                        border = androidx.compose.foundation.BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f))
                                     ) {
                                         listOf("All Calls", "Incoming", "Outgoing", "Missed").forEach { type ->
                                             DropdownMenuItem(
@@ -389,12 +391,12 @@ fun SearchOverlay(
                             )
                         }
                         item {
-                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.sdp()))
                         }
                     }
 
                     if (combinedResults.isEmpty() && debouncedQuery.isNotEmpty() && filteredCallLogs.isEmpty()) {
-                        item { Box(modifier = Modifier.fillMaxWidth().padding(top = 50.dp), contentAlignment = Alignment.Center) { Text("No matching results", color = Color.White.copy(alpha = 0.5f)) } }
+                        item { Box(modifier = Modifier.fillMaxWidth().padding(top = 50.sdp()), contentAlignment = Alignment.Center) { Text("No matching results", color = Color.White.copy(alpha = 0.5f)) } }
                     }
 
                     // All Contacts Header Pill
@@ -403,14 +405,14 @@ fun SearchOverlay(
                             Surface(
                                 color = Color.White.copy(alpha = 0.1f),
                                 shape = RoundedCornerShape(50),
-                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                modifier = Modifier.padding(top = 8.sdp(), bottom = 4.sdp())
                             ) {
                                 Text(
                                     text = "All Contacts",
                                     color = Color.White.copy(alpha = 0.8f),
-                                    fontSize = 11.sp,
+                                    fontSize = 11.ssp(),
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.sdp(), vertical = 4.sdp())
                                 )
                             }
                         }
@@ -456,12 +458,12 @@ fun SearchOverlay(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(bottom = 12.dp)
+                        .padding(bottom = 12.sdp())
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, start = 8.dp, end = 16.dp),
+                            .padding(top = 8.sdp(), start = 8.sdp(), end = 16.sdp()),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onDismiss) {
@@ -473,7 +475,7 @@ fun SearchOverlay(
                             modifier = Modifier
                                 .weight(1f)
                                 .focusRequester(searchFocusRequester)
-                                .clip(RoundedCornerShape(16.dp)),
+                                .clip(RoundedCornerShape(16.sdp())),
                             placeholder = { Text("Search...", color = Color.White.copy(alpha = 0.5f)) },
                             singleLine = true,
                             colors = TextFieldDefaults.colors(
@@ -512,7 +514,7 @@ fun SearchOverlay(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 4.dp),
+                            .padding(horizontal = 24.sdp(), vertical = 4.sdp()),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Start
                     ) {
@@ -520,12 +522,12 @@ fun SearchOverlay(
                             painter = painterResource(id = R.drawable.zoho_logo),
                             contentDescription = null,
                             tint = Color.Unspecified,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(28.sdp())
                         )
                         Text(
                             "  Include CRM data   ",
                             color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 13.sp
+                            fontSize = 13.ssp()
                         )
                         Switch(
                             checked = searchCrmData,
@@ -555,10 +557,10 @@ fun SearchOverlay(
                     FlowRow(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 2.dp)
+                            .padding(horizontal = 16.sdp(), vertical = 2.sdp())
                             .animateContentSize(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(1.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.sdp()),
+                        verticalArrangement = Arrangement.spacedBy(1.sdp())
                     ) {
                         filterOptions.forEach { filter ->
                             val isSelected = selectedFilter == filter
@@ -581,7 +583,7 @@ fun SearchOverlay(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.sdp()))
                     HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
                 }
             }

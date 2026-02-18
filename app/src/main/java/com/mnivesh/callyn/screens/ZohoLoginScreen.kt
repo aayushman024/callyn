@@ -50,6 +50,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mnivesh.callyn.R
+import com.mnivesh.callyn.api.version
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.delay
 
 @Composable
@@ -74,7 +77,7 @@ fun ZohoLoginScreen() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .padding(24.sdp())
                 .systemBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -91,17 +94,17 @@ fun ZohoLoginScreen() {
                         painter = painterResource(id = R.drawable.mnivesh),
                         contentDescription = "mNivesh",
                         modifier = Modifier
-                            .size(200.dp)
-                            .padding(bottom = 8.dp),
+                            .size(200.sdp())
+                            .padding(bottom = 8.sdp()),
                         contentScale = ContentScale.Fit
                     )
 
-                    Spacer(modifier = Modifier.height(44.dp))
+                    Spacer(modifier = Modifier.height(44.sdp()))
 
                     // 2. "Welcome to"
                     Text(
                         text = "Welcome to",
-                        fontSize = 20.sp,
+                        fontSize = 20.ssp(),
                         fontWeight = FontWeight.W300,
                         color = Color.White.copy(alpha = 0.9f),
                         letterSpacing = 0.5.sp
@@ -111,35 +114,35 @@ fun ZohoLoginScreen() {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(top = 18.dp)
+                        modifier = Modifier.padding(top = 18.sdp())
                     ) {
                         Text(
                             text = "Callyn",
-                            fontSize = 40.sp,
+                            fontSize = 40.ssp(),
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.ssp()
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.sdp()))
                         Image(
                             painter = painterResource(id = R.drawable.callyn),
                             contentDescription = "Callyn Logo",
-                            modifier = Modifier.size(36.dp),
+                            modifier = Modifier.size(36.sdp()),
                             contentScale = ContentScale.Fit
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(36.dp))
+                    Spacer(modifier = Modifier.height(36.sdp()))
 
                     Text(
                         text = "Sync your personal and work calls.\nSeamlessly integrated.",
-                        fontSize = 16.sp,
+                        fontSize = 16.ssp(),
                         color = Color.White.copy(alpha = 0.6f),
-                        lineHeight = 24.sp,
+                        lineHeight = 24.ssp(),
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                    Spacer(modifier = Modifier.height(32.sdp()))
 
                     // -- Feature Carousel --
                     FeatureCarousel()
@@ -170,22 +173,58 @@ fun ZohoLoginScreen() {
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.sdp()))
 
-                    // --- New "Learn More" Button ---
-                    Text(
-                        text = "Learn more about permissions",
-                        color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showPermissionsDialog = true }
-                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
+                    // --- Footer: Permissions & Version ---
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Interactive Permissions Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.sdp()))
+                                .clickable { showPermissionsDialog = true }
+                                .padding(vertical = 8.sdp(), horizontal = 12.sdp())
+                                .background(Color.White.copy(alpha = 0.05f)) // Subtle background
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Shield,
+                                contentDescription = "Permissions Info",
+                                tint = Color(0xFFA5B4FC), // Soft Indigo tint
+                                modifier = Modifier.size(14.sdp())
+                            )
+                            Spacer(modifier = Modifier.width(8.sdp()))
+                            Text(
+                                text = "Permissions",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 12.ssp(),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Separator Dot
+                        Text(
+                            text = "•",
+                            color = Color.White.copy(alpha = 0.2f),
+                            fontSize = 12.ssp(),
+                            modifier = Modifier.padding(horizontal = 12.sdp())
+                        )
+
+                        // Static Version Text
+                        Text(
+                            text = "v$version",
+                            color = Color.White.copy(alpha = 0.4f),
+                            fontSize = 12.ssp(),
+                            fontWeight = FontWeight.Normal,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
         }
     }
 }
@@ -200,42 +239,42 @@ fun PermissionsDialog(onDismiss: () -> Unit) {
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF0F172A).copy(alpha = 0.95f), // Dark background matching theme
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+                .padding(16.sdp()),
+            shape = RoundedCornerShape(24.sdp()),
+            color = Color(0xFF0F172A), // Dark background matching theme
+            border = androidx.compose.foundation.BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f))
         ) {
             Column(
                 modifier = Modifier
-                    .padding(24.dp)
+                    .padding(24.sdp())
                     .fillMaxSize()
             ) {
                 // Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 24.dp)
+                    modifier = Modifier.padding(bottom = 24.sdp())
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Shield,
                         contentDescription = null,
                         tint = Color(0xFF818CF8), // Indigo
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(28.sdp())
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(12.sdp()))
                     Text(
                         text = "App Permissions",
-                        fontSize = 22.sp,
+                        fontSize = 22.ssp(),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
                 Text(
-                    text = "Callyn requires specific permissions to function as your default dialer and business tool. All data is securely synced only with internal company servers.",
+                    text = "Callyn requires specific permissions to function as your default dialer and business tool. Only required data is securely synced with internal company servers.",
                     color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(bottom = 24.dp)
+                    fontSize = 14.ssp(),
+                    lineHeight = 20.ssp(),
+                    modifier = Modifier.padding(bottom = 24.sdp())
                 )
 
                 // Scrollable List
@@ -243,34 +282,62 @@ fun PermissionsDialog(onDismiss: () -> Unit) {
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(16.sdp())
                 ) {
+
                     PermissionItem(
                         icon = Icons.Rounded.Call,
-                        title = "Phone & Calls",
-                        desc = "Core functionality to make, receive, and manage calls. Allows Callyn to act as your default dialer."
+                        title = "Phone & Call Management",
+                        desc = "Required to make, receive, and manage calls. Enables Callyn to function as your default dialer and handle incoming and ongoing calls."
                     )
+
                     PermissionItem(
                         icon = Icons.Rounded.Contacts,
-                        title = "Contacts",
-                        desc = "Required to display caller names and manage your business contact list effectively."
+                        title = "Contacts Access",
+                        desc = "Allows displaying caller names, managing contacts, and syncing business directory information securely."
                     )
+
                     PermissionItem(
                         icon = Icons.Rounded.Notifications,
                         title = "Notifications",
-                        desc = "Ensures you never miss an important incoming call, even when the screen is locked."
+                        desc = "Ensures incoming call alerts, missed calls, and important communication notifications are delivered reliably."
+                    )
+
+                    PermissionItem(
+                        icon = Icons.Rounded.SdStorage,
+                        title = "Call History Access",
+                        desc = "Allows viewing and managing call logs to provide complete call history, analytics, and business communication tracking."
+                    )
+
+                    PermissionItem(
+                        icon = Icons.Rounded.Mic,
+                        title = "Foreground & Call Services",
+                        desc = "Allows the app to run call services reliably in the background, ensuring calls continue even when the app is not open."
+                    )
+
+                    PermissionItem(
+                        icon = Icons.Rounded.Shield,
+                        title = "Device & Call State",
+                        desc = "Required to detect call status, SIM state, and ensure proper routing and management of business and personal calls."
+                    )
+
+                    PermissionItem(
+                        icon = Icons.Rounded.Notifications,
+                        title = "Full-Screen Call Interface",
+                        desc = "Allows displaying the incoming call screen over the lock screen so you can answer calls immediately."
                     )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+
+                Spacer(modifier = Modifier.height(24.sdp()))
 
                 // Close Button
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
+                        .height(50.sdp()),
+                    shape = RoundedCornerShape(12.sdp()),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF334155),
                         contentColor = Color.White
@@ -288,32 +355,32 @@ fun PermissionItem(icon: ImageVector, title: String, desc: String) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(40.sdp())
                 .background(Color(0xFF1E293B), CircleShape)
-                .border(1.dp, Color.White.copy(alpha = 0.1f), CircleShape),
+                .border(1.sdp(), Color.White.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = Color(0xFFA5B4FC), // Indigo-200
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.sdp())
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(16.sdp()))
         Column {
             Text(
                 text = title,
-                fontSize = 16.sp,
+                fontSize = 16.ssp(),
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.sdp()))
             Text(
                 text = desc,
-                fontSize = 13.sp,
+                fontSize = 13.ssp(),
                 color = Color.White.copy(alpha = 0.6f),
-                lineHeight = 18.sp
+                lineHeight = 18.ssp()
             )
         }
     }
@@ -357,13 +424,13 @@ fun FeatureCarousel() {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 24.dp),
-            pageSpacing = 16.dp
+            contentPadding = PaddingValues(horizontal = 24.sdp()),
+            pageSpacing = 16.sdp()
         ) { page ->
             GlassFeatureCard(feature = features[page])
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.sdp()))
 
         // Indicators
         Row(
@@ -373,13 +440,13 @@ fun FeatureCarousel() {
             repeat(features.size) { iteration ->
                 val isSelected = pagerState.currentPage == iteration
                 // Animate size/color
-                val width by animateDpAsState(if (isSelected) 24.dp else 8.dp, label = "width")
+                val width by animateDpAsState(if (isSelected) 24.sdp() else 8.sdp(), label = "width")
                 val color by animateColorAsState(if (isSelected) Color.White else Color.White.copy(alpha = 0.3f), label = "color")
 
                 Box(
                     modifier = Modifier
-                        .padding(4.dp)
-                        .height(8.dp)
+                        .padding(4.sdp())
+                        .height(8.sdp())
                         .width(width)
                         .background(color, CircleShape)
                 )
@@ -393,11 +460,11 @@ fun GlassFeatureCard(feature: AppFeature) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(110.dp) // Fixed height to prevent jumping
-            .clip(RoundedCornerShape(20.dp))
+            .height(110.sdp()) // Fixed height to prevent jumping
+            .clip(RoundedCornerShape(20.sdp()))
             .background(Color(0xFF1E293B).copy(alpha = 0.4f)) // Slightly darker glass
-            .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-            .padding(20.dp),
+            .border(1.sdp(), Color.White.copy(alpha = 0.1f), RoundedCornerShape(20.sdp()))
+            .padding(20.sdp()),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -406,17 +473,17 @@ fun GlassFeatureCard(feature: AppFeature) {
         ) {
             Text(
                 text = feature.title,
-                fontSize = 16.sp,
+                fontSize = 16.ssp(),
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFA5B4FC) // Indigo-200 tint
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.sdp()))
             Text(
                 text = feature.description,
-                fontSize = 13.sp,
+                fontSize = 13.ssp(),
                 color = Color.White.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center,
-                lineHeight = 18.sp,
+                lineHeight = 18.ssp(),
                 maxLines = 2
             )
         }
@@ -438,7 +505,9 @@ fun AnimatedGradientBackground() {
     )
 
     BoxWithConstraints(
-        modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A))
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F172A))
     ) {
         val screenWidth = maxWidth
         val screenHeight = maxHeight
@@ -453,17 +522,31 @@ fun AnimatedGradientBackground() {
             modifier = Modifier
                 .align(Alignment.Center)
                 .offset(x = xOffset1, y = yOffset1)
-                .size(400.dp)
-                .background(Brush.radialGradient(colors = listOf(Color(0xFF4F46E5).copy(alpha = 0.3f), Color.Transparent)))
-                .blur(60.dp)
+                .size(400.sdp())
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFF4F46E5).copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .blur(60.sdp())
         )
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
                 .offset(x = xOffset2, y = yOffset2)
-                .size(400.dp)
-                .background(Brush.radialGradient(colors = listOf(Color(0xFFEC4899).copy(alpha = 0.25f), Color.Transparent)))
-                .blur(70.dp)
+                .size(400.sdp())
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFEC4899).copy(alpha = 0.25f),
+                            Color.Transparent
+                        )
+                    )
+                )
+                .blur(70.sdp())
         )
     }
 }
@@ -478,16 +561,19 @@ fun LoginButton(isLoading: Boolean, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(18.sdp()),
         colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-        modifier = Modifier.fillMaxWidth().height(60.dp).scale(scale)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.sdp())
+            .scale(scale)
     ) {
         if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF0F172A), strokeWidth = 2.5.dp)
+            CircularProgressIndicator(modifier = Modifier.size(20.sdp()), color = Color(0xFF0F172A), strokeWidth = 2.5.dp)
         } else {
-            Image(painter = painterResource(id = R.drawable.mnivesh_store), contentDescription = null, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(text = "Login using mNivesh Store", fontSize = 17.sp, color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+            Image(painter = painterResource(id = R.drawable.mnivesh_store), contentDescription = null, modifier = Modifier.size(32.sdp()))
+            Spacer(modifier = Modifier.width(12.sdp()))
+            Text(text = "Login using mNivesh Store", fontSize = 17.ssp(), color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
         }
     }
 }

@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.Settings
 import android.util.Log
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -91,9 +93,9 @@ fun CrmBottomSheet(
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .width(48.dp)
-                    .height(6.dp)
+                    .padding(vertical = 16.sdp())
+                    .width(48.sdp())
+                    .height(6.sdp())
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.2f))
             )
@@ -103,7 +105,7 @@ fun CrmBottomSheet(
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 24.dp)
+            contentPadding = PaddingValues(horizontal = 24.sdp(), vertical = 24.sdp())
         ) {
             item {
                 Column(
@@ -126,14 +128,14 @@ fun CrmBottomSheet(
                             ),
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .size(40.dp)
+                                .size(40.sdp())
                                 .clip(CircleShape)
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.whatsapp),
                                 contentDescription = "WhatsApp",
                                 tint = Color.Unspecified,
-                                modifier = Modifier.size(35.dp)
+                                modifier = Modifier.size(35.sdp())
                             )
                         }
 
@@ -142,7 +144,7 @@ fun CrmBottomSheet(
                             onClick = { showShareCodeDialog = true },
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .size(40.dp)
+                                .size(40.sdp())
                                 .clip(CircleShape)
                                 .background(surfaceColor)
                         ) {
@@ -150,17 +152,17 @@ fun CrmBottomSheet(
                                 Icons.Default.QrCode,
                                 "Share CRM ID",
                                 tint = crmColor,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.sdp())
                             )
                         }
 
                         // Avatar (Center)
                         Box(
                             modifier = Modifier
-                                .size(90.dp)
+                                .size(90.sdp())
                                 .align(Alignment.Center)
-                                .border(4.dp, backgroundColor, CircleShape)
-                                .padding(4.dp)
+                                .border(4.sdp(), backgroundColor, CircleShape)
+                                .padding(4.sdp())
                                 .clip(CircleShape)
                                 .background(
                                     Brush.verticalGradient(
@@ -175,52 +177,52 @@ fun CrmBottomSheet(
                             Text(
                                 getInitials(contact.name),
                                 color = Color.White,
-                                fontSize = 32.sp,
+                                fontSize = 32.ssp(),
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(16.sdp()))
 
                     // Name
                     Text(
                         text = contact.name,
-                        fontSize = 24.sp,
+                        fontSize = 24.ssp(),
                         fontWeight = FontWeight.Bold,
                         color = textPrimary,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.sdp()))
 
                     // Module Pill
                     Surface(
                         color = crmColor.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(50),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.height(32.sdp())
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                            modifier = Modifier.padding(horizontal = 16.sdp())
                         ) {
                             Icon(
                                 Icons.Default.Dns,
                                 null,
                                 tint = crmColor,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(14.sdp())
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(6.sdp()))
                             Text(
                                 text = contact.module.replace("_", " "),
-                                fontSize = 13.sp,
+                                fontSize = 13.ssp(),
                                 color = crmColor,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.sdp()))
 
                     // Call Buttons
                     val showDualButtons = isDualSim && SimManager.workSimSlot == null
@@ -228,32 +230,32 @@ fun CrmBottomSheet(
                     if (showDualButtons) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.sdp())
                         ) {
                             Button(
                                 onClick = { onCall(0) },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(64.dp),
-                                shape = RoundedCornerShape(20.dp),
+                                    .height(64.sdp()),
+                                shape = RoundedCornerShape(20.sdp()),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Default.Phone, null)
-                                    Text("SIM 1", fontSize = 12.sp)
+                                    Text("SIM 1", fontSize = 12.ssp())
                                 }
                             }
                             Button(
                                 onClick = { onCall(1) },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(64.dp),
-                                shape = RoundedCornerShape(20.dp),
+                                    .height(64.sdp()),
+                                shape = RoundedCornerShape(20.sdp()),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Default.Phone, null)
-                                    Text("SIM 2", fontSize = 12.sp)
+                                    Text("SIM 2", fontSize = 12.ssp())
                                 }
                             }
                         }
@@ -262,35 +264,35 @@ fun CrmBottomSheet(
                             onClick = { onCall(null) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(64.dp)
+                                .height(64.sdp())
                                 .shadow(
-                                    8.dp,
-                                    RoundedCornerShape(20.dp),
+                                    8.sdp(),
+                                    RoundedCornerShape(20.sdp()),
                                     ambientColor = crmColor,
                                     spotColor = crmColor
                                 ),
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = crmColor)
                         ) {
-                            Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                            Spacer(modifier = Modifier.width(12.sdp()))
                             Text(
                                 text = if (SimManager.workSimSlot != null) "Call (Work SIM)" else "Call",
-                                fontSize = 18.sp,
+                                fontSize = 18.ssp(),
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(24.sdp()))
 
                     // Info Card
                     Surface(
                         color = surfaceColor,
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(20.sdp()),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(16.sdp())) {
 
                             // --- Masked Mobile Logic ---
                             if (isNumberVisible) {
@@ -321,7 +323,7 @@ fun CrmBottomSheet(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
+                                        .padding(vertical = 4.sdp()),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     // Masked Info
@@ -331,8 +333,8 @@ fun CrmBottomSheet(
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(36.dp)
-                                                .clip(RoundedCornerShape(10.dp))
+                                                .size(36.sdp())
+                                                .clip(RoundedCornerShape(10.sdp()))
                                                 .background(Color(0xFF10B981).copy(alpha = 0.15f)),
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -340,14 +342,14 @@ fun CrmBottomSheet(
                                                 Icons.Default.Phone,
                                                 null,
                                                 tint = Color(0xFF10B981),
-                                                modifier = Modifier.size(18.dp)
+                                                modifier = Modifier.size(18.sdp())
                                             )
                                         }
-                                        Spacer(modifier = Modifier.width(16.dp))
+                                        Spacer(modifier = Modifier.width(16.sdp()))
                                         Column {
                                             Text(
                                                 "Mobile Number",
-                                                fontSize = 11.sp,
+                                                fontSize = 11.ssp(),
                                                 color = Color.White.copy(alpha = 0.5f),
                                                 fontWeight = FontWeight.Medium
                                             )
@@ -357,7 +359,7 @@ fun CrmBottomSheet(
                                                 ) else "******"
                                             Text(
                                                 masked,
-                                                fontSize = 16.sp,
+                                                fontSize = 16.ssp(),
                                                 color = Color.White,
                                                 fontWeight = FontWeight.Medium
                                             )
@@ -423,23 +425,23 @@ fun CrmBottomSheet(
                                             )
                                         ),
                                         contentPadding = PaddingValues(
-                                            horizontal = 16.dp,
-                                            vertical = 0.dp
+                                            horizontal = 16.sdp(),
+                                            vertical = 0.sdp()
                                         ),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier.height(36.dp),
+                                        shape = RoundedCornerShape(8.sdp()),
+                                        modifier = Modifier.height(36.sdp()),
                                         enabled = !isLoading // Disable while loading
                                     ) {
                                         if (isLoading) {
                                             CircularProgressIndicator(
-                                                modifier = Modifier.size(18.dp),
+                                                modifier = Modifier.size(18.sdp()),
                                                 color = Color.White,
-                                                strokeWidth = 2.dp
+                                                strokeWidth = 2.sdp()
                                             )
                                         } else {
                                             Text(
                                                 "View ($remainingViews)",
-                                                fontSize = 13.sp,
+                                                fontSize = 13.ssp(),
                                                 fontWeight = FontWeight.SemiBold
                                             )
                                         }
@@ -447,7 +449,7 @@ fun CrmBottomSheet(
                                 }
                             }
                             HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
+                                modifier = Modifier.padding(vertical = 12.sdp()),
                                 color = textSecondary.copy(alpha = 0.1f)
                             )
 
@@ -459,7 +461,7 @@ fun CrmBottomSheet(
                                 Color(0xFFFFB74D)
                             )
                             HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
+                                modifier = Modifier.padding(vertical = 12.sdp()),
                                 color = textSecondary.copy(alpha = 0.1f)
                             )
 
@@ -470,8 +472,8 @@ fun CrmBottomSheet(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .size(36.sdp())
+                                        .clip(RoundedCornerShape(10.sdp()))
                                         .background(Color(0xFF60A5FA).copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -479,20 +481,20 @@ fun CrmBottomSheet(
                                         Icons.Default.Inventory,
                                         null,
                                         tint = Color(0xFF60A5FA),
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(18.sdp())
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(16.sdp()))
                                 Column {
                                     Text(
                                         "Product / Subject",
-                                        fontSize = 11.sp,
+                                        fontSize = 11.ssp(),
                                         color = Color.White.copy(alpha = 0.5f),
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
                                         text = contact.product ?: "N/A",
-                                        fontSize = 16.sp,
+                                        fontSize = 16.ssp(),
                                         color = Color.White,
                                         fontWeight = FontWeight.Medium
                                     )
@@ -500,7 +502,7 @@ fun CrmBottomSheet(
                             }
 
                             HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 12.dp),
+                                modifier = Modifier.padding(vertical = 12.sdp()),
                                 color = textSecondary.copy(alpha = 0.1f)
                             )
 
@@ -529,8 +531,8 @@ fun CrmBottomSheet(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Surface(
                         color = backgroundColor,
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, crmColor.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(12.sdp()),
+                        border = BorderStroke(1.sdp(), crmColor.copy(alpha = 0.3f)),
                         onClick = {
                             val clipboard =
                                 context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -540,26 +542,26 @@ fun CrmBottomSheet(
                         }
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(16.sdp()),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 contact.recordId,
-                                fontSize = 20.sp,
+                                fontSize = 20.ssp(),
                                 fontWeight = FontWeight.Bold,
                                 color = crmColor
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(12.sdp()))
                             Icon(
                                 Icons.Default.ContentCopy,
                                 null,
                                 tint = textSecondary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(16.sdp())
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Share this ID with other users.", color = textSecondary, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(16.sdp()))
+                    Text("Share this ID with other users.", color = textSecondary, fontSize = 14.ssp())
                 }
             },
             confirmButton = {

@@ -298,8 +298,8 @@ fun RecentDeviceBottomSheet(
                             shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
                             elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 0.dp,
-                                pressedElevation = 4.dp
+                                defaultElevation = 0.sdp(),
+                                pressedElevation = 4.sdp()
                             )
                         ) {
                             Row(horizontalArrangement = Arrangement.Center) {
@@ -324,8 +324,8 @@ fun RecentDeviceBottomSheet(
                             shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                             elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 0.dp,
-                                pressedElevation = 4.dp
+                                defaultElevation = 0.sdp(),
+                                pressedElevation = 4.sdp()
                             )
                         ) {
                             Row(horizontalArrangement = Arrangement.Center) {

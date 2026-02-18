@@ -13,6 +13,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,7 +76,7 @@ fun AppDrawer(
     val email = remember { authManager.getUserEmail() ?: "" }
 
     val configuration = LocalConfiguration.current
-    val drawerWidth = min(320.dp, configuration.screenWidthDp.dp * 0.85f)
+    val drawerWidth = min(320.sdp(), configuration.screenWidthDp.dp * 0.85f)
 
     // --- Logic Optimization ---
     // Prepare the list in a derived state or remember block.
@@ -137,7 +139,7 @@ fun AppDrawer(
         // Use LazyColumn for efficient rendering (Windowing)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp) // Bottom padding for scrolling
+            contentPadding = PaddingValues(bottom = 24.sdp()) // Bottom padding for scrolling
         ) {
             // Header is a single item
             item {
@@ -158,15 +160,15 @@ fun AppDrawer(
                         )
                     }
                     is DrawerItemType.Divider -> {
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.sdp()))
                         HorizontalDivider(
                             color = Color.White.copy(alpha = 0.08f),
-                            modifier = Modifier.padding(horizontal = 24.dp)
+                            modifier = Modifier.padding(horizontal = 24.sdp())
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.sdp()))
                     }
                     is DrawerItemType.VersionInfo -> {
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(24.sdp()))
                         DrawerVersionItem()
                     }
                 }
@@ -192,37 +194,37 @@ private fun DrawerHeader(userName: String, email: String, department: String) {
             .fillMaxWidth()
             .background(bgBrush)
             .statusBarsPadding() // Better than systemBarsPadding for top alignment
-            .padding(top = 24.dp, bottom = 25.dp, start = 24.dp, end = 24.dp)
+            .padding(top = 24.sdp(), bottom = 25.sdp(), start = 24.sdp(), end = 24.sdp())
     ) {
         Box(
             modifier = Modifier
-                .size(70.dp)
+                .size(70.sdp())
                 .clip(CircleShape)
                 .background(avatarBrush),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
-                fontSize = 26.sp,
+                fontSize = 26.ssp(),
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(14.sdp()))
 
         Text(
             text = userName,
-            fontSize = 21.sp,
+            fontSize = 21.ssp(),
             fontWeight = FontWeight.SemiBold,
             color = Color(0xFFF1F5F9)
         )
 
         if (email.isNotBlank() && email != "N/A") {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.sdp()))
             Text(
                 text = email,
-                fontSize = 13.sp,
+                fontSize = 13.ssp(),
                 fontWeight = FontWeight.Medium,
                 color = Color(0xFF9CA3AF),
                 overflow = TextOverflow.Ellipsis,
@@ -231,26 +233,26 @@ private fun DrawerHeader(userName: String, email: String, department: String) {
         }
 
         if (department.isNotBlank() && department != "N/A") {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(10.sdp()))
             Surface(
                 color = Color(0xFF1F2937),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                shape = RoundedCornerShape(20.sdp()),
+                border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.06f))
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 6.sdp()),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         Icons.Default.BusinessCenter,
                         null,
                         tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(16.sdp())
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.sdp()))
                     Text(
                         text = department,
-                        fontSize = 13.sp,
+                        fontSize = 13.ssp(),
                         color = Color(0xFFD1D5DB),
                         fontWeight = FontWeight.Medium
                     )
@@ -270,24 +272,24 @@ private fun DrawerActionItem(
 
     NavigationDrawerItem(
         label = {
-            Text(text = item.label, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Text(text = item.label, fontSize = 15.ssp(), fontWeight = FontWeight.Medium)
         },
         icon = {
-            Icon(item.icon, null, Modifier.size(22.dp), tint = if(item.isDestructive) item.tint else item.tint)
+            Icon(item.icon, null, Modifier.size(22.sdp()), tint = if(item.isDestructive) item.tint else item.tint)
         },
         selected = false,
         onClick = {
             onClose()
             item.onClick()
         },
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(18.sdp()),
         colors = NavigationDrawerItemDefaults.colors(
             unselectedContainerColor = containerColor,
             unselectedTextColor = textColor,
             unselectedIconColor = item.tint, // Use the specific tint from data
         ),
         modifier = Modifier
-            .padding(horizontal = 14.dp, vertical = 4.dp)
+            .padding(horizontal = 14.sdp(), vertical = 4.sdp())
             .fillMaxWidth()
     )
 }
@@ -300,22 +302,22 @@ private fun DrawerVersionItem() {
             onClick = { (context as? MainActivity)?.manualUpdateCheck() },
             shape = RoundedCornerShape(30),
             color = Color.White.copy(alpha = 0.06f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.12f))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 8.sdp()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     Icons.Default.SystemUpdate,
                     null,
                     tint = Color(0xFF93C5FD),
-                    modifier = Modifier.size(14.dp)
+                    modifier = Modifier.size(14.sdp())
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(10.sdp()))
                 Text(
                     text = "Callyn v$version",
-                    fontSize = 12.sp,
+                    fontSize = 12.ssp(),
                     color = Color.White.copy(alpha = 0.8f),
                     fontWeight = FontWeight.Medium
                 )

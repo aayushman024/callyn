@@ -12,6 +12,8 @@ import android.provider.ContactsContract
 import android.provider.Settings
 import android.telephony.SubscriptionManager
 import android.widget.Toast
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -227,8 +229,8 @@ fun DialerScreen(
                 .fillMaxSize()
                 .background(Color(0xFF121212))
                 .statusBarsPadding()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 94.dp),
+                .padding(horizontal = 24.sdp())
+                .padding(bottom = 94.sdp()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
@@ -238,8 +240,8 @@ fun DialerScreen(
                     .weight(1f)
                     .fillMaxWidth(),
                 reverseLayout = true,
-                verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Bottom),
-                contentPadding = PaddingValues(bottom = 20.dp)
+                verticalArrangement = Arrangement.spacedBy(10.sdp(), Alignment.Bottom),
+                contentPadding = PaddingValues(bottom = 20.sdp())
             ) {
                 items(searchResults) { result ->
                     // Extract display data
@@ -251,7 +253,7 @@ fun DialerScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(16.sdp()))
                             .clickable {
                                 // 1. Save to History
                                 scope.launch(Dispatchers.IO) {
@@ -272,18 +274,18 @@ fun DialerScreen(
                                 phoneNumber = number
                             },
                         color = if (isWork) Color(0xFF1E293B) else Color(0xFF1A1A1A),
-                        tonalElevation = if (isWork) 4.dp else 2.dp,
-                        shadowElevation = if (isWork) 2.dp else 0.dp
+                        tonalElevation = if (isWork) 4.sdp() else 2.sdp(),
+                        shadowElevation = if (isWork) 2.sdp() else 0.sdp()
                     ) {
                         Row(
-                            modifier = Modifier.padding(14.dp),
+                            modifier = Modifier.padding(14.sdp()),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
 
                             // Avatar
                             Box(
                                 modifier = Modifier
-                                    .size(48.dp)
+                                    .size(48.sdp())
                                     .background(
                                         if (isWork) {
                                             Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))
@@ -298,20 +300,20 @@ fun DialerScreen(
                                     text = name.firstOrNull()?.uppercase() ?: "?",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 18.sp
+                                    fontSize = 18.ssp()
                                 )
                             }
 
-                            Spacer(Modifier.width(14.dp))
+                            Spacer(Modifier.width(14.sdp()))
 
                             Column(
                                 modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                verticalArrangement = Arrangement.spacedBy(3.sdp())
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = name,
-                                        fontSize = 16.sp,
+                                        fontSize = 16.ssp(),
                                         color = Color.White,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
@@ -320,17 +322,17 @@ fun DialerScreen(
                                     )
                                     // Work Badge
                                     if (isWork) {
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Spacer(modifier = Modifier.width(8.sdp()))
                                         Surface(
                                             color = Color(0xFF3B82F6).copy(alpha = 0.2f),
-                                            shape = RoundedCornerShape(6.dp)
+                                            shape = RoundedCornerShape(6.sdp())
                                         ) {
                                             Text(
                                                 text = "Work",
-                                                fontSize = 10.sp,
+                                                fontSize = 10.ssp(),
                                                 color = Color(0xFF60A5FA),
                                                 fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 6.sdp(), vertical = 2.sdp())
                                             )
                                         }
                                     }
@@ -338,7 +340,7 @@ fun DialerScreen(
 
                                 Text(
                                     text = number,
-                                    fontSize = 14.sp,
+                                    fontSize = 14.ssp(),
                                     color = Color(0xFF9CA3AF)
                                 )
                             }
@@ -347,7 +349,7 @@ fun DialerScreen(
                                 Icons.Filled.ChevronRight,
                                 null,
                                 tint = Color.White.copy(alpha = 0.3f),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(20.sdp())
                             )
                         }
                     }
@@ -360,7 +362,7 @@ fun DialerScreen(
                 onValueChange = { phoneNumber = it },
                 textStyle = TextStyle(
                     color = Color.White,
-                    fontSize = 36.sp,
+                    fontSize = 36.ssp(),
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 ),
@@ -370,14 +372,14 @@ fun DialerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 6.dp, bottom = 14.dp),
+                            .padding(top = 6.sdp(), bottom = 14.sdp()),
                         contentAlignment = Alignment.Center
                     ) {
                         if (phoneNumber.isEmpty()) {
                             Text(
                                 text = "Enter Number",
                                 color = Color.Gray,
-                                fontSize = 36.sp,
+                                fontSize = 36.ssp(),
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center
                             )
@@ -390,7 +392,7 @@ fun DialerScreen(
             // -------- KEYPAD --------
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.sdp())
             ) {
                 val keys = listOf(
                     listOf("1", "2", "3"),
@@ -400,7 +402,7 @@ fun DialerScreen(
                 )
 
                 keys.forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(24.sdp())) {
                         row.forEach {
                             DialerButton(
                                 label = it,
@@ -413,7 +415,7 @@ fun DialerScreen(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(16.sdp()))
 
                 // -------- ACTION ROW --------
                 Row(
@@ -427,9 +429,9 @@ fun DialerScreen(
                     // Add Contact Button
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(64.sdp())
                             .shadow(
-                                elevation = if (phoneNumber.isNotEmpty()) 4.dp else 0.dp,
+                                elevation = if (phoneNumber.isNotEmpty()) 4.sdp() else 0.sdp(),
                                 shape = CircleShape,
                                 ambientColor = Color(0xFF3B82F6).copy(alpha = 0.3f)
                             )
@@ -453,7 +455,7 @@ fun DialerScreen(
                         Icon(
                             Icons.Filled.PersonAdd,
                             null,
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(28.sdp()),
                             tint = if (phoneNumber.isNotEmpty()) Color(0xFF60A5FA) else Color(0xFF4A4A4A)
                         )
                     }
@@ -461,9 +463,9 @@ fun DialerScreen(
                     // Call Button
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
+                            .size(80.sdp())
                             .shadow(
-                                elevation = 8.dp,
+                                elevation = 8.sdp(),
                                 shape = CircleShape,
                                 ambientColor = Color(0xFF00C853),
                                 spotColor = Color(0xFF00C853)
@@ -484,16 +486,16 @@ fun DialerScreen(
                             Icons.Filled.Call,
                             null,
                             tint = Color.White,
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(40.sdp())
                         )
                     }
 
                     // Backspace Button
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(64.sdp())
                             .shadow(
-                                elevation = if (phoneNumber.isNotEmpty()) 4.dp else 0.dp,
+                                elevation = if (phoneNumber.isNotEmpty()) 4.sdp() else 0.sdp(),
                                 shape = CircleShape,
                                 ambientColor = Color(0xFFEF4444).copy(alpha = 0.3f)
                             )
@@ -518,7 +520,7 @@ fun DialerScreen(
                         Icon(
                             Icons.Filled.Backspace,
                             null,
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(28.sdp()),
                             tint = if (phoneNumber.isNotEmpty()) Color(0xFFF87171) else Color(0xFF4A4A4A)
                         )
                     }
@@ -578,22 +580,22 @@ fun DialerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 32.dp),
+                        .padding(horizontal = 24.sdp())
+                        .padding(bottom = 32.sdp()),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
 
                     Text(
                         "Select SIM to Call",
                         color = Color.White,
-                        fontSize = 18.sp,
+                        fontSize = 18.ssp(),
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 16.dp)
+                        modifier = Modifier.padding(vertical = 16.sdp())
                     )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.sdp())
                     ) {
                         // SIM 1 Button
                         Button(
@@ -605,15 +607,15 @@ fun DialerScreen(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(64.dp)
-                                .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
-                            shape = RoundedCornerShape(20.dp),
+                                .height(64.sdp())
+                                .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                            shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                         ) {
                             Row(horizontalArrangement = Arrangement.Center) {
                                 Icon(Icons.Default.Phone, contentDescription = null)
-                                Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -627,15 +629,15 @@ fun DialerScreen(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(64.dp)
-                                .shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
-                            shape = RoundedCornerShape(20.dp),
+                                .height(64.sdp())
+                                .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                            shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                         ) {
                             Row(horizontalArrangement = Arrangement.Center) {
                                 Icon(Icons.Default.Phone, contentDescription = null)
-                                Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -657,9 +659,9 @@ fun DialerButton(
 
     Box(
         modifier = Modifier
-            .size(72.dp)
+            .size(72.sdp())
             .shadow(
-                elevation = 2.dp,
+                elevation = 2.sdp(),
                 shape = CircleShape,
                 ambientColor = Color.White.copy(alpha = 0.05f)
             )
@@ -683,7 +685,7 @@ fun DialerButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, fontSize = 32.sp, color = Color.White, fontWeight = FontWeight.Medium)
+        Text(label, fontSize = 32.ssp(), color = Color.White, fontWeight = FontWeight.Medium)
     }
 }
 

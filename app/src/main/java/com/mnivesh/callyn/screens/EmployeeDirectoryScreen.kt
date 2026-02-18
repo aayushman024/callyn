@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import android.telephony.SubscriptionManager
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -136,13 +138,13 @@ fun EmployeeDirectoryScreen(
                         modifier = Modifier.align(Alignment.Center),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.Default.CloudOff, null, tint = Color.Red, modifier = Modifier.size(48.dp))
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(state.message, color = Color.White, fontSize = 16.sp)
+                        Icon(Icons.Default.CloudOff, null, tint = Color.Red, modifier = Modifier.size(48.sdp()))
+                        Spacer(modifier = Modifier.height(16.sdp()))
+                        Text(state.message, color = Color.White, fontSize = 16.ssp())
                         Button(onClick = {
                             val token = authManager.getToken()
                             if(token != null) viewModel.loadEmployees(token, true)
-                        }, modifier = Modifier.padding(top=16.dp)) { Text("Retry") }
+                        }, modifier = Modifier.padding(top=16.sdp())) { Text("Retry") }
                     }
                 }
                 is EmployeeUiState.Success -> {
@@ -164,11 +166,11 @@ fun EmployeeDirectoryScreen(
 
                     Column(modifier = Modifier.fillMaxSize()) {
                         // 1. Search Bar
-                        Box(modifier = Modifier.padding(16.dp, 0.dp, 16.dp, 10.dp)) {
+                        Box(modifier = Modifier.padding(16.sdp(), 0.sdp(), 16.sdp(), 10.sdp())) {
                             TextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.sdp())),
                                 placeholder = { Text("Search directory...", color = Color.White.copy(alpha = 0.5f)) },
                                 leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(alpha = 0.6f)) },
                                 trailingIcon = if (searchQuery.isNotEmpty()) { { IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.6f)) } } } else null,
@@ -187,7 +189,7 @@ fun EmployeeDirectoryScreen(
                         ScrollableTabRow(
                             selectedTabIndex = departments.indexOf(selectedDepartment),
                             containerColor = Color.Transparent,
-                            edgePadding = 16.dp,
+                            edgePadding = 16.sdp(),
                             divider = {},
                             indicator = {}
                         ) {
@@ -198,7 +200,7 @@ fun EmployeeDirectoryScreen(
                                     onClick = { selectedDepartment = dept },
                                     label = { Text(dept,
                                         textAlign = TextAlign.Center) },
-                                    modifier = Modifier.padding(end = 8.dp),
+                                    modifier = Modifier.padding(end = 8.sdp()),
                                     colors = FilterChipDefaults.filterChipColors(
                                         containerColor = Color(0xFF1E293B),
                                         labelColor = Color.White.copy(alpha = 0.7f),
@@ -213,12 +215,12 @@ fun EmployeeDirectoryScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(8.sdp()))
 
                         // 3. Employee List
                         LazyColumn(
-                            contentPadding = PaddingValues(top = 8.dp, bottom = 100.dp, start = 16.dp, end = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            contentPadding = PaddingValues(top = 8.sdp(), bottom = 100.sdp(), start = 16.sdp(), end = 16.sdp()),
+                            verticalArrangement = Arrangement.spacedBy(12.sdp())
                         ) {
                             groupedEmployees.forEach { (dept, employees) ->
                                 item {
@@ -226,8 +228,8 @@ fun EmployeeDirectoryScreen(
                                         text = dept,
                                         color = Color(0xFF60A5FA),
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                                        fontSize = 14.ssp(),
+                                        modifier = Modifier.padding(vertical = 8.sdp(), horizontal = 4.sdp())
                                     )
                                 }
                                 items(employees.sortedBy { it.name }) { employee ->
@@ -273,47 +275,47 @@ fun ModernEmployeeCard(employee: EmployeeDirectory, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp()),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(56.sdp())
                     .clip(CircleShape)
                     .background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
                 contentAlignment = Alignment.Center
             ) {
-                Text(getEmpInitials(employee.name), color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(getEmpInitials(employee.name), color = Color.White, fontSize = 20.ssp(), fontWeight = FontWeight.Bold)
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(16.sdp()))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     employee.name,
-                    fontSize = 17.sp,
+                    fontSize = 17.ssp(),
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                    Icon(Icons.Default.Business, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(14.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(employee.department, fontSize = 13.sp, color = Color(0xFF60A5FA), fontWeight = FontWeight.Medium)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.sdp())) {
+                    Icon(Icons.Default.Business, null, tint = Color(0xFF60A5FA), modifier = Modifier.size(14.sdp()))
+                    Spacer(modifier = Modifier.width(4.sdp()))
+                    Text(employee.department, fontSize = 13.ssp(), color = Color(0xFF60A5FA), fontWeight = FontWeight.Medium)
                 }
             }
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(48.sdp())
                     .clip(CircleShape)
                     .background(Brush.linearGradient(listOf(Color(0xFF10B981), Color(0xFF059669))))
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Call, "Call", tint = Color.White, modifier = Modifier.size(22.dp))
+                Icon(Icons.Default.Call, "Call", tint = Color.White, modifier = Modifier.size(22.sdp()))
             }
         }
     }
@@ -349,9 +351,9 @@ fun EmployeeBottomSheet(
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .width(48.dp)
-                    .height(6.dp)
+                    .padding(vertical = 16.sdp())
+                    .width(48.sdp())
+                    .height(6.sdp())
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.2f))
             )
@@ -360,16 +362,16 @@ fun EmployeeBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp),
+                .padding(horizontal = 24.sdp())
+                .padding(bottom = 24.sdp()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Header: Avatar
             Box(
                 modifier = Modifier
-                    .size(110.dp)
-                    .border(4.dp, backgroundColor, CircleShape)
-                    .padding(4.dp)
+                    .size(110.sdp())
+                    .border(4.sdp(), backgroundColor, CircleShape)
+                    .padding(4.sdp())
                     .clip(CircleShape)
                     .background(
                         Brush.verticalGradient(
@@ -384,100 +386,100 @@ fun EmployeeBottomSheet(
                 Text(
                     getEmpInitials(employee.name),
                     color = Color.White,
-                    fontSize = 40.sp,
+                    fontSize = 40.ssp(),
                     fontWeight = FontWeight.SemiBold
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
 
             // Name
             Text(
                 text = employee.name,
-                fontSize = 26.sp,
+                fontSize = 26.ssp(),
                 fontWeight = FontWeight.Bold,
                 color = textPrimary,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
 
             // Pill
             Surface(
                 color = secondaryColor.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(50),
-                modifier = Modifier.height(32.dp)
+                modifier = Modifier.height(32.sdp())
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 16.sdp())
                 ) {
                     Icon(
                         Icons.Default.Badge,
                         null,
                         tint = secondaryColor,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(14.sdp())
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(6.sdp()))
                     Text(
                         text = "Employee",
-                        fontSize = 13.sp,
+                        fontSize = 13.ssp(),
                         color = secondaryColor,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.sdp()))
 
             // Details Card
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "CONTACT DETAILS",
                     color = textSecondary,
-                    fontSize = 12.sp,
+                    fontSize = 12.ssp(),
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+                    letterSpacing = 1.ssp(),
+                    modifier = Modifier.padding(start = 8.sdp(), bottom = 8.sdp())
                 )
 
                 Surface(
                     color = surfaceColor,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(20.sdp()),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(16.sdp())) {
                         // Phone Row
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(primaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Phone, null, tint = primaryColor, modifier = Modifier.size(18.dp))
+                            Box(modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(primaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Phone, null, tint = primaryColor, modifier = Modifier.size(18.sdp()))
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(16.sdp()))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Mobile", fontSize = 11.sp, color = textSecondary, fontWeight = FontWeight.Medium)
-                                Text(employee.phone, fontSize = 16.sp, color = textPrimary, fontWeight = FontWeight.Medium)
+                                Text("Mobile", fontSize = 11.ssp(), color = textSecondary, fontWeight = FontWeight.Medium)
+                                Text(employee.phone, fontSize = 16.ssp(), color = textPrimary, fontWeight = FontWeight.Medium)
                             }
                             IconButton(onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                 clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Phone", employee.phone))
                                 Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                             }) {
-                                Icon(Icons.Default.ContentCopy, null, tint = textSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.ContentCopy, null, tint = textSecondary, modifier = Modifier.size(18.sdp()))
                             }
                         }
 
                         // [!code change] Only show Email row if data exists (offline mode support)
                         if (employee.email.isNotBlank()) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = textSecondary.copy(alpha = 0.1f))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(secondaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Email, null, tint = secondaryColor, modifier = Modifier.size(18.dp))
+                                Box(modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(secondaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Email, null, tint = secondaryColor, modifier = Modifier.size(18.sdp()))
                                 }
-                                Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(16.sdp()))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Email", fontSize = 11.sp, color = textSecondary, fontWeight = FontWeight.Medium)
-                                    Text(employee.email, fontSize = 16.sp, color = textPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("Email", fontSize = 11.ssp(), color = textSecondary, fontWeight = FontWeight.Medium)
+                                    Text(employee.email, fontSize = 16.ssp(), color = textPrimary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                                 IconButton(onClick = {
                                     val intent = Intent(Intent.ACTION_SENDTO).apply {
@@ -485,80 +487,80 @@ fun EmployeeBottomSheet(
                                     }
                                     try { context.startActivity(intent) } catch (e: Exception) { Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show() }
                                 }) {
-                                    Icon(Icons.Default.Send, null, tint = textSecondary, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Send, null, tint = textSecondary, modifier = Modifier.size(18.sdp()))
                                 }
                             }
                         }
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = textSecondary.copy(alpha = 0.1f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
 
                         // Department Row
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF8B5CF6).copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Apartment, null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(18.dp))
+                            Box(modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(Color(0xFF8B5CF6).copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Apartment, null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(18.sdp()))
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(16.sdp()))
                             Column {
-                                Text("Department", fontSize = 11.sp, color = textSecondary, fontWeight = FontWeight.Medium)
-                                Text(employee.department, fontSize = 16.sp, color = textPrimary, fontWeight = FontWeight.Medium)
+                                Text("Department", fontSize = 11.ssp(), color = textSecondary, fontWeight = FontWeight.Medium)
+                                Text(employee.department, fontSize = 16.ssp(), color = textPrimary, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.sdp()))
 
             //smart calling
             val showDualButtons = isDualSim && SimManager.workSimSlot == null
             if (showDualButtons) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
                 ) {
                     // SIM 1
                     Button(
                         onClick = { onCall(0) },
-                        modifier = Modifier.weight(1f).height(64.dp).shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
-                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f).height(64.sdp()).shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
+                        shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, null)
-                            Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                         }
                     }
                     // SIM 2
                     Button(
                         onClick = { onCall(1) },
-                        modifier = Modifier.weight(1f).height(64.dp).shadow(8.dp, RoundedCornerShape(20.dp), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
-                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.weight(1f).height(64.sdp()).shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                     ) {
                         Row(horizontalArrangement = Arrangement.Center) {
                             Icon(Icons.Default.Phone, null)
-                            Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             } else {
                 Button(
                     onClick = { onCall(null) },
-                    modifier = Modifier.fillMaxWidth().height(64.dp).shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = primaryColor, spotColor = primaryColor),
-                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth().height(64.sdp()).shadow(12.sdp(), RoundedCornerShape(20.sdp()), ambientColor = primaryColor, spotColor = primaryColor),
+                    shape = RoundedCornerShape(20.sdp()),
                     colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 4.dp)
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                 ) {
-                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                    Spacer(modifier = Modifier.width(12.sdp()))
                     // Text Update
                     val buttonText = if (SimManager.workSimSlot != null) "Call (Work SIM)" else "Call"
-                    Text(text = buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(text = buttonText, fontSize = 18.ssp(), fontWeight = FontWeight.Bold)
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
         }
     }
 }

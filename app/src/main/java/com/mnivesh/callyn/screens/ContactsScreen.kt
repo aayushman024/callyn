@@ -80,6 +80,8 @@ import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.viewmodels.CrmViewModel
 import com.mnivesh.callyn.viewmodels.CrmViewModelFactory
 import kotlinx.coroutines.joinAll
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 // [!code ++] Import CrmContactCard
 import com.mnivesh.callyn.tabs.CrmContactCard
 
@@ -409,26 +411,26 @@ fun ContactsScreen(
                                 "Callyn",
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
+                                fontSize = 20.ssp()
                             )
                             if (department == "Management" || department == "IT Desk") {
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(8.sdp()))
                                 Surface(
                                     color = Color(0xFF3B82F6).copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(50),
                                     border = BorderStroke(
-                                        1.dp,
+                                        1.sdp(),
                                         Color(0xFF3B82F6).copy(alpha = 0.5f)
                                     )
                                 ) {
                                     Text(
                                         text = " Admin ",
                                         color = Color(0xFF3B82F6),
-                                        fontSize = 10.sp,
+                                        fontSize = 10.ssp(),
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(
-                                            horizontal = 8.dp,
-                                            vertical = 3.dp
+                                            horizontal = 8.sdp(),
+                                            vertical = 3.sdp()
                                         ),
                                         letterSpacing = 0.5.sp
                                     )
@@ -443,7 +445,7 @@ fun ContactsScreen(
                     },
                     actions = {
                         if (department == "Management" || userEmail == "aayushman@niveshonline.com" || userEmail == "himanshu@niveshonline.com" || userEmail == "pramajeet@niveshonline.com") {
-                            Box(modifier = Modifier.padding(end = 8.dp)) {
+                            Box(modifier = Modifier.padding(end = 8.sdp())) {
                                 IconButton(onClick = { showSmsScreen = true }) {
                                     Icon(
                                         imageVector = Icons.Default.Notifications,
@@ -453,9 +455,9 @@ fun ContactsScreen(
                                 }
                                 if (hasSmsNotification) {
                                     Box(
-                                        modifier = Modifier.size(10.dp).clip(CircleShape)
+                                        modifier = Modifier.size(10.sdp()).clip(CircleShape)
                                             .background(Color.Red).align(Alignment.TopEnd)
-                                            .padding(4.dp)
+                                            .padding(4.sdp())
                                     )
                                 }
                             }
@@ -478,7 +480,7 @@ fun ContactsScreen(
                 val screenWidth = configuration.screenWidthDp.dp
                 val tabWidth = screenWidth * 0.4f
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.sdp()))
 
                 // [!code ++] Create separate interaction sources to disable ripples
                 val interactionSource1 = remember { MutableInteractionSource() }
@@ -490,13 +492,13 @@ fun ContactsScreen(
                         selectedTabIndex = selectedTabIndex,
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
-                        edgePadding = 0.dp,
+                        edgePadding = 0.sdp(),
                         indicator = { tabPositions ->
                             if (selectedTabIndex < tabPositions.size) {
                                 TabRowDefaults.SecondaryIndicator(
                                     Modifier.tabIndicatorOffset(
                                         tabPositions[selectedTabIndex]
-                                    ), color = Color(0xFF3B82F6), height = 3.dp
+                                    ), color = Color(0xFF3B82F6), height = 3.sdp()
                                 )
                             }
                         },
@@ -565,14 +567,14 @@ fun ContactsScreen(
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp, 15.dp, 16.dp, 10.dp)
+                            modifier = Modifier.fillMaxWidth().padding(16.sdp(), 15.sdp(), 16.sdp(), 10.sdp())
                         ) {
                             Box {
                                 TextField(
                                     value = searchQuery,
                                     onValueChange = { },
                                     modifier = Modifier.fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.dp)),
+                                        .clip(RoundedCornerShape(16.sdp())),
                                     placeholder = {
                                         Text(
                                             "Search contacts...",
@@ -618,14 +620,14 @@ fun ContactsScreen(
                                 )
                                 Box(
                                     modifier = Modifier.matchParentSize()
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(16.sdp()))
                                         .clickable { showFullSearch = true })
                             }
                         }
 
                         HorizontalPager(
                             state = pagerState,
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                            modifier = Modifier.fillMaxSize().padding(horizontal = 16.sdp()),
                             verticalAlignment = Alignment.Top
                         ) { page ->
                             when (page) {
@@ -794,17 +796,17 @@ fun ContactsScreen(
                 containerColor = Color(0xFF1E293B), contentColor = Color.White, dragHandle = null
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.sdp(), vertical = 8.sdp())
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.sdp()),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
                             "Duplicate Contacts Found",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
+                            fontSize = 14.ssp(),
                             color = Color.White
                         )
                         Button(
@@ -854,20 +856,20 @@ fun ContactsScreen(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                            shape = RoundedCornerShape(8.dp)
-                        ) { Text("Continue to Delete", fontSize = 12.sp) }
+                            shape = RoundedCornerShape(8.sdp())
+                        ) { Text("Continue to Delete", fontSize = 12.ssp()) }
                     }
 
                     LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 30.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.sdp()),
+                        contentPadding = PaddingValues(bottom = 30.sdp())
                     ) {
                         items(conflictingContacts) { contact ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().background(
                                     Color.White.copy(alpha = 0.05f),
-                                    RoundedCornerShape(12.dp)
-                                ).padding(12.dp),
+                                    RoundedCornerShape(12.sdp())
+                                ).padding(12.sdp()),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
@@ -875,7 +877,7 @@ fun ContactsScreen(
                                         text = contact.name,
                                         color = Color.White,
                                         fontWeight = FontWeight.SemiBold,
-                                        fontSize = 16.sp
+                                        fontSize = 16.ssp()
                                     )
                                 }
                                 Button(
@@ -895,15 +897,15 @@ fun ContactsScreen(
                                             alpha = 0.1f
                                         )
                                     ),
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(8.sdp()),
                                     contentPadding = PaddingValues(
-                                        horizontal = 12.dp,
-                                        vertical = 8.dp
+                                        horizontal = 12.sdp(),
+                                        vertical = 8.sdp()
                                     )
                                 ) {
                                     Text(
                                         "Mark Personal",
-                                        fontSize = 12.sp,
+                                        fontSize = 12.ssp(),
                                         color = Color(0xFF60A5FA)
                                     )
                                 }
@@ -923,7 +925,7 @@ fun ContactsScreen(
                         "Request Change",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
+                        fontSize = 20.ssp()
                     )
                 },
                 text = {
@@ -931,8 +933,8 @@ fun ContactsScreen(
                         Text(
                             "Why do you want to mark ${contactForRequest ?: "this contact"} as Personal?",
                             color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(bottom = 16.dp)
+                            fontSize = 14.ssp(),
+                            modifier = Modifier.padding(bottom = 16.sdp())
                         )
                         OutlinedTextField(
                             value = globalRequestReason,
@@ -948,7 +950,7 @@ fun ContactsScreen(
                                 focusedContainerColor = Color.White.copy(alpha = 0.05f),
                                 unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
                             ),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(12.sdp()),
                             minLines = 3,
                             maxLines = 5
                         )
@@ -973,7 +975,7 @@ fun ContactsScreen(
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.sdp())
                     ) { Text("Submit", fontWeight = FontWeight.SemiBold) }
                 },
                 dismissButton = {

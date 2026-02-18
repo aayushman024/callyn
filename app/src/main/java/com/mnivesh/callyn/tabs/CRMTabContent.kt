@@ -5,6 +5,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -106,7 +108,7 @@ fun CrmTabContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(horizontal = 16.sdp(), vertical = 8.sdp())
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -115,22 +117,22 @@ fun CrmTabContent(
                         Text(
                             text = "Refreshing CRM Data of last 3 months...",
                             color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 12.sp
+                            fontSize = 12.ssp()
                         )
                         Text(
                             text = "${(animatedProgress * 100).toInt()}%",
                             color = Color(0xFF3B82F6),
-                            fontSize = 12.sp,
+                            fontSize = 12.ssp(),
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(6.sdp()))
                     LinearProgressIndicator(
                         progress = { animatedProgress },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
+                            .height(6.sdp())
+                            .clip(RoundedCornerShape(3.sdp())),
                         color = Color(0xFF3B82F6),
                         trackColor = Color.White.copy(alpha = 0.1f),
                     )
@@ -140,8 +142,8 @@ fun CrmTabContent(
             // --- Filter Chips ---
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 1.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(horizontal = 1.sdp(), vertical = 4.sdp()),
+                horizontalArrangement = Arrangement.spacedBy(8.sdp())
             ) {
                 items(filters) { filter ->
                     val isSelected = selectedFilter == filter
@@ -166,11 +168,11 @@ fun CrmTabContent(
                                     label,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(6.sdp()))
                                 // Count Badge
                                 Box(
                                     modifier = Modifier
-                                        .size(24.dp)
+                                        .size(24.sdp())
                                         .clip(CircleShape)
                                         .background(
                                             if (isSelected) Color.White
@@ -181,9 +183,9 @@ fun CrmTabContent(
                                     Text(
                                         text = displayCount,
                                         fontSize = when {
-                                            displayCount.length >= 4 -> 8.sp
-                                            displayCount.length == 3 -> 9.sp
-                                            else -> 11.sp
+                                            displayCount.length >= 4 -> 8.ssp()
+                                            displayCount.length == 3 -> 9.ssp()
+                                            else -> 11.ssp()
                                         },
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
@@ -214,8 +216,8 @@ fun CrmTabContent(
             // --- Content List ---
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 1.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(horizontal = 1.sdp(), vertical = 8.sdp()),
+                verticalArrangement = Arrangement.spacedBy(12.sdp())
             ) {
                 if (uiState.errorMessage != null) {
                     // [!code ++] Render Error as a full-screen list item
@@ -259,17 +261,17 @@ fun CrmContactCard(
     Card(
         onClick = onClick,
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(16.sdp()),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(12.sdp()),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Avatar
             Box(
                 modifier = Modifier
-                    .size(50.dp)
+                    .size(50.sdp())
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
@@ -285,11 +287,11 @@ fun CrmContactCard(
                     getInitials(contact.name),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
+                    fontSize = 18.ssp()
                 )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(16.sdp()))
 
             // Info
             Column(modifier = Modifier.weight(1f)) {
@@ -297,33 +299,33 @@ fun CrmContactCard(
                     text = contact.name,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 16.ssp(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(4.sdp()))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.ConfirmationNumber,
                         null,
                         tint = Color.White.copy(alpha = 0.5f),
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(12.sdp())
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(4.sdp()))
                     Text(
                         text = "ID: ${contact.recordId}",
                         color = Color.White.copy(alpha = 0.6f),
-                        fontSize = 12.sp
+                        fontSize = 12.ssp()
                     )
                 }
 
                 if (contact.product != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(2.sdp()))
                     Text(
                         text = contact.product,
                         color = Color(0xFF60A5FA), // Light Blue
-                        fontSize = 11.sp,
+                        fontSize = 11.ssp(),
                         fontWeight = FontWeight.Medium
                     )
                 }

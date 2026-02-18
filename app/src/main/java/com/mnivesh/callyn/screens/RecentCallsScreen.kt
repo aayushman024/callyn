@@ -1,6 +1,7 @@
 package com.mnivesh.callyn.screens
 
 import android.Manifest
+import android.R
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ContentValues
@@ -86,6 +87,7 @@ data class RecentCallUiItem(
     val number: String,
     val type: String, // "Work" or "Personal"
     val date: Long,
+    val rawDuration: Long = 0,
     val duration: String,
     val isIncoming: Boolean,
     val isMissed: Boolean = false,
@@ -183,10 +185,12 @@ class RecentCallsViewModel(
         loadNextPage()
     }
 
-    // [!code ++] Merging Logic moved from UI to ViewModel
     // [!code replace]
     private fun mergeLogs(sysLogs: List<RecentCallUiItem>, dbLogs: List<WorkCallLog>): List<RecentCallUiItem> {
-        // 1. Convert Work Logs to UI items
+        val TIME_BUFFER_MS = 3 * 60 * 1000L
+        val DUR_BUFFER_SEC = 5
+
+        // 1. Convert DB logs to UI items (include raw duration for comparison)
         val workUiLogs = dbLogs.map {
             val isIncomingCall = it.direction.equals("incoming", ignoreCase = true) ||
                     it.direction.equals("missed", ignoreCase = true)
@@ -196,44 +200,90 @@ class RecentCallsViewModel(
                 number = it.number,
                 type = "Work",
                 date = it.timestamp,
+                rawDuration = it.duration, // integer seconds
                 duration = formatDuration(it.duration),
                 isIncoming = isIncomingCall,
                 isMissed = it.direction.equals("missed", ignoreCase = true),
                 simSlot = it.simSlot
             )
-        }
+        }.sortedByDescending { it.date }
 
-        // 2. Helper to generate a unique key for deduplication
-        // Key format: Number (last 10) + TimeBucket (10s) + Direction
-        fun generateKey(item: RecentCallUiItem): String {
-            val num = item.number.filter { it.isDigit() }.takeLast(10)
-            val timeBucket = item.date / 10000 // 10-second bucket
-            val dir = if (item.isIncoming) "in" else "out"
-            return "${num}_${timeBucket}_${dir}"
-        }
+        // Ensure system logs are also sorted to make matching predictable
+        val sortedSysLogs = sysLogs.sortedByDescending { it.date }
 
-        // 3. Optimized Merge Logic using HashSet
-        val merged = if (department == "Management") {
-            // Priority: System Logs
-            val sysLogKeys = sysLogs.map { generateKey(it) }.toHashSet()
+        // 2. Comparison Logic
+        fun isSameCall(primary: RecentCallUiItem, candidate: RecentCallUiItem): Boolean {
+            // A. Number Check (Strip non-digits, compare last 10)
+            val n1 = primary.number.filter { it.isDigit() }.takeLast(10)
+            val n2 = candidate.number.filter { it.isDigit() }.takeLast(10)
+            if (n1 != n2) return false
 
-            // Filter out Work logs that exist in System logs (O(1) lookup)
-            val uniqueWorkLogs = workUiLogs.filter { workItem ->
-                !sysLogKeys.contains(generateKey(workItem))
+            // B. Direction Check
+            if (primary.isIncoming != candidate.isIncoming) return false
+
+            // C. Time Drift Check
+            val timeDiff = kotlin.math.abs(primary.date - candidate.date)
+            if (timeDiff > TIME_BUFFER_MS) return false
+
+            // D. Duration Check (Skip for Missed/Rejected calls as they are often 0 vs 1s)
+            if (!primary.isMissed && !candidate.isMissed) {
+                val durDiff = kotlin.math.abs(primary.rawDuration - candidate.rawDuration)
+                if (durDiff > DUR_BUFFER_SEC) return false
             }
-            sysLogs + uniqueWorkLogs
+
+            return true
+        }
+
+        // 3. Merging with "Consumption" logic
+        val result = ArrayList<RecentCallUiItem>()
+        val usedWorkIndices = HashSet<Int>()
+        val usedSysIndices = HashSet<Int>()
+
+        if (department == "Management") {
+            // Priority: System Logs
+            // We iterate System logs and try to find their pair in Work logs to "consume" duplicates
+            result.addAll(sortedSysLogs)
+
+            sortedSysLogs.forEach { sysItem ->
+                // Find the best matching work item that hasn't been used yet
+                // We iterate work logs to find a match. Since both are sorted, we effectively find the closest one.
+                for ((index, workItem) in workUiLogs.withIndex()) {
+                    if (!usedWorkIndices.contains(index) && isSameCall(sysItem, workItem)) {
+                        usedWorkIndices.add(index)
+                        break // Stop after first match to ensure 1-to-1 mapping
+                    }
+                }
+            }
+
+            // Add only the Work logs that were NOT matched/consumed
+            workUiLogs.forEachIndexed { index, item ->
+                if (!usedWorkIndices.contains(index)) {
+                    result.add(item)
+                }
+            }
+
         } else {
             // Priority: Work Logs
-            val workLogKeys = workUiLogs.map { generateKey(it) }.toHashSet()
+            result.addAll(workUiLogs)
 
-            // Filter out System logs that exist in Work logs (O(1) lookup)
-            val uniqueSystemLogs = sysLogs.filter { sysItem ->
-                !workLogKeys.contains(generateKey(sysItem))
+            workUiLogs.forEach { workItem ->
+                for ((index, sysItem) in sortedSysLogs.withIndex()) {
+                    if (!usedSysIndices.contains(index) && isSameCall(workItem, sysItem)) {
+                        usedSysIndices.add(index)
+                        break
+                    }
+                }
             }
-            workUiLogs + uniqueSystemLogs
+
+            // Add only unmatched System logs
+            sortedSysLogs.forEachIndexed { index, item ->
+                if (!usedSysIndices.contains(index)) {
+                    result.add(item)
+                }
+            }
         }
 
-        return merged.sortedByDescending { it.date }
+        return result.sortedByDescending { it.date }
     }
 
     // [!code ++] Fetch Device Contacts Internal
@@ -513,7 +563,7 @@ fun RecentCallsScreen(
                 item {
                     Text(
                         text = "Recent Calls",
-                        fontSize = 24.ssp(),
+                        fontSize = 25.ssp(),
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         modifier = Modifier.padding(top = 24.sdp(), bottom = 16.sdp(), start = 16.sdp(), end = 16.sdp())
@@ -527,16 +577,16 @@ fun RecentCallsScreen(
                             .fillMaxWidth()
                             .padding(horizontal = 16.sdp())
                             .padding(bottom = 4.sdp())
-                            .height(56.dp)
+                            .height(56.sdp())
                             .clip(RoundedCornerShape(12.sdp()))
                             .clickable { showSearchOverlay = true },
                         color = Color.White.copy(alpha = 0.05f),
                         shape = RoundedCornerShape(12.sdp())
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.sdp())) {
                             Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Search name or number...", color = Color.Gray, fontSize = 14.ssp())
+                            Spacer(modifier = Modifier.width(12.sdp()))
+                            Text("Search name or number...", color = Color.Gray, fontSize = 16.ssp())
                         }
                     }
                 }
@@ -858,7 +908,7 @@ fun FilterChipItem(
             Text(
                 text = label,
                 color = textColor,
-                fontSize = 13.ssp(),
+                fontSize = 14.ssp(),
                 fontWeight = FontWeight.Medium
             )
         }
@@ -932,7 +982,7 @@ fun RecentCallItem(
                             text = log.name.ifBlank { log.number },
                             color = if (log.isMissed) Color(0xFFEF4444) else Color.White,
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.ssp(),
+                            fontSize = 17.ssp(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)

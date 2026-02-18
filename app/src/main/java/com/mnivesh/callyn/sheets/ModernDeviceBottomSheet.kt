@@ -9,6 +9,8 @@ import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -61,9 +63,9 @@ fun ModernDeviceBottomSheet(
         dragHandle = {
             Box(
                 modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .width(48.dp)
-                    .height(6.dp)
+                    .padding(vertical = 16.sdp())
+                    .width(48.sdp())
+                    .height(6.sdp())
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.2f))
             )
@@ -72,8 +74,8 @@ fun ModernDeviceBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 24.dp), // Bottom padding for safety
+                .padding(horizontal = 24.sdp())
+                .padding(bottom = 24.sdp()), // Bottom padding for safety
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
@@ -82,7 +84,7 @@ fun ModernDeviceBottomSheet(
                 // Top Right Actions (Edit/View) - Styled as Glassmorphic Buttons
                 Row(
                     modifier = Modifier.align(Alignment.TopEnd),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.sdp())
                 ) {
                     val actionButtonColors = IconButtonDefaults.iconButtonColors(
                         containerColor = surfaceColor,
@@ -110,9 +112,9 @@ fun ModernDeviceBottomSheet(
                         },
                         colors = actionButtonColors,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(40.sdp())
                             .clip(CircleShape)
-                    ) { Icon(Icons.Default.Edit, "Edit Contact", modifier = Modifier.size(20.dp)) }
+                    ) { Icon(Icons.Default.Edit, "Edit Contact", modifier = Modifier.size(20.sdp())) }
 
                     IconButton(
                         onClick = {
@@ -134,13 +136,13 @@ fun ModernDeviceBottomSheet(
                         },
                         colors = actionButtonColors,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(40.sdp())
                             .clip(CircleShape)
                     ) {
                         Icon(
                             Icons.Default.OpenInNew,
                             "View Contact",
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(20.sdp())
                         )
                     }
                 }
@@ -148,10 +150,10 @@ fun ModernDeviceBottomSheet(
                 // Centered Avatar
                 Box(
                     modifier = Modifier
-                        .size(110.dp)
+                        .size(110.sdp())
                         .align(Alignment.Center)
-                        .border(4.dp, backgroundColor, CircleShape) // "Cutout" effect
-                        .padding(4.dp) // Spacing between border and avatar
+                        .border(4.sdp(), backgroundColor, CircleShape) // "Cutout" effect
+                        .padding(4.sdp()) // Spacing between border and avatar
                         .clip(CircleShape)
                         .background(
                             Brush.verticalGradient(
@@ -166,52 +168,52 @@ fun ModernDeviceBottomSheet(
                     Text(
                         getInitials(contact.name),
                         color = Color.White,
-                        fontSize = 40.sp,
+                        fontSize = 40.ssp(),
                         fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
 
             // --- Name & Type ---
             Text(
                 text = contact.name,
-                fontSize = 26.sp,
+                fontSize = 26.ssp(),
                 fontWeight = FontWeight.Bold,
                 color = textPrimary,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
 
             // "Personal Contact" Pill
             Surface(
                 color = primaryColor.copy(alpha = 0.15f),
                 shape = RoundedCornerShape(50),
-                modifier = Modifier.height(32.dp)
+                modifier = Modifier.height(32.sdp())
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier.padding(horizontal = 16.sdp())
                 ) {
                     Icon(
                         Icons.Default.Person,
                         null,
                         tint = primaryColor,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(14.sdp())
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(6.sdp()))
                     Text(
                         "Personal Contact",
-                        fontSize = 13.sp,
+                        fontSize = 13.ssp(),
                         color = primaryColor,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.sdp()))
 
             // --- Numbers Logic ---
             val defaultNumberObj = contact.numbers.find { it.isDefault }
@@ -224,20 +226,20 @@ fun ModernDeviceBottomSheet(
                     Text(
                         "PHONE NUMBERS",
                         color = textSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 12.ssp(),
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+                        letterSpacing = 1.ssp(),
+                        modifier = Modifier.padding(start = 8.sdp(), bottom = 8.sdp())
                     )
 
                     Surface(
                         color = surfaceColor,
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(20.sdp()),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         LazyColumn(
-                            modifier = Modifier.heightIn(max = 250.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp)
+                            modifier = Modifier.heightIn(max = 250.sdp()),
+                            contentPadding = PaddingValues(vertical = 8.sdp())
                         ) {
                             itemsIndexed(contact.numbers) { index, numObj ->
                                 Row(
@@ -249,22 +251,22 @@ fun ModernDeviceBottomSheet(
                                                 null
                                             )
                                         } // Default to system choice/auto
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        .padding(horizontal = 16.sdp(), vertical = 12.sdp()),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             numObj.number,
-                                            fontSize = 17.sp,
+                                            fontSize = 17.ssp(),
                                             color = textPrimary,
                                             fontWeight = FontWeight.Medium
                                         )
                                         if (numObj.isDefault) {
-                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Spacer(modifier = Modifier.height(4.sdp()))
                                             Text(
                                                 "Default",
-                                                fontSize = 11.sp,
+                                                fontSize = 11.ssp(),
                                                 color = Color(0xFF60A5FA),
                                                 fontWeight = FontWeight.Medium
                                             )
@@ -288,22 +290,22 @@ fun ModernDeviceBottomSheet(
                                                     Toast.LENGTH_SHORT
                                                 ).show()
                                             },
-                                            modifier = Modifier.size(36.dp)
+                                            modifier = Modifier.size(36.sdp())
                                         ) {
                                             Icon(
                                                 Icons.Default.ContentCopy,
                                                 null,
                                                 tint = textSecondary,
-                                                modifier = Modifier.size(18.dp)
+                                                modifier = Modifier.size(18.sdp())
                                             )
                                         }
 
-                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Spacer(modifier = Modifier.width(4.sdp()))
 
                                         // Small Call Button
                                         Box(
                                             modifier = Modifier
-                                                .size(36.dp)
+                                                .size(36.sdp())
                                                 .clip(CircleShape)
                                                 .background(primaryColor)
                                                 .clickable { onCall(numObj.number, null) },
@@ -313,7 +315,7 @@ fun ModernDeviceBottomSheet(
                                                 Icons.Default.Call,
                                                 null,
                                                 tint = Color.White,
-                                                modifier = Modifier.size(18.dp)
+                                                modifier = Modifier.size(18.sdp())
                                             )
                                         }
                                     }
@@ -323,7 +325,7 @@ fun ModernDeviceBottomSheet(
                                 if (index < contact.numbers.lastIndex) {
                                     HorizontalDivider(
                                         color = textSecondary.copy(alpha = 0.1f),
-                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                        modifier = Modifier.padding(horizontal = 16.sdp())
                                     )
                                 }
                             }
@@ -335,24 +337,24 @@ fun ModernDeviceBottomSheet(
                 val number = contact.numbers.firstOrNull()?.number ?: ""
                 Surface(
                     color = surfaceColor,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(20.sdp()),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
-                            .padding(16.dp)
+                            .padding(16.sdp())
                             .fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
                             number,
-                            fontSize = 20.sp,
+                            fontSize = 20.ssp(),
                             color = textPrimary,
                             fontWeight = FontWeight.Medium,
                             letterSpacing = 0.5.sp
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(12.sdp()))
                         IconButton(
                             onClick = {
                                 val clipboard =
@@ -361,50 +363,50 @@ fun ModernDeviceBottomSheet(
                                 clipboard.setPrimaryClip(clip)
                                 Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(32.sdp())
                         ) {
                             Icon(
                                 Icons.Default.ContentCopy,
                                 "Copy",
                                 tint = textSecondary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(16.sdp())
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.sdp()))
 
             // --- Main Call Button (Split for Dual Sim) ---
             if (effectiveDefault != null) {
                 if (isDualSim) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.sdp())
                     ) {
                         // SIM 1
                         Button(
                             onClick = { onCall(effectiveDefault.number, 0) },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(64.dp)
+                                .height(64.sdp())
                                 .shadow(
-                                    8.dp,
-                                    RoundedCornerShape(20.dp),
+                                    8.sdp(),
+                                    RoundedCornerShape(20.sdp()),
                                     ambientColor = Color(0xFF3B82F6),
                                     spotColor = Color(0xFF3B82F6)
                                 ),
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)),
                             elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 0.dp,
-                                pressedElevation = 4.dp
+                                defaultElevation = 0.sdp(),
+                                pressedElevation = 4.sdp()
                             )
                         ) {
                             Row(horizontalArrangement = Arrangement.Center) {
                                 Icon(Icons.Default.Phone, contentDescription = null)
-                                Text("  SIM 1", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -413,23 +415,23 @@ fun ModernDeviceBottomSheet(
                             onClick = { onCall(effectiveDefault.number, 1) },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(64.dp)
+                                .height(64.sdp())
                                 .shadow(
-                                    8.dp,
-                                    RoundedCornerShape(20.dp),
+                                    8.sdp(),
+                                    RoundedCornerShape(20.sdp()),
                                     ambientColor = Color(0xFF10B981),
                                     spotColor = Color(0xFF10B981)
                                 ),
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                             elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 0.dp,
-                                pressedElevation = 4.dp
+                                defaultElevation = 0.sdp(),
+                                pressedElevation = 4.sdp()
                             )
                         ) {
                             Row(horizontalArrangement = Arrangement.Center) {
                                 Icon(Icons.Default.Phone, contentDescription = null)
-                                Text("  SIM 2", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -439,34 +441,34 @@ fun ModernDeviceBottomSheet(
                         onClick = { onCall(effectiveDefault.number, null) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp)
+                            .height(64.sdp())
                             .shadow(
-                                12.dp,
-                                RoundedCornerShape(20.dp),
+                                12.sdp(),
+                                RoundedCornerShape(20.sdp()),
                                 ambientColor = primaryColor,
                                 spotColor = primaryColor
                             ),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(20.sdp()),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = primaryColor
                         ),
                         elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 0.dp,
-                            pressedElevation = 4.dp
+                            defaultElevation = 0.sdp(),
+                            pressedElevation = 4.sdp()
                         )
                     ) {
-                        Icon(Icons.Default.Call, null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                        Spacer(modifier = Modifier.width(12.sdp()))
                         Text(
                             text = if (contact.numbers.size > 1) "Call Default" else "Call",
-                            fontSize = 18.sp,
+                            fontSize = 18.ssp(),
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.sdp()))
         }
     }
 }

@@ -11,6 +11,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
+import com.mnivesh.callyn.ui.theme.sdp
+import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +65,7 @@ fun PersonalRequestsScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Personal Contact Requests", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+                title = { Text("Personal Contact Requests", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.ssp()) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
@@ -87,12 +89,12 @@ fun PersonalRequestsScreen(
                 }
             } else if (uiState.requests.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No pending requests", color = Color.White.copy(alpha = 0.5f), fontSize = 16.sp)
+                    Text("No pending requests", color = Color.White.copy(alpha = 0.5f), fontSize = 16.ssp())
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 100.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    contentPadding = PaddingValues(start = 16.sdp(), end = 16.sdp(), top = 16.sdp(), bottom = 100.sdp()),
+                    verticalArrangement = Arrangement.spacedBy(16.sdp())
                 ) {
                     items(uiState.requests, key = { it._id }) { request ->
                         RequestCard(
@@ -178,15 +180,15 @@ fun RequestCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(20.sdp()),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(20.sdp())) {
             // Header: RM Info
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(48.sdp())
                         .clip(CircleShape)
                         .background(Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))),
                     contentAlignment = Alignment.Center
@@ -195,83 +197,83 @@ fun RequestCard(
                         text = if (request.requestedBy.isNotEmpty()) request.requestedBy.take(1).uppercase() else "R",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp
+                        fontSize = 20.ssp()
                     )
                 }
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.sdp()))
                 Column {
-                    Text(text = request.requestedBy, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(text = request.requestedBy, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.ssp())
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.sdp()))
 
             // Client Info
             Text(
                 text = "Requesting access for:",
                 color = Color.White.copy(alpha = 0.5f),
-                fontSize = 12.sp,
+                fontSize = 12.ssp(),
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = request.requestedContact,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(top = 4.dp)
+                fontSize = 18.ssp(),
+                modifier = Modifier.padding(top = 4.sdp())
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(16.sdp()))
 
             // Reason Box
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.sdp()))
+                    .padding(16.sdp())
             ) {
                 Column {
-                    Text(text = "Reason:", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(text = "Reason:", color = Color.White.copy(alpha = 0.4f), fontSize = 11.ssp(), fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.sdp()))
                     Text(
                         text = "\"${request.reason}\"",
                         color = Color.White.copy(alpha = 0.9f),
-                        fontSize = 14.sp,
+                        fontSize = 14.ssp(),
                         fontStyle = FontStyle.Italic,
-                        lineHeight = 20.sp
+                        lineHeight = 20.ssp()
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(20.sdp()))
 
             // Action Buttons or Loader
             if (isProcessing) {
-                Box(modifier = Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color(0xFF3B82F6), strokeWidth = 2.dp)
+                Box(modifier = Modifier.fillMaxWidth().height(48.sdp()), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = Color(0xFF3B82F6), strokeWidth = 2.sdp())
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.sdp())) {
                     Button(
                         onClick = onDeny,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444).copy(alpha = 0.1f)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        elevation = ButtonDefaults.buttonElevation(0.dp)
+                        shape = RoundedCornerShape(12.sdp()),
+                        modifier = Modifier.weight(1f).height(48.sdp()),
+                        elevation = ButtonDefaults.buttonElevation(0.sdp())
                     ) {
-                        Icon(Icons.Default.Close, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.Close, null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.sdp()))
+                        Spacer(modifier = Modifier.width(8.sdp()))
                         Text("Reject", color = Color(0xFFEF4444), fontWeight = FontWeight.SemiBold)
                     }
 
                     Button(
                         onClick = onApprove,
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f).height(48.dp)
+                        shape = RoundedCornerShape(12.sdp()),
+                        modifier = Modifier.weight(1f).height(48.sdp())
                     ) {
-                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.sdp()))
+                        Spacer(modifier = Modifier.width(8.sdp()))
                         Text("Approve", fontWeight = FontWeight.SemiBold)
                     }
                 }

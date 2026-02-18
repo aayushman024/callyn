@@ -258,13 +258,13 @@ fun InCallContent(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()
-                    .padding(top = 30.dp, end = 10.dp)
+                    .padding(top = 30.sdp(), end = 10.sdp())
             ) {
                 Surface(
                     onClick = { showNotePopup = true },
                     color = Color.White.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(50), // Pill shape
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
@@ -321,7 +321,7 @@ fun InCallContent(
                         .clickable(enabled = false) {}, // Consume clicks inside
                     color = Color(0xFF1E293B), // Slate-900 like background
                     shape = RoundedCornerShape(16.sdp()),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f)),
                     shadowElevation = 12.sdp()
                 ) {
                     Column(
@@ -421,7 +421,7 @@ fun InCallContent(
                                     containerColor = Color.Transparent,
                                     contentColor = HangupRed
                                 ),
-                                border = BorderStroke(1.dp, HangupRed.copy(alpha = 0.3f)),
+                                border = BorderStroke(1.sdp(), HangupRed.copy(alpha = 0.3f)),
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(8.sdp())
                             ) {
@@ -465,7 +465,7 @@ fun InCallContent(
                         .clickable(enabled = false) {}, // Consume clicks inside
                     color = Color(0xFF1E293B),
                     shape = RoundedCornerShape(16.sdp()),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f)),
                     shadowElevation = 8.sdp()
                 ) {
                     Column(
@@ -795,7 +795,7 @@ private fun CallerInfo(
                                 onClick = onShowDetails,
                                 color = Color.White.copy(alpha = 0.1f),
                                 shape = RoundedCornerShape(20.sdp()),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+                                border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 8.sdp()),
@@ -1028,7 +1028,7 @@ private fun SwipeableCallControl(
                 .size(thumbSize)
                 .clip(CircleShape)
                 .background(Color.White)
-                .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                .border(2.sdp(), Color.White.copy(alpha = 0.35f), CircleShape)
                 .draggable(
                     orientation = Orientation.Horizontal,
                     state = rememberDraggableState { delta ->
