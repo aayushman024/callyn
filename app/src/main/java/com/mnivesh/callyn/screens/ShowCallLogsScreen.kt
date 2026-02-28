@@ -135,6 +135,13 @@ fun ShowCallLogsScreen(
     )
     datePickerDialog.datePicker.maxDate = System.currentTimeMillis()
 
+    fun formatDurationCompact(seconds: Int): String {
+        if (seconds == 0) return "0m"
+        val h = seconds / 3600
+        val m = (seconds % 3600) / 60
+        return if (h > 0) "${h}h ${m}m" else "${m}m"
+    }
+
     // Initial Data Load
     LaunchedEffect(Unit) {
         if (token != null) {
@@ -205,16 +212,16 @@ fun CallLogsContent(
     uiState: CallLogsUiState,
     userList: List<String>,
     selectedUser: String,
-    startDate: String, // [!code focus]
-    endDate: String,   // [!code focus]
+    startDate: String,
+    endDate: String,
     showNotesOnly: Boolean,
     showDropdown: Boolean,
     isPowerUser: Boolean,
     onNavigateBack: () -> Unit,
     onToggleDropdown: (Boolean) -> Unit,
     onUserSelected: (String) -> Unit,
-    onStartDateClick: () -> Unit, // [!code focus]
-    onEndDateClick: () -> Unit,   // [!code focus]
+    onStartDateClick: () -> Unit,
+    onEndDateClick: () -> Unit,
     onClearDate: () -> Unit,
     onToggleShowNotes: (Boolean) -> Unit,
     onSearch: () -> Unit
@@ -222,14 +229,23 @@ fun CallLogsContent(
     val isUserListReady = userList.isNotEmpty()
     var selectedTypeFilter by remember { mutableStateOf("All") }
 
+    // 1. Define Filtered Logs
     val filteredLogs = remember(uiState, selectedTypeFilter) {
         if (uiState is CallLogsUiState.Success) {
             when (selectedTypeFilter) {
                 "All" -> uiState.logs
-                "Personal" -> uiState.logs.filter { it.isWork == false }
+                "Work" -> uiState.logs.filter { it.isWork }
+                "Personal" -> uiState.logs.filter { !it.isWork }
                 else -> uiState.logs.filter { it.type.equals(selectedTypeFilter, ignoreCase = true) }
             }
         } else emptyList()
+    }
+
+    // 2. [FIX] Calculate Durations HERE (Top Level), not inside LazyColumn
+    val (workDuration, personalDuration) = remember(filteredLogs) {
+        val work = filteredLogs.filter { it.isWork != false }.sumOf { it.duration }
+        val personal = filteredLogs.filter { it.isWork == false }.sumOf { it.duration }
+        Pair(work, personal)
     }
 
     Scaffold(
@@ -256,7 +272,7 @@ fun CallLogsContent(
                 .fillMaxSize(),
             contentPadding = PaddingValues(bottom = 100.sdp())
         ) {
-            // Section 1: Filters
+            // Section 1: Main Filters
             item {
                 FilterSection(
                     selectedUser = selectedUser,
@@ -287,7 +303,7 @@ fun CallLogsContent(
                 }
             }
 
-            // Section 3: Results
+            // Section 3: Results & Stats
             when (uiState) {
                 is CallLogsUiState.Idle -> item { EmptyStateMessage("Adjust filters to view logs.") }
                 is CallLogsUiState.Loading -> item {
@@ -300,14 +316,69 @@ fun CallLogsContent(
                     if (filteredLogs.isEmpty()) {
                         item { EmptyStateMessage("No logs found.") }
                     } else {
+                        // Header Row with Stats
                         item {
-                            Text(
-                                text = "Found ${filteredLogs.size} records",
-                                color = SubtextColor,
-                                fontSize = 13.ssp(),
-                                modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp())
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.sdp(), vertical = 8.sdp()),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                // Record Count
+                                Text(
+                                    text = "Found ${filteredLogs.size} records",
+                                    color = SubtextColor,
+                                    fontSize = 13.ssp()
+                                )
+
+                                // Duration Statistics
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
+                                ) {
+                                    // Work Stats
+                                    if (workDuration > 0) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Work,
+                                                contentDescription = "Work Duration",
+                                                tint = SubtextColor,
+                                                modifier = Modifier.size(14.sdp())
+                                            )
+                                            Spacer(modifier = Modifier.width(4.sdp()))
+                                            Text(
+                                                text = formatDurationCompact(workDuration),
+                                                color = SubtextColor,
+                                                fontSize = 12.ssp(),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+
+                                    // Personal Stats
+                                    if (personalDuration > 0) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = "Personal Duration",
+                                                tint = SubtextColor,
+                                                modifier = Modifier.size(14.sdp())
+                                            )
+                                            Spacer(modifier = Modifier.width(4.sdp()))
+                                            Text(
+                                                text = formatDurationCompact(personalDuration),
+                                                color = SubtextColor,
+                                                fontSize = 12.ssp(),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
+
+                        // List Items
                         items(filteredLogs) { log ->
                             if (isPowerUser) {
                                 ManagementCallLogCard(log)
@@ -319,6 +390,22 @@ fun CallLogsContent(
                 }
             }
         }
+    }
+}
+
+// --- Helper for Stats formatting ---
+// Example Output: "1h 20m" or "45m"
+private fun formatDurationCompact(seconds: Long): String {
+    if (seconds == 0L) return "0s"
+
+    val h = seconds / 3600
+    val m = (seconds % 3600) / 60
+    val s = seconds % 60
+
+    return when {
+        h > 0 -> "${h}h ${m}m ${s}s"
+        m > 0 -> "${m}m ${s}s"
+        else -> "${s}s"
     }
 }
 
@@ -869,6 +956,7 @@ fun QuickFilterRow(
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         FilterChip(Icons.Default.AllInbox, selectedFilter == "All", PrimaryColor) { onFilterSelected("All") }
+        FilterChip(Icons.Default.Work, selectedFilter == "Work", PrimaryColor) { onFilterSelected("Work") }
         FilterChip(Icons.Default.Person, selectedFilter == "Personal", PersonalBorder) { onFilterSelected("Personal") }
         FilterChip(Icons.Rounded.CallReceived, selectedFilter == "Incoming", PrimaryColor) { onFilterSelected("Incoming") }
         FilterChip(Icons.Rounded.CallMade, selectedFilter == "Outgoing", SuccessColor) { onFilterSelected("Outgoing") }

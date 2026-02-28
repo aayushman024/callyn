@@ -68,6 +68,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import android.content.ContextWrapper
+
+// Recursively unwrap the context to get the actual Activity
+tailrec fun Context.getActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.getActivity()
+    else -> null
+}
 
 // --- Theme Constants ---
 private val PersonalGradient = Brush.verticalGradient(
@@ -85,13 +93,23 @@ private val AnswerGreen = Color(0xFF30D158)
 
 // 1. STATEFUL COMPOSABLE
 @Composable
-fun InCallScreen() {
+fun InCallScreen(
+) {
     val context = LocalContext.current
     val callState by CallManager.callState.collectAsState()
 
+    // 1. Use safe unwrap instead of simple cast
     if (callState == null) {
-        (context as? Activity)?.finish()
+        context.getActivity()?.finish()
         return
+    }
+
+    // 2. OS Bug Fallback: Force finish if stuck on Disconnected for >1.5s
+    LaunchedEffect(callState?.status) {
+        if (callState?.status == "Disconnected" && callState?.secondIncomingCall == null) {
+            delay(1500) // Let user see "Disconnected" state briefly
+            context.getActivity()?.finish()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -303,6 +321,51 @@ fun InCallContent(
                 onAccept = onAnswerWaiting,
                 onDecline = onRejectWaiting
             )
+        }
+        AnimatedVisibility(
+            visible = currentState.isSecondCallHolding,
+            enter = slideInVertically { -it },
+            exit = slideOutVertically { -it },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = if (currentState.secondIncomingCall != null) 120.sdp() else 40.sdp())
+                .padding(horizontal = 16.sdp())
+        ) {
+            // fallback chain: Name -> Number -> Unknown
+            val holdDisplayName = currentState.secondCallerName?.takeIf { it.isNotBlank() }
+                ?: currentState.secondCallerNumber?.takeIf { it.isNotBlank() }
+                ?: "Unknown Caller"
+
+            Surface(
+                color = Color(0xFFF59E0B).copy(alpha = 0.95f), // Amber warning color
+                shape = RoundedCornerShape(20.sdp()),
+                modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .clickable { CallManager.swapCalls() },
+                shadowElevation = 8.sdp()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 10.sdp()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Pause,
+                        contentDescription = "Swap Calls",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.sdp())
+                    )
+                    Spacer(modifier = Modifier.width(8.sdp()))
+                    Text(
+                        text = "On Hold: $holdDisplayName",
+                        color = Color.White,
+                        fontSize = 13.ssp(),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
 
         //notes popup
@@ -896,7 +959,6 @@ private fun RingingControls(
         verticalArrangement = Arrangement.spacedBy(24.sdp())
     ) {
         // Only show Message button for Personal calls
-        if (isPersonal) {
             CallToggleButton(
                 icon = Icons.Default.Message,
                 text = "Message",
@@ -904,7 +966,6 @@ private fun RingingControls(
                 buttonSize = 64.sdp(),
                 onClick = onMessageClick
             )
-        }
 
         SwipeableCallControl(
             onSwipeLeft = onReject,

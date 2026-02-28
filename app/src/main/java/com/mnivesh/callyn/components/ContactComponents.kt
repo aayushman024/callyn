@@ -96,26 +96,46 @@ fun CustomTabContent(text: String, icon: Any, count: Int?, isSelected: Boolean) 
                 modifier = Modifier.size(18.sdp())
             )
         } else if (icon is Painter) {
-        Icon(
-            painter = icon,
-            contentDescription = null,
-            tint = Color.Unspecified,
-            modifier = Modifier.size(28.sdp())
-        )
-    }
-        Spacer(modifier = Modifier.width(8.sdp()))
-        Text(text, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium, fontSize = 15.ssp())
-        Spacer(modifier = Modifier.width(8.sdp()))
-        if(count != null){
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f))
-                .padding(6.sdp(), 2.sdp())
-        ) {
-            Text(count.toString(), fontSize = 12.ssp(), fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f))
+            Icon(
+                painter = icon,
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(28.sdp())
+            )
         }
-    }
+
+        Spacer(modifier = Modifier.width(8.sdp()))
+
+        // force single line, let text ellipsize if tab width gets constrained
+        Text(
+            text = text,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            fontSize = 15.ssp(),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+
+        if(count != null) {
+            Spacer(modifier = Modifier.width(8.sdp()))
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(if (isSelected) Color.White.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.1f))
+                    .padding(horizontal = 6.sdp(), vertical = 2.sdp())
+            ) {
+                // prevent wrapping for large numbers like 24682
+                Text(
+                    text = count.toString(),
+                    fontSize = 12.ssp(),
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
     }
 }
 

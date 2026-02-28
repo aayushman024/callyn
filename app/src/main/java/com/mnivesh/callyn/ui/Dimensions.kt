@@ -1,8 +1,8 @@
 package com.mnivesh.callyn.ui.theme
 
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -18,13 +18,29 @@ fun Int.ssp() = (this * scaleText()).sp
 @Composable
 fun scaleWidth(): Float {
     val config = LocalConfiguration.current
-    return config.screenWidthDp / BASE_WIDTH
+    val isPortrait = config.orientation != Configuration.ORIENTATION_LANDSCAPE
+
+    // In landscape, screenWidthDp represents the longer side of the device.
+    // We scale against BASE_HEIGHT to maintain proportional sizing.
+    return if (isPortrait) {
+        config.screenWidthDp / BASE_WIDTH
+    } else {
+        config.screenWidthDp / BASE_HEIGHT
+    }
 }
 
 @Composable
 fun scaleHeight(): Float {
     val config = LocalConfiguration.current
-    return config.screenHeightDp / BASE_HEIGHT
+    val isPortrait = config.orientation != Configuration.ORIENTATION_LANDSCAPE
+
+    // In landscape, screenHeightDp is the shorter side.
+    // Scale against BASE_WIDTH here.
+    return if (isPortrait) {
+        config.screenHeightDp / BASE_HEIGHT
+    } else {
+        config.screenHeightDp / BASE_WIDTH
+    }
 }
 
 @Composable

@@ -9,7 +9,7 @@ plugins {
 }
 
 android {
-    namespace = "com.mnivesh.callyn" // <-- Your package name
+    namespace = "com.mnivesh.callyn"
     compileSdk = 36
 
     defaultConfig {
@@ -17,7 +17,7 @@ android {
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
         versionCode = 1
-        versionName = "1.3.5"
+        versionName = "1.3.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

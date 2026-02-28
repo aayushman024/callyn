@@ -3,6 +3,7 @@ package com.mnivesh.callyn.components
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.mnivesh.callyn.ui.theme.sdp
@@ -33,7 +35,7 @@ import com.mnivesh.callyn.MainActivity
 import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.managers.AuthManager
 
-// Define specific access lists outside the composable to prevent recreation.
+// --- Access Lists (Unchanged) ---
 private val ADMIN_EMAILS = hashSetOf(
     "aayushman@niveshonline.com",
     "ishika@niveshonline.com",
@@ -43,8 +45,7 @@ private val ADMIN_EMAILS = hashSetOf(
 
 private val MANAGEMENT_ROLES = hashSetOf("Management", "IT Desk")
 
-// --- Data Model ---
-// Decoupling data from UI logic
+// --- Data Model (Unchanged) ---
 sealed class DrawerItemType {
     data class Action(
         val label: String,
@@ -71,20 +72,17 @@ fun AppDrawer(
 ) {
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
-    // Fetch once and remember
     val department = remember { authManager.getDepartment() ?: "" }
     val email = remember { authManager.getUserEmail() ?: "" }
+    val workPhone = remember { authManager.getWorkPhone() ?: "Not Alloted" }
 
     val configuration = LocalConfiguration.current
     val drawerWidth = min(320.sdp(), configuration.screenWidthDp.dp * 0.85f)
 
-    // --- Logic Optimization ---
-    // Prepare the list in a derived state or remember block.
-    // This runs only when department or email changes, not on every recomposition.
+    // --- Logic (Unchanged) ---
     val drawerItems = remember(department, email) {
         val list = mutableListOf<DrawerItemType>()
 
-        // 1. Standard Items
         list.add(
             DrawerItemType.Action("Sync Work Contacts", Icons.Default.Refresh, Color(0xFF38BDF8)) {
                 Toast.makeText(context, "Syncing Work Contacts...", Toast.LENGTH_SHORT).show()
@@ -95,14 +93,12 @@ fun AppDrawer(
             DrawerItemType.Action("Employee Directory", Icons.Default.Badge, Color(0xFFF472B6), onClick = onShowDirectory)
         )
 
-        // 2. Role Based Items (O(1) Lookup)
         if (MANAGEMENT_ROLES.contains(department)) {
             list.add(
                 DrawerItemType.Action("User Status", Icons.Default.Group, Color(0xFFA5B4FC), onClick = onShowUserDetails)
             )
         }
 
-        // 3. Email/Dept Logic
         val callLogLabel = if (department == "Management" || ADMIN_EMAILS.contains(email)) "View Call Logs" else "View Call Notes"
         val callLogIcon = if (department == "Management" || ADMIN_EMAILS.contains(email)) Icons.Default.List else Icons.Default.EditNote
         val callLogColor = if (department == "Management" || ADMIN_EMAILS.contains(email)) Color(0xFF34D399) else Color(0xFF673AB7)
@@ -115,7 +111,6 @@ fun AppDrawer(
             DrawerItemType.Action("Personal Contact Requests", Icons.Default.AssignmentInd, Color(0xFFFACC15), onClick = onShowRequests)
         )
 
-        // 4. Footer Items
         list.add(DrawerItemType.Divider)
         list.add(
             DrawerItemType.Action(
@@ -128,47 +123,44 @@ fun AppDrawer(
         )
         list.add(DrawerItemType.VersionInfo)
 
-        list // Return the list
+        list
     }
 
     ModalDrawerSheet(
         drawerContainerColor = Color(0xFF0B1220),
         drawerContentColor = Color.White,
-        modifier = Modifier.width(drawerWidth)
+        modifier = Modifier.width(drawerWidth),
+        // Modern rounded edge for the drawer sheet itself
+        drawerShape = RoundedCornerShape(topEnd = 24.sdp(), bottomEnd = 24.sdp())
     ) {
-        // Use LazyColumn for efficient rendering (Windowing)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.sdp()) // Bottom padding for scrolling
+            contentPadding = PaddingValues(bottom = 24.sdp())
         ) {
-            // Header is a single item
             item {
-                DrawerHeader(userName, email, department)
+                DrawerHeader(userName, email, department, workPhone)
             }
 
+            // Spacing before list starts
             item {
-                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                Spacer(modifier = Modifier.height(8.sdp()))
             }
 
-            // Render list items dynamically
             items(drawerItems) { item ->
                 when (item) {
                     is DrawerItemType.Action -> {
-                        DrawerActionItem(
-                            item = item,
-                            onClose = onClose
-                        )
+                        DrawerActionItem(item = item, onClose = onClose)
                     }
                     is DrawerItemType.Divider -> {
-                        Spacer(modifier = Modifier.height(16.sdp()))
+                        // Soft divider
                         HorizontalDivider(
-                            color = Color.White.copy(alpha = 0.08f),
-                            modifier = Modifier.padding(horizontal = 24.sdp())
+                            modifier = Modifier.padding(vertical = 16.sdp(), horizontal = 32.sdp()),
+                            color = Color.White.copy(alpha = 0.04f),
+                            thickness = 1.sdp()
                         )
-                        Spacer(modifier = Modifier.height(16.sdp()))
                     }
                     is DrawerItemType.VersionInfo -> {
-                        Spacer(modifier = Modifier.height(24.sdp()))
+                        Spacer(modifier = Modifier.height(16.sdp()))
                         DrawerVersionItem()
                     }
                 }
@@ -177,85 +169,158 @@ fun AppDrawer(
     }
 }
 
-// --- Extracted Composables for Smart Recomposition ---
+// --- Modernized Components ---
 
 @Composable
-private fun DrawerHeader(userName: String, email: String, department: String) {
-    // Memoize the background brush to avoid recreation on every frame
-    val bgBrush = remember {
-        Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0B1220), Color(0xFF111827)))
+private fun DrawerHeader(userName: String, email: String, department: String, workPhone: String) {
+    // 1. Dynamic Gradients for visual pop
+    val headerBg = remember {
+        Brush.verticalGradient(
+            colors = listOf(Color(0xFF1E293B), Color(0xFF0F172A)) // Richer Slate Gradient
+        )
     }
-    val avatarBrush = remember {
-        Brush.linearGradient(listOf(Color(0xFF2563EB), Color(0xFF60A5FA)))
+
+    val avatarBorder = remember {
+        Brush.sweepGradient(
+            colors = listOf(
+                Color(0xFFF472B6), // Pink
+                Color(0xFF818CF8), // Indigo
+                Color(0xFF34D399), // Emerald
+                Color(0xFFF472B6)  // Wrap back to Pink
+            )
+        )
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(bgBrush)
-            .statusBarsPadding() // Better than systemBarsPadding for top alignment
-            .padding(top = 24.sdp(), bottom = 25.sdp(), start = 24.sdp(), end = 24.sdp())
+            .background(headerBg)
+            .statusBarsPadding()
+            .padding(start = 24.sdp(), end = 24.sdp(), top = 28.sdp(), bottom = 24.sdp())
     ) {
-        Box(
-            modifier = Modifier
-                .size(70.sdp())
-                .clip(CircleShape)
-                .background(avatarBrush),
-            contentAlignment = Alignment.Center
+        // --- Top Row: Avatar & Name ---
+        Row(
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
-                fontSize = 26.ssp(),
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.sdp()))
-
-        Text(
-            text = userName,
-            fontSize = 21.ssp(),
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFFF1F5F9)
-        )
-
-        if (email.isNotBlank() && email != "N/A") {
-            Spacer(modifier = Modifier.height(4.sdp()))
-            Text(
-                text = email,
-                fontSize = 13.ssp(),
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF9CA3AF),
-                overflow = TextOverflow.Ellipsis,
-                maxLines = 1
-            )
-        }
-
-        if (department.isNotBlank() && department != "N/A") {
-            Spacer(modifier = Modifier.height(10.sdp()))
-            Surface(
-                color = Color(0xFF1F2937),
-                shape = RoundedCornerShape(20.sdp()),
-                border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.06f))
+            Box(
+                modifier = Modifier
+                    .size(60.sdp())
+                    .padding(4.sdp()) // Spacing between border and image
+                    .clip(CircleShape)
+                    .background(Color(0xFF212A38)),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 6.sdp()),
-                    verticalAlignment = Alignment.CenterVertically
+                Text(
+                    text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
+                    fontSize = 26.ssp(),
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.sdp()))
+
+            // Name & Email Block
+            Column(
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = userName,
+                    fontSize = 19.ssp(),
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    letterSpacing = 0.5.sp
+                )
+
+                if (email.isNotBlank() && email != "N/A") {
+                    Spacer(modifier = Modifier.height(2.sdp()))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Mail,
+                            contentDescription = null,
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(11.sdp())
+                        )
+                        Spacer(modifier = Modifier.width(4.sdp()))
+                        Text(
+                            text = email,
+                            fontSize = 12.ssp(),
+                            color = Color(0xFF94A3B8),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.sdp()))
+
+        // --- Bottom Row: Info Pills (Department & Phone) ---
+        // We use a Row to place them side-by-side or wrap if needed
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.sdp())
+        ) {
+            // 1. Department Pill (Indigo Theme)
+            if (department.isNotBlank() && department != "N/A") {
+                Surface(
+                    color = Color(0xFF818CF8).copy(alpha = 0.15f), // Indigo Tint
+                    shape = CircleShape,
+                    border = BorderStroke(1.sdp(), Color(0xFF818CF8).copy(alpha = 0.3f)),
+                    modifier = Modifier.weight(1f, fill = false) // Allow flexible width
                 ) {
-                    Icon(
-                        Icons.Default.BusinessCenter,
-                        null,
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(16.sdp())
-                    )
-                    Spacer(modifier = Modifier.width(8.sdp()))
-                    Text(
-                        text = department,
-                        fontSize = 13.ssp(),
-                        color = Color(0xFFD1D5DB),
-                        fontWeight = FontWeight.Medium
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.BusinessCenter,
+                            null,
+                            tint = Color(0xFF818CF8),
+                            modifier = Modifier.size(14.sdp())
+                        )
+                        Spacer(modifier = Modifier.width(6.sdp()))
+                        Text(
+                            text = department,
+                            fontSize = 11.ssp(),
+                            color = Color(0xFFE0E7FF),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // 2. Work Phone Pill (Emerald Theme)
+            if (workPhone != "Not Alloted") {
+                Surface(
+                    color = Color(0xFF34D399).copy(alpha = 0.15f), // Emerald Tint
+                    shape = CircleShape,
+                    border = BorderStroke(1.sdp(), Color(0xFF34D399).copy(alpha = 0.3f)),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.PhoneIphone,
+                            null,
+                            tint = Color(0xFF34D399),
+                            modifier = Modifier.size(14.sdp())
+                        )
+                        Spacer(modifier = Modifier.width(6.sdp()))
+                        Text(
+                            text = workPhone,
+                            fontSize = 11.ssp(),
+                            color = Color(0xFFD1FAE5),
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -267,60 +332,94 @@ private fun DrawerActionItem(
     item: DrawerItemType.Action,
     onClose: () -> Unit
 ) {
-    val textColor = if (item.isDestructive) Color(0xFFF44336) else Color.White.copy(alpha = 0.92f)
-    val containerColor = if (item.isDestructive) Color(0xFFF44336).copy(alpha = 0.1f) else Color.White.copy(alpha = 0.04f)
+    // The "Pill" Logic
+    // 1. Container Shape = CircleShape (Stadium/Pill)
+    // 2. Subtle Border for definition
+    // 3. Floating effect via padding
 
-    NavigationDrawerItem(
-        label = {
-            Text(text = item.label, fontSize = 15.ssp(), fontWeight = FontWeight.Medium)
-        },
-        icon = {
-            Icon(item.icon, null, Modifier.size(22.sdp()), tint = if(item.isDestructive) item.tint else item.tint)
-        },
-        selected = false,
+    val backgroundColor = if (item.isDestructive)
+        item.tint.copy(alpha = 0.1f)
+    else
+        Color.Transparent
+
+    val borderColor = if (item.isDestructive)
+        item.tint.copy(alpha = 0.2f)
+    else
+        Color.White.copy(alpha = 0.08f)
+
+    Surface(
         onClick = {
             onClose()
             item.onClick()
         },
-        shape = RoundedCornerShape(18.sdp()),
-        colors = NavigationDrawerItemDefaults.colors(
-            unselectedContainerColor = containerColor,
-            unselectedTextColor = textColor,
-            unselectedIconColor = item.tint, // Use the specific tint from data
-        ),
         modifier = Modifier
-            .padding(horizontal = 14.sdp(), vertical = 4.sdp())
             .fillMaxWidth()
-    )
+            .padding(horizontal = 16.sdp(), vertical = 4.sdp()), // Floating margins
+        shape = CircleShape, // Makes it a Pill
+        color = backgroundColor,
+        border = BorderStroke(1.sdp(), borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(vertical = 12.sdp(), horizontal = 16.sdp())
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Icon(
+                imageVector = item.icon,
+                contentDescription = null,
+                tint = item.tint,
+                modifier = Modifier.size(20.sdp())
+            )
+
+            Spacer(modifier = Modifier.width(16.sdp()))
+
+            // Label
+            Text(
+                text = item.label,
+                fontSize = 14.ssp(),
+                fontWeight = FontWeight.Medium,
+                color = if (item.isDestructive) item.tint else Color(0xFFE2E8F0),
+                modifier = Modifier.weight(1f)
+            )
+
+            // Chevron (Visual affordance for navigation)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.2f),
+                modifier = Modifier.size(18.sdp())
+            )
+        }
+    }
 }
 
 @Composable
 private fun DrawerVersionItem() {
     val context = LocalContext.current
+
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        // Version Pill
         Surface(
             onClick = { (context as? MainActivity)?.manualUpdateCheck() },
-            shape = RoundedCornerShape(30),
-            color = Color.White.copy(alpha = 0.06f),
-            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.12f))
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.2f),
+            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.05f))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 8.sdp()),
+                modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.SystemUpdate,
-                    null,
-                    tint = Color(0xFF93C5FD),
-                    modifier = Modifier.size(14.sdp())
-                )
-                Spacer(modifier = Modifier.width(10.sdp()))
                 Text(
-                    text = "Callyn v$version",
-                    fontSize = 12.ssp(),
-                    color = Color.White.copy(alpha = 0.8f),
+                    text = "v$version",
+                    fontSize = 11.ssp(),
+                    color = Color.White.copy(alpha = 0.4f),
                     fontWeight = FontWeight.Medium
                 )
+                Spacer(modifier = Modifier.width(6.sdp()))
+                // Small dot
+                Box(modifier = Modifier.size(4.sdp()).clip(CircleShape).background(Color(0xFF38BDF8)))
             }
         }
     }

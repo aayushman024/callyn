@@ -3,11 +3,8 @@ package com.mnivesh.callyn.managers
 import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
-import android.database.ContentObserver
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telecom.Call
@@ -16,6 +13,7 @@ import android.telephony.SmsManager
 import android.telephony.SubscriptionManager
 import androidx.annotation.RequiresApi
 import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -23,16 +21,18 @@ import androidx.work.workDataOf
 import com.mnivesh.callyn.services.MyInCallService
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.WorkCallLog
+import com.mnivesh.callyn.workers.DeleteCallLogWorker
 import com.mnivesh.callyn.workers.PersonalUploadWorker
 import com.mnivesh.callyn.workers.UploadCallLogWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 // --- UPDATED CallState ---
 data class CallState(
@@ -56,11 +56,11 @@ data class CallState(
     val familyAum: String? = null,
     val connectTimeMillis: Long = 0,
     internal val call: Call? = null,
-
     // Call Waiting / Background Call
     val secondCallerName: String? = null,
     val secondCallerNumber: String? = null,
-    internal val secondIncomingCall: Call? = null // The "Waiting" or "Background" call
+    internal val secondIncomingCall: Call? = null, // The "Waiting" or "Background" call
+    val isSecondCallHolding: Boolean = false
 )
 
 object CallManager {
@@ -68,15 +68,16 @@ object CallManager {
     private val _callState = MutableStateFlow<CallState?>(null)
     val callState = _callState.asStateFlow()
 
-    // NEW: Track all calls to handle multi-call logic properly
-    private val registeredCalls = mutableListOf<Call>()
+    // Thread-safe list and map to prevent CME and memory leaks
+    private val registeredCalls = CopyOnWriteArrayList<Call>()
+    private val callCallbacks = ConcurrentHashMap<Call, Call.Callback>()
 
     private var repository: ContactRepository? = null
     private var appContext: Context? = null
 
     private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // [ADDED] Variable to hold the note for the active call
+    // Left as-is per request
     private var currentNote: String? = null
 
     fun initialize(repository: ContactRepository, context: Context) {
@@ -102,13 +103,15 @@ object CallManager {
     fun onCallRemoved(call: Call) {
         registeredCalls.remove(call)
 
-        // [MODIFIED] Capture note locally to pass to logging, then clear it
+        // Unregister callback to prevent memory leak
+        callCallbacks.remove(call)?.let { call.unregisterCallback(it) }
+
         val noteToSave = currentNote
 
         // 1. Handle Logging (Passing the note)
         handleCallLogging(call, noteToSave)
 
-        // [MODIFIED] Reset note for next call
+        // Reset note for next call
         currentNote = null
 
         // 2. Update UI
@@ -150,15 +153,14 @@ object CallManager {
         val handle = details.handle
         val displayNumber = handle?.schemeSpecificPart ?: ""
 
+        val currentState = _callState.value
         var finalName = if (isConference) {
             "Conference (${children.size})"
         } else {
             displayNumber
         }
 
-        val currentState = _callState.value
-
-        // Check if we already have a resolved name to avoid flickering
+        // prevent UI flickering: reuse the resolved name if the number hasn't changed while DB queries run
         if (!isConference && displayNumber.isNotEmpty()) {
             if (currentState?.number == displayNumber && currentState.name != displayNumber) {
                 finalName = currentState.name
@@ -167,39 +169,50 @@ object CallManager {
             }
         }
 
-        // Secondary call logic (Call Waiting)
-        val isSecondRinging = secondary?.state == Call.STATE_RINGING
-        var secName = secondary?.details?.handle?.schemeSpecificPart ?: ""
-        if (isSecondRinging && currentState?.secondCallerNumber == secName) {
-            secName = currentState.secondCallerName ?: secName
-        } else if (isSecondRinging) {
-            resolveSecondaryContactInfo(secName)
+        // --- BACKGROUND CALL LOGIC (Waiting & Hold) ---
+        val waitingCall = registeredCalls.find { it != primary && it.state == Call.STATE_RINGING }
+        val heldCall = registeredCalls.find { it != primary && it.state == Call.STATE_HOLDING }
+
+        val targetSecondary = waitingCall ?: heldCall
+        val isSecondRinging = targetSecondary?.state == Call.STATE_RINGING
+        val isSecondHolding = targetSecondary?.state == Call.STATE_HOLDING
+
+        // Separate raw number from resolved name to keep the number dialable
+        val secNumber = targetSecondary?.details?.handle?.schemeSpecificPart ?: ""
+        var secName = secNumber
+
+        if (isSecondRinging && currentState?.secondCallerNumber == secNumber) {
+            secName = currentState.secondCallerName ?: secNumber
+        } else if (targetSecondary != null) {
+            resolveSecondaryContactInfo(secNumber)
         }
 
-        // Use .copy() to preserve AUM, FamilyHead, etc.
-        _callState.value = (currentState ?: CallState(name = finalName, number = displayNumber, status = "Connecting")).copy(
-            name = finalName,
-            number = displayNumber,
-            status = primary.getStateString(),
-            isIncoming = (primary.state == Call.STATE_RINGING),
-            isConference = isConference,
-            canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
-                    (registeredCalls.size > 1 && !isSecondRinging),
-            canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
-                    (registeredCalls.size > 1 && secondary?.state == Call.STATE_HOLDING),
-            participants = children.map { it.details.handle?.schemeSpecificPart ?: "Unknown" },
-            call = primary,
-            isHolding = (primary.state == Call.STATE_HOLDING),
-            connectTimeMillis = details.connectTimeMillis,
-            secondIncomingCall = if (isSecondRinging) secondary else null,
-            secondCallerName = if (isSecondRinging) secName else null,
-            secondCallerNumber = if (isSecondRinging) secName else null
-        )
+        // --- EMIT STATE atomically to prevent lost updates ---
+        _callState.update { current ->
+            (current ?: CallState(name = finalName, number = displayNumber, status = "Connecting")).copy(
+                name = finalName,
+                number = displayNumber,
+                status = primary.getStateString(),
+                isIncoming = (primary.state == Call.STATE_RINGING),
+                isConference = isConference,
+                canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
+                        (registeredCalls.size > 1 && !isSecondRinging),
+                canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
+                        (registeredCalls.size > 1 && isSecondHolding),
+                participants = children.map { it.details.handle?.schemeSpecificPart ?: "Unknown" },
+                call = primary,
+                isHolding = (primary.state == Call.STATE_HOLDING),
+                connectTimeMillis = details.connectTimeMillis,
+                secondIncomingCall = if (isSecondRinging) targetSecondary else null,
+                secondCallerName = if (targetSecondary != null) secName else null,
+                secondCallerNumber = if (targetSecondary != null) secNumber else null,
+                isSecondCallHolding = isSecondHolding
+            )
+        }
     }
 
     // --- Actions ---
 
-    // [ADDED] Note Management
     fun setCallNote(note: String) {
         currentNote = if (note.isBlank()) null else note
     }
@@ -246,16 +259,18 @@ object CallManager {
         }
     }
 
-    //send quick response text
     fun sendQuickResponse(context: Context, number: String, message: String) {
         try {
-            // Use SupressLint if your target SDK marks this as deprecated,
-            // or use context.getSystemService(SmsManager::class.java) for Android 12+
-            val smsManager = SmsManager.getDefault()
-            smsManager.sendTextMessage(number, null, message, null, null)
-            rejectCall()
+            val call = _callState.value?.call
+            if (call != null && call.state == Call.STATE_RINGING) {
+                call.reject(true, message)
+            } else {
+                val smsManager = context.getSystemService(SmsManager::class.java)
+                smsManager.sendTextMessage(number, null, message, null, null)
+                rejectCall()
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
+            rejectCall()
         }
     }
 
@@ -270,20 +285,19 @@ object CallManager {
         coroutineScope.launch {
             var resolvedName: String? = null
 
-            // 1. Work Contact (Higher priority)
+            // 1. Work Contact
             val workContact = repository?.findWorkContactByNumber(normalized)
             if (workContact != null) {
                 resolvedName = workContact.name
-            }
-
-            if (resolvedName == null) {
+            } else {
+                // Check CRM if not in work DB
                 val crmContact = repository?.findCrmContactByNumber(normalized)
                 if (crmContact != null) {
                     resolvedName = crmContact.name
                 }
             }
 
-            // 2. Device Contact (Fallback)
+            // 2. Device Contact
             if (resolvedName == null) {
                 resolvedName = findPersonalContactName(normalized)
             }
@@ -301,9 +315,10 @@ object CallManager {
 
             val finalName = resolvedName ?: number
 
-            val current = _callState.value
-            if (current != null && current.secondCallerNumber == number) {
-                _callState.value = current.copy(secondCallerName = finalName)
+            _callState.update { current ->
+                if (current != null && current.secondCallerNumber == number) {
+                    current.copy(secondCallerName = finalName)
+                } else current
             }
         }
     }
@@ -320,8 +335,7 @@ object CallManager {
             var aum: String? = null
             var familyAum: String? = null
 
-            // 1. Work Contact (Higher priority)
-            // Check length > 9 to avoid false matches on short numbers in the work DB
+            // Properly gate CRM contact check
             if (normalized.length > 9) {
                 val workContact = repository?.findWorkContactByNumber(normalized)
                 if (workContact != null) {
@@ -331,20 +345,18 @@ object CallManager {
                     rshipManager = workContact.rshipManager
                     aum = workContact.aum
                     familyAum = workContact.familyAum
-                }
-            } else {
-                // [ADDED] 1.5 CRM Contact (Second priority)
-                val crmContact = repository?.findCrmContactByNumber(normalized)
-                if (crmContact != null) {
-                    resolvedName = crmContact.name
-                    type = "work" // Treat as work for UI/Logging consistency
-                    familyHead = crmContact.module // Map Module to FamilyHead
-                    rshipManager = crmContact.ownerName // Use Owner as R.M context
-                    aum = crmContact.product // Use Product as AUM context
+                } else {
+                    val crmContact = repository?.findCrmContactByNumber(normalized)
+                    if (crmContact != null) {
+                        resolvedName = crmContact.name
+                        type = "work"
+                        familyHead = crmContact.module
+                        rshipManager = crmContact.ownerName
+                        aum = crmContact.product
+                    }
                 }
             }
 
-            // 2. Device Contact (Fallback if not in work DB)
             if (resolvedName == null) {
                 val personalName = findPersonalContactName(normalized)
                 if (personalName != null) {
@@ -353,7 +365,6 @@ object CallManager {
                 }
             }
 
-            // 3. CNAP / Network Name
             if (resolvedName == null) {
                 val cnapName = _callState.value?.call?.details?.callerDisplayName
                 if (!cnapName.isNullOrBlank() && normalizeNumber(cnapName) != normalized) {
@@ -363,62 +374,55 @@ object CallManager {
 
             val finalName = resolvedName ?: number
 
-            if (_callState.value?.number == number) {
-                _callState.value = _callState.value?.copy(
-                    name = finalName,
-                    type = type,
-                    familyHead = familyHead,
-                    rshipManager = rshipManager,
-                    aum = aum,
-                    familyAum = familyAum
-                )
+            _callState.update { current ->
+                if (current?.number == number) {
+                    current.copy(
+                        name = finalName,
+                        type = type,
+                        familyHead = familyHead,
+                        rshipManager = rshipManager,
+                        aum = aum,
+                        familyAum = familyAum
+                    )
+                } else current
             }
         }
     }
 
-    //get sim card info for the call
     @SuppressLint("MissingPermission")
     private fun getSimSlot(context: Context, call: Call): String {
         try {
             val accountHandle = call.details.accountHandle ?: return "Unknown"
             val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
 
-            // Iterate active subs to find matching ID
             val activeSubs = sm.activeSubscriptionInfoList ?: return "Unknown"
             val subInfo = activeSubs.find {
                 it.subscriptionId == accountHandle.id.toIntOrNull() || it.iccId == accountHandle.id
             }
 
-            return if (subInfo != null) {
-                // Human readable format: "SIM 1" or "SIM 2"
-                "SIM ${subInfo.simSlotIndex + 1}"
-            } else {
-                "Unknown"
-            }
+            return if (subInfo != null) "SIM ${subInfo.simSlotIndex + 1}" else "Unknown"
         } catch (e: Exception) {
             return "Unknown"
         }
     }
 
-    // --- Logging & Deletion ---
+    // Added API guard explicitly
     @RequiresApi(Build.VERSION_CODES.Q)
-    // [MODIFIED] Added 'callNote' parameter to constructor
     private fun handleCallLogging(call: Call, callNote: String?) {
         val rawNumber = call.details.handle?.schemeSpecificPart ?: ""
         if (rawNumber.isBlank()) return
 
         coroutineScope.launch {
-            // 0. Get User Department
             val dept = appContext?.let { AuthManager(it).getDepartment() } ?: "N/A"
             val isManagement = dept == "Management"
 
-            // 1. Prepare Common Data
             val now = System.currentTimeMillis()
             val durationSeconds = if (call.details.connectTimeMillis > 0) {
                 (now - call.details.connectTimeMillis) / 1000
             } else {
                 0
             }
+            val startTimestamp = if (call.details.connectTimeMillis > 0) call.details.connectTimeMillis else call.details.creationTimeMillis
 
             var direction = "outgoing"
             val wasIncoming = (call.details.callDirection == Call.Details.DIRECTION_INCOMING)
@@ -426,67 +430,65 @@ object CallManager {
                 direction = if (call.details.connectTimeMillis > 0) "incoming" else "missed"
             }
 
-            // Get SIM info safely
             val simSlot = appContext?.let { getSimSlot(it, call) } ?: "Unknown"
             val normalized = normalizeNumber(rawNumber)
 
-            // 2. Identify Call Type (Duplication Logic Check)
             var isWork = false
             var workName = ""
             var familyHead = ""
 
+            // CRM logic shifted inside the length > 9 block
             if (normalized.length > 9) {
-                // Check Work DB
                 val workContact = repository?.findWorkContactByNumber(normalized)
-                val inWorkDb = workContact != null
-
-                if (inWorkDb) {
-                    // It is definitely Work
+                if (workContact != null) {
                     isWork = true
                     workName = workContact.name
                     familyHead = workContact.familyHead
                 } else {
-                    // [ADDED] Check CRM DB (treat as work)
                     val crmContact = repository?.findCrmContactByNumber(normalized)
                     if (crmContact != null) {
                         isWork = true
                         workName = crmContact.name
-                        familyHead = crmContact.product ?: "N/A" // Map OwnerName to FamilyHead
+                        familyHead = crmContact.product ?: "N/A"
                     } else {
-                        // Only check device contacts if NOT in work DB AND NOT in CRM DB
                         val deviceName = findPersonalContactName(normalized)
                         if (deviceName != null) {
-                            isWork = false // It's purely personal
+                            isWork = false
                         }
                     }
                 }
             }
 
-            // 3. Branch Logic
             if (isWork) {
-                // ================= WORK FLOW =================
-                // A. Save to Local DB (Always for Work calls, even for Management)
                 repository?.insertWorkLog(
                     WorkCallLog(
                         name = workName,
                         familyHead = familyHead,
                         number = rawNumber,
                         duration = durationSeconds,
-                        timestamp = now,
+                        timestamp = startTimestamp,
                         type = "work",
                         direction = direction,
                         simSlot = simSlot,
                         isSynced = false,
-                        notes = callNote // [ADDED] Save the note
+                        notes = callNote
                     )
                 )
 
                 appContext?.let { ctx ->
                     if (!isManagement) {
-                        // B. Delete from System Log (Only for Non-Management)
-                        setupLogDeletionObserver(rawNumber)
+                        // Replaced in-memory observer with WorkManager implementation
+                        val deleteData = workDataOf("number" to rawNumber)
+                        val deleteWorkRequest = OneTimeWorkRequestBuilder<DeleteCallLogWorker>()
+                            .setInputData(deleteData)
+                            .build()
 
-                        // C. Trigger Upload Worker (Only for Non-Management)
+                        WorkManager.getInstance(ctx).enqueueUniqueWork(
+                            "delete_log_$rawNumber",
+                            ExistingWorkPolicy.REPLACE,
+                            deleteWorkRequest
+                        )
+
                         val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadCallLogWorker>()
                             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                             .build()
@@ -495,14 +497,10 @@ object CallManager {
                 }
 
             } else {
-                // ================= PERSONAL FLOW =================
-                // No local app DB for personal calls (they stay in system log).
-
-                // Only upload if NOT Management
                 if (!isManagement) {
                     val personalData = workDataOf(
                         "duration" to durationSeconds,
-                        "timestamp" to now,
+                        "timestamp" to startTimestamp,
                         "direction" to direction,
                         "simSlot" to simSlot
                     )
@@ -520,14 +518,15 @@ object CallManager {
         }
     }
 
-    // --- Boilerplate (Unchanged) ---
     private fun registerCallCallback(call: Call) {
-        call.registerCallback(object : Call.Callback() {
+        val callback = object : Call.Callback() {
             override fun onStateChanged(call: Call, state: Int) { recalculateGlobalState() }
             override fun onDetailsChanged(call: Call, details: Call.Details) { recalculateGlobalState() }
             override fun onConferenceableCallsChanged(call: Call, conferenceableCalls: List<Call>) { recalculateGlobalState() }
             override fun onChildrenChanged(call: Call, children: List<Call>) { recalculateGlobalState() }
-        })
+        }
+        callCallbacks[call] = callback
+        call.registerCallback(callback)
     }
 
     fun splitFromConference(childIndex: Int) {
@@ -535,7 +534,7 @@ object CallManager {
         if (children != null && childIndex in children.indices) children[childIndex].splitFromConference()
     }
     fun updateAudioState(isMuted: Boolean, isSpeakerOn: Boolean, isBluetoothOn: Boolean, availableRoutes: Int) {
-        _callState.value = _callState.value?.copy(isMuted = isMuted, isSpeakerOn = isSpeakerOn, isBluetoothOn = isBluetoothOn, availableRoutes = availableRoutes)
+        _callState.update { current -> current?.copy(isMuted = isMuted, isSpeakerOn = isSpeakerOn, isBluetoothOn = isBluetoothOn, availableRoutes = availableRoutes) }
     }
     fun answerCall() { _callState.value?.call?.answer(0) }
     fun rejectCall() {
@@ -581,65 +580,5 @@ object CallManager {
         Call.STATE_DISCONNECTED -> "Disconnected"
         Call.STATE_CONNECTING -> "Connecting"
         else -> "Unknown"
-    }
-
-    private fun setupLogDeletionObserver(number: String) {
-        val context = appContext ?: return
-        val handler = Handler(Looper.getMainLooper())
-        var observer: ContentObserver? = null
-        observer = object : ContentObserver(handler) {
-            override fun onChange(selfChange: Boolean, uri: Uri?) {
-                super.onChange(selfChange, uri)
-                coroutineScope.launch {
-                    val deleted = maskAndDeleteLog(context, number)
-                    if (deleted) try { observer?.let { context.contentResolver.unregisterContentObserver(it) } } catch (e: Exception) {}
-                }
-            }
-        }
-        try { context.contentResolver.registerContentObserver(CallLog.Calls.CONTENT_URI, true, observer) } catch (e: Exception) {}
-        handler.postDelayed({ try { observer?.let { context.contentResolver.unregisterContentObserver(it) } } catch (e: Exception) {} }, 5000)
-        coroutineScope.launch {
-            val deleted = maskAndDeleteLog(context, number)
-            if (deleted) try { observer?.let { context.contentResolver.unregisterContentObserver(it) } } catch (e: Exception) {}
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun maskAndDeleteLog(context: Context, number: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val numberToQuery = normalizeNumber(number)
-                val contentResolver = context.contentResolver
-                val queryUri = CallLog.Calls.CONTENT_URI
-                val projection = arrayOf(CallLog.Calls._ID, CallLog.Calls.TYPE)
-                val selection = "${CallLog.Calls.NUMBER} LIKE ?"
-                val selectionArgs = arrayOf("%$numberToQuery")
-                val sortOrder = "${CallLog.Calls.DATE} DESC LIMIT 1"
-                var entryId: String? = null
-                var currentType: Int = -1
-                contentResolver.query(queryUri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        entryId = cursor.getString(cursor.getColumnIndexOrThrow(CallLog.Calls._ID))
-                        currentType = cursor.getInt(cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE))
-                    }
-                }
-                if (entryId != null) {
-                    if (currentType == CallLog.Calls.MISSED_TYPE) {
-                        try {
-                            val values = ContentValues().apply {
-                                put(CallLog.Calls.TYPE, CallLog.Calls.INCOMING_TYPE)
-                                put(CallLog.Calls.IS_READ, 1)
-                                put(CallLog.Calls.NEW, 0)
-                            }
-                            contentResolver.update(queryUri, values, "${CallLog.Calls._ID} = ?", arrayOf(entryId))
-                            delay(400)
-                        } catch (e: Exception) {}
-                    }
-                    val rows = contentResolver.delete(queryUri, "${CallLog.Calls._ID} = ?", arrayOf(entryId))
-                    if (rows > 0) return@withContext true
-                }
-            } catch (e: Exception) {}
-            return@withContext false
-        }
     }
 }

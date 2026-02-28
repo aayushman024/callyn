@@ -149,6 +149,9 @@ class MyInCallService : InCallService() {
 
         val callStatus = currentState.status
 
+        val isActive = callStatus.equals("Active", ignoreCase = true)
+        val displayTime = if (isActive && currentState.connectTimeMillis > 0) currentState.connectTimeMillis else System.currentTimeMillis()
+
         val activityIntent = Intent(this, InCallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -187,9 +190,8 @@ class MyInCallService : InCallService() {
                 .setCategory(Notification.CATEGORY_CALL)
                 .setColor(getColor(R.color.holo_green_dark))
                 .setContentIntent(pendingIntent)
-                .setUsesChronometer(true)
-                .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: System.currentTimeMillis())
-
+                .setUsesChronometer(isActive)
+                .setWhen(displayTime)
             startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
 
         } else {

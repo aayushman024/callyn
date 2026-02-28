@@ -532,7 +532,7 @@ class MainActivity : ComponentActivity() {
             val error = data.getQueryParameter("error")
             if (error != null) {
                 if (error == "not_logged_in") {
-                    Toast.makeText(this, "Please log into mNivesh Store first", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "Please log into mNivesh Central first", Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(this, "Login failed: $error", Toast.LENGTH_LONG).show()
                 }

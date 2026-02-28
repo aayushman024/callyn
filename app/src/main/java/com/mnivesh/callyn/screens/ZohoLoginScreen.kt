@@ -160,7 +160,7 @@ fun ZohoLoginScreen() {
                     LoginButton(
                         isLoading = isLoading,
                         onClick = {
-                            val ssoUrl = "mniveshstore://sso/request?callback=callyn://auth/callback"
+                            val ssoUrl = "mniveshcentral://sso/request?callback=callyn://auth/callback"
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ssoUrl)).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
@@ -168,7 +168,7 @@ fun ZohoLoginScreen() {
                             try {
                                 context.startActivity(intent)
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Please install mNivesh Store first", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "Please install mNivesh Central first", Toast.LENGTH_LONG).show()
                             }
                         }
                     )
@@ -571,9 +571,9 @@ fun LoginButton(isLoading: Boolean, onClick: () -> Unit) {
         if (isLoading) {
             CircularProgressIndicator(modifier = Modifier.size(20.sdp()), color = Color(0xFF0F172A), strokeWidth = 2.5.dp)
         } else {
-            Image(painter = painterResource(id = R.drawable.mnivesh_store), contentDescription = null, modifier = Modifier.size(32.sdp()))
+            Image(painter = painterResource(id = R.drawable.centralicon), contentDescription = null, modifier = Modifier.size(42.sdp()))
             Spacer(modifier = Modifier.width(12.sdp()))
-            Text(text = "Login using mNivesh Store", fontSize = 17.ssp(), color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+            Text(text = "Login using mNivesh Central", fontSize = 17.ssp(), color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
         }
     }
 }
