@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.provider.CallLog
+import com.mnivesh.callyn.api.RetrofitInstance
 import kotlinx.coroutines.flow.first
 import com.mnivesh.callyn.screens.RecentCallUiItem
 import java.util.Date
@@ -43,6 +44,9 @@ class ContactsViewModel(
 
     private val _uiState = MutableStateFlow(ContactsUiState(isLoading = true))
     val uiState: StateFlow<ContactsUiState> = _uiState.asStateFlow()
+
+    private val _isSmsWhitelisted = MutableStateFlow<Boolean?>(null)
+    val isSmsWhitelisted: StateFlow<Boolean?> = _isSmsWhitelisted.asStateFlow()
 
     // Observes the database for real-time updates (Work Contacts)
     val localContacts: StateFlow<List<AppContact>> = repository.allContacts
@@ -129,6 +133,25 @@ class ContactsViewModel(
                 _deviceContacts.value = contactsMap.values.map { contact ->
                     contact.copy(numbers = contact.numbers.sortedByDescending { it.isDefault })
                 }.sortedBy { it.name }
+            }
+        }
+    }
+
+    fun checkSmsWhitelist(token: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSmsWhitelisted.value = null
+
+            try {
+                val headerToken = if (token.startsWith("Bearer ")) token else "Bearer $token"
+                val response = RetrofitInstance.api.checkWhitelistStatus(headerToken)
+
+                if (response.isSuccessful && response.body() != null) {
+                    _isSmsWhitelisted.value = response.body()?.isWhitelisted == true
+                } else {
+                    _isSmsWhitelisted.value = false
+                }
+            } catch (e: Exception) {
+                _isSmsWhitelisted.value = false
             }
         }
     }

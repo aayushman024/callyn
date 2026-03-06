@@ -180,6 +180,12 @@ data class CrmResponse(
     val message: String,
     val data: CrmSyncData
 )
+
+data class WhitelistResponse(
+    val isWhitelisted: Boolean
+)
+
+
 // --- API SERVICE INTERFACE ---
 
 interface ApiService {
@@ -283,5 +289,10 @@ interface ApiService {
     suspend fun incrementViewCount(
         @Header("Authorization") token: String
     ): Response<ViewLimitResponse>
+
+    @GET("whitelist/status")
+    suspend fun checkWhitelistStatus(
+        @Header("Authorization") token: String
+    ): Response<WhitelistResponse>
 }
 

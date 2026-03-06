@@ -117,6 +117,8 @@ fun ContactsScreen(
     )
     val callLogs by recentCallsViewModel.mergedCalls.collectAsState()
 
+    val isSmsWhitelisted by viewModel.isSmsWhitelisted.collectAsState()
+
     // --- AUTH & USER RETRIEVAL ---
     val authManager = remember { AuthManager(context) }
     val token by remember(authManager) { mutableStateOf(authManager.getToken()) }
@@ -154,6 +156,7 @@ fun ContactsScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_START) {
                 if (!token.isNullOrBlank() && userName.isNotBlank()) {
+                    viewModel.checkSmsWhitelist(token!!)
                     viewModel.onRefresh(token!!, userName)
                 }
             }
@@ -446,22 +449,38 @@ fun ContactsScreen(
                         }
                     },
                     actions = {
-                        if (department == "Management" || userEmail == "aayushman@niveshonline.com" || userEmail == "himanshu@niveshonline.com" || userEmail == "pramajeet@niveshonline.com") {
-                            Box(modifier = Modifier.padding(end = 8.sdp())) {
-                                IconButton(onClick = { showSmsScreen = true }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Notifications,
-                                        contentDescription = "Notifications",
-                                        tint = Color.White
+                        when (isSmsWhitelisted) {
+                            null -> {
+                                // Show a small async progress indicator while checking
+                                Box(modifier = Modifier.padding(end = 16.sdp())) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(20.sdp()),
+                                        strokeWidth = 2.sdp()
                                     )
                                 }
-                                if (hasSmsNotification) {
-                                    Box(
-                                        modifier = Modifier.size(10.sdp()).clip(CircleShape)
-                                            .background(Color.Red).align(Alignment.TopEnd)
-                                            .padding(4.sdp())
-                                    )
+                            }
+                            true -> {
+                                // Whitelisted - Show Notification Icon
+                                Box(modifier = Modifier.padding(end = 8.sdp()).size(28.sdp())) {
+                                    IconButton(onClick = { showSmsScreen = true }) {
+                                        Icon(
+                                            painter = painterResource(R.drawable.mrelay),
+                                            contentDescription = "Notifications",
+                                            tint = Color.Unspecified
+                                        )
+                                    }
+                                    if (hasSmsNotification) {
+                                        Box(
+                                            modifier = Modifier.size(10.sdp()).clip(CircleShape)
+                                                .background(Color.Red).align(Alignment.TopEnd)
+                                                .padding(4.sdp())
+                                        )
+                                    }
                                 }
+                            }
+                            false -> {
+                                // Not whitelisted - Do nothing (icon is hidden)
                             }
                         }
                     },
