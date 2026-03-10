@@ -523,7 +523,7 @@ fun RecentCallsScreen(
     fun handleItemClick(item: RecentCallUiItem) {
         scope.launch {
             viewModel.fetchHistoryForNumber(item.number)
-            val numberStr = item.number.takeLast(10)
+            val numberStr = item.number.filter { it.isDigit() }.takeLast(10)
             val workContact = withContext(Dispatchers.IO) { application.repository.findWorkContactByNumber(numberStr) }
 
             if (workContact != null) {
@@ -738,8 +738,9 @@ fun RecentCallsScreen(
                 isDualSim = isDualSim,
                 onDismiss = {
                     scope.launch { sheetState.hide() }.invokeOnCompletion { selectedWorkContact = null }
+                    viewModel.clearCallHistory()
                 },
-                onShowHistory = { viewModel.fetchHistoryForNumber(selectedEmployeeContact!!.number) },
+                onShowHistory = { viewModel.fetchHistoryForNumber(selectedWorkContact!!.number) },
                 onCall = { slotIndex ->
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                         onCallClick(selectedWorkContact!!.number, true, slotIndex)
@@ -902,6 +903,7 @@ suspend fun fetchSystemCallLogs(
                             number = number,
                             type = "Personal",
                             date = date,
+                            rawDuration = durationSec,
                             duration = formatDuration(durationSec),
                             isIncoming = type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.MISSED_TYPE,
                             isMissed = type == CallLog.Calls.MISSED_TYPE,

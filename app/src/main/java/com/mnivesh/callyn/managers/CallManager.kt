@@ -274,6 +274,7 @@ object CallManager {
         }
     }
 
+
     // --- Resolution Logic ---
 
     private fun resolveSecondaryContactInfo(number: String) {
@@ -285,12 +286,13 @@ object CallManager {
         coroutineScope.launch {
             var resolvedName: String? = null
 
-            // 1. Work Contact
+            // 1. Employee / Work / CRM Contact
             val workContact = repository?.findWorkContactByNumber(normalized)
-            if (workContact != null) {
+            if (workContact?.rshipManager == "Employee") {
+                resolvedName = workContact.name
+            } else if (workContact != null) {
                 resolvedName = workContact.name
             } else {
-                // Check CRM if not in work DB
                 val crmContact = repository?.findCrmContactByNumber(normalized)
                 if (crmContact != null) {
                     resolvedName = crmContact.name
@@ -338,7 +340,14 @@ object CallManager {
             // Properly gate CRM contact check
             if (normalized.length > 9) {
                 val workContact = repository?.findWorkContactByNumber(normalized)
-                if (workContact != null) {
+                if (workContact?.rshipManager == "Employee") {
+                    resolvedName = workContact.name
+                    type = "work"
+                    familyHead = workContact.familyHead
+                    rshipManager = workContact.rshipManager
+                    aum = workContact.aum
+                    familyAum = workContact.familyAum
+                } else if (workContact != null) {
                     resolvedName = workContact.name
                     type = "work"
                     familyHead = workContact.familyHead
@@ -492,7 +501,11 @@ object CallManager {
                         val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadCallLogWorker>()
                             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                             .build()
-                        WorkManager.getInstance(ctx).enqueue(uploadWorkRequest)
+                        WorkManager.getInstance(ctx).enqueueUniqueWork(
+                            "UploadWorkLogs",
+                            ExistingWorkPolicy.APPEND_OR_REPLACE,
+                            uploadWorkRequest
+                        )
                     }
                 }
 
