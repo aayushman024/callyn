@@ -1042,7 +1042,7 @@ fun ContactsScreen(
             onDismiss = { showFullSearch = false },
             deviceContacts = deviceContacts,
             workContacts = workContacts,
-            myContacts = workContacts,
+            myContacts = workContacts.filter { !it.rshipManager.equals("Employee", ignoreCase = true) },
             callLogs = callLogs,
             crmUiState = crmUiState,
             department = department,

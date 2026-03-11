@@ -165,7 +165,18 @@ class ContactRepository(
     }
 
     suspend fun findWorkContactByNumber(normalizedNumber: String): AppContact? {
-        return contactDao.getContactByNumber(normalizedNumber)
+        val matches = contactDao.getContactsByNumber(normalizedNumber)
+
+        if (matches.size <= 1) return matches.firstOrNull()
+
+        // If multiple contacts share the same number, prefer the one who is
+        // the familyHead of another contact in the result set.
+        matches.map { it.name }.toSet()
+        val familyHeadContact = matches.firstOrNull { candidate ->
+            matches.any { other -> other.familyHead == candidate.name }
+        }
+
+        return familyHeadContact ?: matches.first()
     }
 
     suspend fun findCrmContactByNumber(normalizedNumber: String): CrmContact? {

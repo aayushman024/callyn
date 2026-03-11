@@ -32,6 +32,13 @@ interface ContactDao {
     """)
     suspend fun getContactByNumber(normalizedNumber: String): AppContact?
 
+    @Query("""
+    SELECT * FROM contacts 
+    WHERE number LIKE '%' || :normalizedNumber 
+    ORDER BY CASE WHEN rshipManager = 'Employee' THEN 0 ELSE 1 END ASC, name ASC
+""")
+    suspend fun getContactsByNumber(normalizedNumber: String): List<AppContact>
+
 
     @Query("SELECT * FROM contacts WHERE name = :name LIMIT 1")
     suspend fun getContactByName(name: String): AppContact?
