@@ -166,6 +166,7 @@ fun InCallContent(
     onSaveNote: (String) -> Unit
 ) {
     var showDialpad by remember { mutableStateOf(false) }
+    var dtmfInput by remember { mutableStateOf("") }
     var showConferenceSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMessageSheet by remember { mutableStateOf(false) }
@@ -218,14 +219,37 @@ fun InCallContent(
                 contentAlignment = Alignment.Center
             ) {
                 if (showDialpad) {
-                    DialpadComponent(
-                        onDigitClick = onDigitClick,
-                        keySize = dialerKeySize,
+                    Column(
                         modifier = Modifier
-                            .padding(top = 10.sdp())
                             .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
-                    )
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // show the ivr digits typed so far
+                        if (dtmfInput.isNotEmpty()) {
+                            Text(
+                                text = dtmfInput,
+                                fontSize = 36.ssp(),
+                                fontWeight = FontWeight.Medium,
+                                color = TextPrimary,
+                                modifier = Modifier.padding(bottom = 24.sdp()),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        DialpadComponent(
+                            onDigitClick = { digit ->
+                                dtmfInput += digit // append to UI
+                                onDigitClick(digit) // send to telecom manager
+                            },
+                            keySize = dialerKeySize,
+                            modifier = Modifier
+                                .padding(top = 10.sdp())
+                                .fillMaxWidth()
+                        )
+                    }
                 } else {
                     CallerInfo(
                         currentState = currentState,
@@ -255,7 +279,10 @@ fun InCallContent(
                         buttonSize = controlButtonSize,
                         hangupSize = hangupButtonSize,
                         verticalSpacing = verticalSpacing,
-                        onToggleDialpad = { showDialpad = !showDialpad },
+                        onToggleDialpad = {
+                            showDialpad = !showDialpad
+                            if (!showDialpad) dtmfInput = ""
+                                          },
                         onAddCall = onAddCall,
                         onManageConference = { showConferenceSheet = true },
                         onMute = onMute,

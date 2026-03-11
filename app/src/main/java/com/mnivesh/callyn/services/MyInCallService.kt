@@ -1,6 +1,7 @@
 package com.mnivesh.callyn.services
 
 import android.R
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -27,6 +28,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import android.net.Uri
+import android.provider.ContactsContract
+import android.telecom.DisconnectCause
+import androidx.core.app.NotificationManagerCompat
+import com.mnivesh.callyn.CallynApplication
+import com.mnivesh.callyn.MainActivity
 
 @RequiresApi(Build.VERSION_CODES.N)
 class MyInCallService : InCallService() {
@@ -34,7 +41,9 @@ class MyInCallService : InCallService() {
     companion object {
         var instance: MyInCallService? = null
         private const val NOTIFICATION_ID = 12345
+        private const val MISSED_CALL_NOTIF_ID = 12346 // NEW
         private const val CHANNEL_ID = "callyn_ongoing_calls"
+        private const val MISSED_CHANNEL_ID = "callyn_missed_calls" // NEW
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -46,6 +55,7 @@ class MyInCallService : InCallService() {
         super.onCreate()
         instance = this
         createNotificationChannel()
+        createMissedCallChannel()
         startStateObserver()
 
         // 1. INITIALIZE WAKELOCK
@@ -75,6 +85,17 @@ class MyInCallService : InCallService() {
         super.onCallRemoved(call)
         CallManager.onCallRemoved(call)
 
+        if (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                call.details.state == Call.STATE_DISCONNECTED &&
+                    call.details.disconnectCause.code == DisconnectCause.MISSED
+            } else {
+                TODO("VERSION.SDK_INT < S")
+            }
+        ) {
+            val rawNumber = call.details.handle?.schemeSpecificPart ?: "Unknown"
+            showMissedCallNotification(rawNumber)
+        }
+
         if (calls.isEmpty()) {
             // 3. RELEASE SENSOR ON CALL END
             if (wakeLock?.isHeld == true) {
@@ -85,6 +106,91 @@ class MyInCallService : InCallService() {
         } else {
             showNotification()
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun showMissedCallNotification(number: String) {
+        serviceScope.launch(Dispatchers.IO) {
+            var resolvedName: String? = null
+            val numberStr = number.filter { it.isDigit() }.takeLast(10)
+
+            // 1 & 2. Employee / Work (AppContact DB)
+            try {
+                val app = applicationContext as CallynApplication
+                val workContact = app.repository.findWorkContactByNumber(numberStr)
+
+                if (workContact != null) {
+                    resolvedName = workContact.name
+                } else {
+                    // 3. CRM (CrmContact DB)
+                    val crmContact = app.repository.findCrmContactByNumber(numberStr)
+                    if (crmContact != null) {
+                        resolvedName = crmContact.name
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore DB lookup failures
+            }
+
+            // 4. Personal (Device Contacts)
+            if (resolvedName == null) {
+                try {
+                    val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+                    contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use {
+                        if (it.moveToFirst()) resolvedName = it.getString(0)
+                    }
+                } catch (e: Exception) {
+                    // Ignore local contact lookup failures
+                }
+            }
+
+            val displayName = resolvedName ?: number
+
+            // Get unread missed call count for the badge
+            var unreadCount = 1
+            try {
+                contentResolver.query(
+                    android.provider.CallLog.Calls.CONTENT_URI, null,
+                    "${android.provider.CallLog.Calls.TYPE} = ? AND ${android.provider.CallLog.Calls.IS_READ} = ?",
+                    arrayOf(android.provider.CallLog.Calls.MISSED_TYPE.toString(), "0"), null
+                )?.use { unreadCount = it.count.takeIf { c -> c > 0 } ?: 1 }
+            } catch (e: Exception) {
+                // Ignore call log query failures
+            }
+
+            // Build and trigger notification
+            val pendingIntent = PendingIntent.getActivity(
+                this@MyInCallService, 0,
+                Intent(this@MyInCallService, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val builder = NotificationCompat.Builder(this@MyInCallService, MISSED_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_notify_missed_call) // Or your app's custom icon
+                .setContentTitle("Missed call")
+                .setContentText(displayName)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setNumber(unreadCount)
+
+            NotificationManagerCompat.from(this@MyInCallService).notify(MISSED_CALL_NOTIF_ID, builder.build())
+        }
+    }
+
+    private fun createMissedCallChannel() {
+        val name = "Missed Calls"
+        val descriptionText = "Notifications for missed calls"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel = NotificationChannel(MISSED_CHANNEL_ID, name, importance).apply {
+            description = descriptionText
+            setShowBadge(true) // Ensures the launcher icon badge appears
+        }
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(channel)
     }
 
     override fun onCallAudioStateChanged(audioState: CallAudioState) {

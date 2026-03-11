@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.mnivesh.callyn.R
 import com.mnivesh.callyn.components.ModernDetailRow
 import com.mnivesh.callyn.components.getColorForName
@@ -66,6 +68,13 @@ fun ModernBottomSheet(
     var showShareCodeDialog by remember { mutableStateOf(false) }
     var showRequestDialog by remember { mutableStateOf(false) }
     var requestReason by remember { mutableStateOf("") }
+
+    // report dialog states
+    var showReportDialog by remember { mutableStateOf(false) }
+    var selectedReportType by remember { mutableStateOf<String?>(null) }
+    var selectedFormat by remember { mutableStateOf<String?>(null) }
+    var selectedDestination by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
 
     var isNumberVisible by remember { mutableStateOf(false) }
@@ -175,19 +184,18 @@ fun ModernBottomSheet(
                                 }
                                 Spacer(modifier = Modifier.width(8.sdp()))
 
-                                if (department == "ConflictContactPaused")
-                                    IconButton(
-                                        onClick = { showMenu = true },
-                                        colors = IconButtonDefaults.iconButtonColors(
-                                            containerColor = surfaceColor,
-                                            contentColor = textSecondary
-                                        ),
-                                        modifier = Modifier
-                                            .size(40.sdp())
-                                            .clip(CircleShape)
-                                    ) {
-                                        Icon(Icons.Default.MoreVert, "Options", modifier = Modifier.size(20.sdp()))
-                                    }
+                                IconButton(
+                                    onClick = { showMenu = true },
+                                    colors = IconButtonDefaults.iconButtonColors(
+                                        containerColor = surfaceColor,
+                                        contentColor = textSecondary
+                                    ),
+                                    modifier = Modifier
+                                        .size(40.sdp())
+                                        .clip(CircleShape)
+                                ) {
+                                    Icon(Icons.Default.MoreVert, "Options", modifier = Modifier.size(20.sdp()))
+                                }
                             }
 
                             // Custom Dropdown
@@ -205,18 +213,41 @@ fun ModernBottomSheet(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                "Raise request to mark as personal",
+                                                "Generate Portfolio Valuation Report",
                                                 color = textPrimary,
                                                 fontSize = 14.ssp()
                                             )
                                         },
                                         onClick = {
                                             showMenu = false
-                                            showRequestDialog = true
+                                            selectedReportType = "Portfolio Valuation"
+                                            showReportDialog = true
                                         },
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Edit,
+                                                Icons.Default.Assessment,
+                                                null,
+                                                tint = workColor,
+                                                modifier = Modifier.size(18.sdp())
+                                            )
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Generate Capital Gain Report",
+                                                color = textPrimary,
+                                                fontSize = 14.ssp()
+                                            )
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            selectedReportType = "Capital Gain Report"
+                                            showReportDialog = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.AutoGraph,
                                                 null,
                                                 tint = workColor,
                                                 modifier = Modifier.size(18.sdp())
@@ -614,6 +645,176 @@ fun ModernBottomSheet(
         }
     }
 
+    // --- Generate Report Dialog Logic ---
+    if (showReportDialog) {
+        val isSubmitEnabled = selectedReportType != null && selectedFormat != null && selectedDestination != null
+
+        AlertDialog(
+            onDismissRequest = {
+                showReportDialog = false
+                selectedFormat = null
+                selectedDestination = null
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+            // explicitly set width to 90% of screen width (adjust as needed)
+            modifier = Modifier.fillMaxWidth(0.9f),
+            containerColor = surfaceColor,
+            title = {
+                Text(
+                    "Generate Report",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = textPrimary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // 1. Report Type Selection
+                    Text(
+                        "Report Type",
+                        fontSize = 12.ssp(),
+                        color = textSecondary,
+                        modifier = Modifier.padding(bottom = 8.sdp(), top = 8.sdp())
+                    )
+                    listOf("Portfolio Valuation", "Capital Gain Report").forEach { type ->
+                        ReportOptionItem(
+                            text = type,
+                            icon = Icons.Default.Assessment,
+                            isSelected = selectedReportType == type,
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) {
+                            selectedReportType = type
+                        }
+                    }
+
+                    // 2. Format Selection
+                    Text(
+                        "Select File Format",
+                        fontSize = 12.ssp(),
+                        color = textSecondary,
+                        modifier = Modifier.padding(bottom = 8.sdp(), top = 16.sdp())
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.sdp())
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            ReportOptionItem(
+                                text = "PDF",
+                                icon = Icons.Default.Description,
+                                isSelected = selectedFormat == "pdf",
+                                primaryColor = primaryColor,
+                                surfaceColor = backgroundColor,
+                                textPrimary = textPrimary,
+                                textSecondary = textSecondary
+                            ) { selectedFormat = "pdf" }
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            ReportOptionItem(
+                                text = "Excel",
+                                icon = Icons.Default.TableChart,
+                                isSelected = selectedFormat == "excel",
+                                primaryColor = primaryColor,
+                                surfaceColor = backgroundColor,
+                                textPrimary = textPrimary,
+                                textSecondary = textSecondary
+                            ) { selectedFormat = "excel" }
+                        }
+                    }
+
+                    // 3. Send To Selection
+                    Text(
+                        "Send To",
+                        fontSize = 12.ssp(),
+                        color = textSecondary,
+                        modifier = Modifier.padding(bottom = 8.sdp(), top = 16.sdp())
+                    )
+                    ReportOptionItem(
+                        text = "Client (via WhatsApp)",
+                        icon = Icons.Default.Chat,
+                        customIconRes = R.drawable.whatsapp,
+                        isSelected = selectedDestination == "client_wa",
+                        primaryColor = primaryColor,
+                        surfaceColor = backgroundColor,
+                        textPrimary = textPrimary,
+                        textSecondary = textSecondary
+                    ) { selectedDestination = "client_wa" }
+
+                    ReportOptionItem(
+                        text = "Client (via Email)",
+                        icon = Icons.Default.Email,
+                        isSelected = selectedDestination == "client_email",
+                        primaryColor = primaryColor,
+                        surfaceColor = backgroundColor,
+                        textPrimary = textPrimary,
+                        textSecondary = textSecondary
+                    ) { selectedDestination = "client_email" }
+
+                    ReportOptionItem(
+                        text = "Myself (on WhatsApp)",
+                        icon = Icons.Default.Chat,
+                        customIconRes = R.drawable.whatsapp,
+                        isSelected = selectedDestination == "self_wa",
+                        primaryColor = primaryColor,
+                        surfaceColor = backgroundColor,
+                        textPrimary = textPrimary,
+                        textSecondary = textSecondary
+                    ) { selectedDestination = "self_wa" }
+                    ReportOptionItem(
+                        text = "Myself (via Email)",
+                        icon = Icons.Default.Email,
+                        customIconRes = R.drawable.whatsapp,
+                        isSelected = selectedDestination == "self_email",
+                        primaryColor = primaryColor,
+                        surfaceColor = backgroundColor,
+                        textPrimary = textPrimary,
+                        textSecondary = textSecondary
+                    ) { selectedDestination = "self_email" }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // todo: handle integration
+                        showReportDialog = false
+                        selectedFormat = null
+                        selectedDestination = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = primaryColor,
+                        disabledContainerColor = primaryColor.copy(alpha = 0.3f)
+                    ),
+                    shape = RoundedCornerShape(12.sdp()),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.sdp()),
+                    enabled = isSubmitEnabled
+                ) {
+                    Text("Submit", fontWeight = FontWeight.Bold, fontSize = 16.ssp(), color = if (isSubmitEnabled) Color.White else textSecondary)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showReportDialog = false
+                        selectedFormat = null
+                        selectedDestination = null
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cancel", color = textSecondary, fontWeight = FontWeight.Medium)
+                }
+            },
+            shape = RoundedCornerShape(20.sdp())
+        )
+    }
+
     // --- Request Dialog Logic ---
     if (showRequestDialog) {
         AlertDialog(
@@ -760,5 +961,64 @@ fun ModernBottomSheet(
                 }
             }
         )
+    }
+}
+
+// reusable internal component for selectable options
+@Composable
+private fun ReportOptionItem(
+    text: String,
+    icon: ImageVector?,
+    customIconRes: Int? = null,
+    isSelected: Boolean,
+    primaryColor: Color,
+    surfaceColor: Color,
+    textPrimary: Color,
+    textSecondary: Color,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) primaryColor else textSecondary.copy(alpha = 0.2f)
+    val bgColor = if (isSelected) primaryColor.copy(alpha = 0.1f) else surfaceColor
+
+    Surface(
+        onClick = onClick,
+        color = bgColor,
+        shape = RoundedCornerShape(10.sdp()),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.sdp())
+    ) {
+        Row(
+            modifier = Modifier.padding(12.sdp()),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (customIconRes != null) {
+                Icon(
+                    painter = painterResource(customIconRes),
+                    contentDescription = null,
+                    tint = if (isSelected) primaryColor else textSecondary,
+                    modifier = Modifier.size(18.sdp())
+                )
+            } else if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (isSelected) primaryColor else textSecondary,
+                    modifier = Modifier.size(18.sdp())
+                )
+            }
+            Spacer(modifier = Modifier.width(12.sdp()))
+            Text(
+                text = text,
+                fontSize = 13.ssp(),
+                color = if (isSelected) textPrimary else textSecondary,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            if (isSelected) {
+                Icon(Icons.Default.CheckCircle, null, tint = primaryColor, modifier = Modifier.size(16.sdp()))
+            }
+        }
     }
 }

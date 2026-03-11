@@ -207,7 +207,7 @@ class RecentCallsViewModel(
 
     // [!code replace]
     private fun mergeLogs(sysLogs: List<RecentCallUiItem>, dbLogs: List<WorkCallLog>): List<RecentCallUiItem> {
-        val TIME_BUFFER_MS = 3 * 60 * 1000L
+        val TIME_BUFFER_MS = 5 * 1000L
         val DUR_BUFFER_SEC = 5
 
         // 1. Convert DB logs to UI items (include raw duration for comparison)
@@ -260,22 +260,34 @@ class RecentCallsViewModel(
         val usedSysIndices = HashSet<Int>()
 
         if (department == "Management") {
-            // Priority: System Logs
-            // We iterate System logs and try to find their pair in Work logs to "consume" duplicates
-            result.addAll(sortedSysLogs)
-
-            sortedSysLogs.forEach { sysItem ->
-                // Find the best matching work item that hasn't been used yet
-                // We iterate work logs to find a match. Since both are sorted, we effectively find the closest one.
+            // Single pass: match + enrich simultaneously
+            val enrichedSysLogs = sortedSysLogs.map { sysItem ->
+                var matched: Pair<Int, RecentCallUiItem>? = null
                 for ((index, workItem) in workUiLogs.withIndex()) {
                     if (!usedWorkIndices.contains(index) && isSameCall(sysItem, workItem)) {
-                        usedWorkIndices.add(index)
-                        break // Stop after first match to ensure 1-to-1 mapping
+                        matched = Pair(index, workItem)
+                        break
                     }
+                }
+
+                if (matched != null) {
+                    usedWorkIndices.add(matched.first)
+                    val workItem = matched.second
+                    // Unknown contact: enrich name + type from work DB
+                    val isUnknown = sysItem.name == sysItem.number || sysItem.name.isBlank()
+                    if (isUnknown) {
+                        sysItem.copy(name = workItem.name, type = "Work")
+                    } else {
+                        sysItem // known device contact, keep as-is
+                    }
+                } else {
+                    sysItem // no work match, show as personal
                 }
             }
 
-            // Add only the Work logs that were NOT matched/consumed
+            result.addAll(enrichedSysLogs)
+
+            // Add work logs that had no matching system log
             workUiLogs.forEachIndexed { index, item ->
                 if (!usedWorkIndices.contains(index)) {
                     result.add(item)

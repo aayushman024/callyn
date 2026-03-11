@@ -250,8 +250,9 @@ fun ContactsScreen(
 
                 // 2. Filter Visibility
                 if (department == "Management" ||
-                    department == "IT Desk" ||
+                   // department == "IT Desk" ||
                     department == "Operations Dept" ||
+                    userEmail == "aayushman@niveshonline.com" ||
                     userEmail == "arbind@niveshonline.com") {
                     true
                 } else {
@@ -790,8 +791,9 @@ fun ContactsScreen(
                     viewModel.clearCallHistory()
                 },
                 onShowHistory = {
-                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
-                    viewModel.fetchCallHistory(number, isWork = false)
+                    selectedEmployeeContact?.number?.let {
+                        viewModel.fetchCallHistory(it, isWork = true)
+                    }
                 },
                 history = history,
                 isLoading = isHistoryLoading,
@@ -1040,7 +1042,7 @@ fun ContactsScreen(
             onDismiss = { showFullSearch = false },
             deviceContacts = deviceContacts,
             workContacts = workContacts,
-            myContacts = myContacts,
+            myContacts = workContacts,
             callLogs = callLogs,
             crmUiState = crmUiState,
             department = department,

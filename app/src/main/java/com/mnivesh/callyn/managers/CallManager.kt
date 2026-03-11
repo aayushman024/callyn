@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.delay
 
 // --- UPDATED CallState ---
 data class CallState(
@@ -86,8 +87,7 @@ object CallManager {
     }
 
     private fun normalizeNumber(number: String): String {
-        val digitsOnly = number.filter { it.isDigit() }
-        return if (digitsOnly.length > 10) digitsOnly.takeLast(10) else digitsOnly
+        return number.filter { it.isDigit() }
     }
 
     @SuppressLint("MissingPermission")
@@ -570,7 +570,17 @@ object CallManager {
         val newRoute = if (current.isBluetoothOn) CallAudioState.ROUTE_EARPIECE else CallAudioState.ROUTE_BLUETOOTH
         MyInCallService.Companion.instance?.setAudioRoute(newRoute)
     }
-    fun playDtmfTone(digit: Char) { _callState.value?.call?.playDtmfTone(digit) }
+
+    fun playDtmfTone(digit: Char) {
+        val call = _callState.value?.call ?: return
+        call.playDtmfTone(digit)
+
+        // explicitly stop the tone after a short delay so the network registers the keypress
+        coroutineScope.launch {
+            delay(200)
+            call.stopDtmfTone()
+        }
+    }
 
     @SuppressLint("Range")
     private fun findPersonalContactName(normalizedNumber: String): String? {

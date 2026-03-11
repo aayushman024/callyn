@@ -683,6 +683,10 @@ class MainActivity : ComponentActivity() {
                     "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.IS_READ} = ?",
                     arrayOf(CallLog.Calls.MISSED_TYPE.toString(), "0")
                 )
+
+                val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                notificationManager.cancel(12346) // Matches MISSED_CALL_NOTIF_ID from MyInCallService
+
             } catch (e: Exception) {
                 Log.e(TAG, "Error marking calls as read", e)
             }
@@ -696,7 +700,17 @@ class MainActivity : ComponentActivity() {
         if (!isDefaultDialer()) { offerDefaultDialer(); return }
         if (!checkAllPermissions()) { requestPermissions(); return }
 
-        val numberToDial = if (number.filter { it.isDigit() }.length >= 11 && !number.startsWith('+')) "+${number.filter { it.isDigit() }}" else number
+        // Strip everything except digits and existing plus signs
+        val cleanNumber = number.filter { it.isDigit() || it == '+' }
+
+        // Handle Indian telecom routing (Toll-free, STD, and standard mobile)
+        val numberToDial = when {
+            cleanNumber.startsWith("+") -> cleanNumber
+            cleanNumber.startsWith("1800") -> cleanNumber
+            cleanNumber.startsWith("0") -> cleanNumber
+            cleanNumber.length > 10 -> "+$cleanNumber"
+            else -> cleanNumber
+        }
 
         try {
             val telecomManager = getSystemService(TelecomManager::class.java)

@@ -238,7 +238,7 @@ fun DialerScreen(
             val seenNumbers = mutableSetOf<String>()
 
             fun normalizeNumber(number: String): String {
-                return number.filter { it.isDigit() }.takeLast(10)
+                return number.filter { it.isDigit() }
             }
 
             // 1. Search Work Contacts
