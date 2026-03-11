@@ -47,6 +47,8 @@ import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.launch
+import com.mnivesh.callyn.api.RetrofitInstance
+import com.mnivesh.callyn.api.ReportRequest
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -74,6 +76,7 @@ fun ModernBottomSheet(
     var selectedReportType by remember { mutableStateOf<String?>(null) }
     var selectedFormat by remember { mutableStateOf<String?>(null) }
     var selectedDestination by remember { mutableStateOf<String?>(null) }
+    var isReportSubmitting by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
 
@@ -647,7 +650,7 @@ fun ModernBottomSheet(
 
     // --- Generate Report Dialog Logic ---
     if (showReportDialog) {
-        val isSubmitEnabled = selectedReportType != null && selectedFormat != null && selectedDestination != null
+        val isSubmitEnabled = selectedReportType != null && selectedFormat != null && selectedDestination != null && !isReportSubmitting
 
         AlertDialog(
             onDismissRequest = {
@@ -778,13 +781,75 @@ fun ModernBottomSheet(
                     ) { selectedDestination = "self_email" }
                 }
             },
+
             confirmButton = {
                 Button(
-                    onClick = {
-                        // todo: handle integration
-                        showReportDialog = false
-                        selectedFormat = null
-                        selectedDestination = null
+                    onClick = {if (isReportSubmitting) return@Button // prevent double clicks
+
+                        coroutineScope.launch {
+                            isReportSubmitting = true // START LOADER
+                            try {
+                                // parse wa or email
+                                val mode = if (selectedDestination?.endsWith("_wa") == true) "wa" else "email"
+
+                                // swap phone based on selection
+                                val rawPhone = if (selectedDestination?.startsWith("client") == true) {
+                                    contact.number
+                                } else {
+                                    authManager.getWorkPhone() ?: ""
+                                }
+
+                                // sanitize and force 91 prefix
+                                var cleanPhone = rawPhone.replace(Regex("[^0-9]"), "")
+                                if (cleanPhone.length == 10) cleanPhone = "91$cleanPhone"
+                                if (cleanPhone.startsWith("0")) cleanPhone = "91${cleanPhone.drop(1)}"
+
+                                val request = ReportRequest(
+                                    report = selectedReportType?.lowercase() ?: "",
+                                    format = selectedFormat ?: "pdf",
+                                    mode = mode,
+                                    phone = cleanPhone,
+                                    rmemail = authManager.getUserEmail() ?: "",
+                                    pan = contact.pan,
+                                    name = contact.name
+                                )
+
+                                val response = RetrofitInstance.api.generateReport(request)
+
+                                // grab the raw string from either body or errorBody
+                                val responseString = if (response.isSuccessful) {
+                                    response.body()?.string()
+                                } else {
+                                    response.errorBody()?.string()
+                                }
+
+                                // default fallback messages
+                                var msg = if (response.isSuccessful) "Report generated successfully" else "Failed to generate report"
+
+                                // try to extract a better message if backend sent json, otherwise just show whatever string we got
+                                if (!responseString.isNullOrEmpty()) {
+                                    try {
+                                        val json = org.json.JSONObject(responseString)
+                                        msg = json.optString("message", json.optString("error", responseString))
+                                    } catch (e: Exception) {
+                                        msg = responseString
+                                    }
+                                }
+
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                Log.e("ModernBottomSheet", "Report API error", e)
+                            } finally {
+                                // reset state
+                                isReportSubmitting = false
+                                showReportDialog = false
+                                selectedFormat = null
+                                selectedDestination = null
+                                selectedReportType = null
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = primaryColor,
@@ -796,7 +861,20 @@ fun ModernBottomSheet(
                         .height(48.sdp()),
                     enabled = isSubmitEnabled
                 ) {
-                    Text("Submit", fontWeight = FontWeight.Bold, fontSize = 16.ssp(), color = if (isSubmitEnabled) Color.White else textSecondary)
+                    if (isReportSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.sdp()),
+                            color = Color.White,
+                            strokeWidth = 2.sdp()
+                        )
+                    } else {
+                        Text(
+                            "Submit",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.ssp(),
+                            color = if (isSubmitEnabled) Color.White else textSecondary
+                        )
+                    }
                 }
             },
             dismissButton = {

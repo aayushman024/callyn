@@ -9,6 +9,7 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Query
+import retrofit2.http.Url
 
 data class AuthResponse(
     val authUrl: String
@@ -185,6 +186,16 @@ data class WhitelistResponse(
     val isWhitelisted: Boolean
 )
 
+data class ReportRequest(
+    val report: String,
+    val format: String,
+    val mode: String,
+    val phone: String,
+    val rmemail: String,
+    val pan: String,
+    val name: String
+)
+
 
 // --- API SERVICE INTERFACE ---
 
@@ -294,5 +305,10 @@ interface ApiService {
     suspend fun checkWhitelistStatus(
         @Header("Authorization") token: String
     ): Response<WhitelistResponse>
+
+    @POST("https://mwt9w146-7071.inc1.devtunnels.ms/api/ReportsWatiHttp")
+    suspend fun generateReport(
+        @Body request: ReportRequest
+    ): Response<ResponseBody>
 }
 
