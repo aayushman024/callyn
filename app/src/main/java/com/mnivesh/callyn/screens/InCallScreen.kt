@@ -828,8 +828,30 @@ private fun CallerInfo(
             textAlign = TextAlign.Center,
             lineHeight = nameLineHeight
         )
+        if (!currentState.personalName.isNullOrEmpty()) {
+            Spacer(modifier = Modifier.height(6.sdp()))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContactPhone,
+                    contentDescription = "Saved as",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(13.sdp())
+                )
+                Spacer(modifier = Modifier.width(4.sdp()))
+                Text(
+                    text = "(${currentState.personalName})",
+                    fontSize = 16.ssp(),
+                    fontWeight = FontWeight.Normal,
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
 
-        Spacer(modifier = Modifier.height(16.sdp()))
+        Spacer(modifier = Modifier.height(20.sdp()))
 
         // 3. Info Pills (Updated Logic)
         if (currentState.type == "work" && !currentState.isConference) {
@@ -1491,6 +1513,7 @@ fun PreviewPersonalActiveCall() {
 fun PreviewWorkIncomingCall() {
     val mockState = CallState(
         name = "Rahul Sharma",
+        personalName = "Suresh Client Ops Milestone",
         number = "+91 11223 34455",
         status = "Ringing",
         type = "work",
@@ -1524,6 +1547,7 @@ fun PreviewWorkIncomingCall() {
 fun PreviewClientWorkCall() {
     val mockState = CallState(
         name = "Suresh Raina",
+        personalName = "Suresh Client MF Milestone",
         number = "+91 55667 78899",
         status = "Active",
         type = "work",

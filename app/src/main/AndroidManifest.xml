@@ -116,6 +116,10 @@
         <activity
             android:name="com.mnivesh.callyn.InCallActivity"
             android:exported="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.Callyn.InCall"
             tools:ignore="LockedOrientationActivity" />

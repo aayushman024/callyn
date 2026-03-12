@@ -15,6 +15,13 @@ class InCallActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
+
         // 1. Handle Lock Screen Visibility
         setShowWhenLocked(true)
         setTurnScreenOn(true)
@@ -24,7 +31,7 @@ class InCallActivity : ComponentActivity() {
         val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         keyguardManager.requestDismissKeyguard(this, null)
 
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        //window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // 4. Edge-to-Edge UI
         WindowCompat.setDecorFitsSystemWindows(window, false)

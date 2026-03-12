@@ -2,6 +2,7 @@ package com.mnivesh.callyn
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.NotificationManager
 import android.app.role.RoleManager
 import android.content.ContentValues
 import android.content.Context
@@ -121,6 +122,12 @@ sealed class MainActivityUiState {
         val conflicts: List<DeviceContact>,
         val workContacts: List<AppContact> // Added workContacts to state
     ) : MainActivityUiState()
+}
+
+fun isXiaomiDevice(): Boolean {
+    return Build.MANUFACTURER.equals("xiaomi", ignoreCase = true) ||
+            Build.MANUFACTURER.equals("redmi", ignoreCase = true) ||
+            Build.BRAND.equals("poco", ignoreCase = true)
 }
 
 class MainActivity : ComponentActivity() {
@@ -429,7 +436,7 @@ class MainActivity : ComponentActivity() {
 
         WorkManager.getInstance(this).enqueueUniqueWork(
             "SyncUserDetailsWork",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             syncRequest
         )
     }
@@ -492,6 +499,15 @@ class MainActivity : ComponentActivity() {
                                     Manifest.permission.WRITE_CONTACTS
                                 )
                             )
+                        }
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            val notifManager = getSystemService(NotificationManager::class.java)
+                            if (!notifManager.canUseFullScreenIntent()) {
+                                startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                                    data = Uri.parse("package:$packageName")
+                                })
+                            }
                         }
                         // Stop here. Wait for callback or onResume.
                         return@launch
@@ -557,6 +573,7 @@ class MainActivity : ComponentActivity() {
                     authManager.saveUserEmail(email)
                     authManager.saveWorkPhone(workPhone)
                 }
+               // checkLoginState()
 
                 Log.d(TAG, "Saved details: Name= $name Dept=$department, Email=$email, Phone=$workPhone")
 
@@ -1881,6 +1898,94 @@ private fun SetupScreen(
                                 fontSize = 11.ssp(),
                                 textAlign = TextAlign.Center,
                                 lineHeight = 14.ssp()
+                            )
+                        }
+                    }
+                }
+
+                if (isXiaomiDevice()) {
+                    Spacer(modifier = Modifier.height(24.sdp()))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ComposeColor(0xFFFF6900).copy(alpha = 0.12f)
+                        ),
+                        shape = RoundedCornerShape(16.sdp()),
+                        border = BorderStroke(
+                            1.sdp(),
+                            ComposeColor(0xFFFF6900).copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.sdp()),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = ComposeColor(0xFFFF6900),
+                                modifier = Modifier.size(24.sdp())
+                            )
+                            Spacer(modifier = Modifier.height(8.sdp()))
+                            Text(
+                                text = "Xiaomi / POCO / Redmi Device Detected",
+                                fontWeight = FontWeight.Bold,
+                                color = ComposeColor(0xFFFF6900),
+                                fontSize = 15.ssp(),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(8.sdp()))
+                            Text(
+                                text = "To receive incoming call screens, you must enable \"Display pop-up windows while running in background\" for Callyn.",
+                                color = ComposeColor.White.copy(alpha = 0.8f),
+                                fontSize = 13.ssp(),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(16.sdp()))
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent("miui.intent.action.APP_PERM_EDITOR").apply {
+                                            setClassName(
+                                                "com.miui.securitycenter",
+                                                "com.miui.permcenter.permissions.PermissionsEditorActivity"
+                                            )
+                                            putExtra("extra_pkgname", context.packageName)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        // Fallback: open generic app settings
+                                        try {
+                                            context.startActivity(
+                                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                    data = Uri.fromParts("package", context.packageName, null)
+                                                }
+                                            )
+                                        } catch (ex: Exception) {
+                                            Toast.makeText(context, "Open Settings > Apps > Callyn > Other Permissions manually", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.sdp()),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ComposeColor(0xFFFF6900)
+                                )
+                            ) {
+                                Text(
+                                    "2. Enable Pop-up Permission",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.ssp()
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.sdp()))
+                            Text(
+                                text = "Settings → Apps → Callyn → Other permissions → Display pop-up windows while running in background",
+                                color = ComposeColor.White.copy(alpha = 0.5f),
+                                fontSize = 11.ssp(),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 15.ssp()
                             )
                         }
                     }

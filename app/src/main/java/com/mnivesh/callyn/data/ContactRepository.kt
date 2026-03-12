@@ -165,15 +165,20 @@ class ContactRepository(
     }
 
     suspend fun findWorkContactByNumber(normalizedNumber: String): AppContact? {
-        val matches = contactDao.getContactsByNumber(normalizedNumber)
-
+        val matches = contactDao.getContactsByNumber(normalizedNumber).ifEmpty {
+            if (normalizedNumber.length > 10)
+                contactDao.getContactsByNumber(normalizedNumber.takeLast(10))
+            else emptyList()
+        }
         if (matches.size <= 1) return matches.firstOrNull()
 
-        // If multiple contacts share the same number, prefer the one who is
-        // the familyHead of another contact in the result set.
-        matches.map { it.name }.toSet()
+        // 1. Employee always wins over everything
+        val employeeContact = matches.firstOrNull { it.rshipManager == "Employee" }
+        if (employeeContact != null) return employeeContact
+
+        // 2. Among clients only, prefer the family head
         val familyHeadContact = matches.firstOrNull { candidate ->
-            matches.any { other -> other.familyHead == candidate.name }
+            matches.any { other -> other != candidate && other.familyHead == candidate.name }
         }
 
         return familyHeadContact ?: matches.first()

@@ -107,9 +107,9 @@ fun AppDrawer(
             DrawerItemType.Action(callLogLabel, callLogIcon, callLogColor, onClick = onShowCallLogs)
         )
 
-        list.add(
-            DrawerItemType.Action("Personal Contact Requests", Icons.Default.AssignmentInd, Color(0xFFFACC15), onClick = onShowRequests)
-        )
+//        list.add(
+//            DrawerItemType.Action("Personal Contact Requests", Icons.Default.AssignmentInd, Color(0xFFFACC15), onClick = onShowRequests)
+//        )
 
         list.add(DrawerItemType.Divider)
         list.add(

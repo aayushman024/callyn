@@ -38,6 +38,7 @@ import kotlinx.coroutines.delay
 // --- UPDATED CallState ---
 data class CallState(
     val name: String,
+    val personalName: String? = null,
     val number: String,
     val status: String,
     val type: String = "unknown",
@@ -336,6 +337,7 @@ object CallManager {
             var rshipManager: String? = null
             var aum: String? = null
             var familyAum: String? = null
+            var personalName: String? = null
 
             // Properly gate CRM contact check
             if (normalized.length > 9) {
@@ -366,6 +368,11 @@ object CallManager {
                 }
             }
 
+            //resolve personal contact name as well if work
+            if (type == "work") {
+                personalName = findPersonalContactName(normalized)
+            }
+
             if (resolvedName == null) {
                 val personalName = findPersonalContactName(normalized)
                 if (personalName != null) {
@@ -391,7 +398,8 @@ object CallManager {
                         familyHead = familyHead,
                         rshipManager = rshipManager,
                         aum = aum,
-                        familyAum = familyAum
+                        familyAum = familyAum,
+                        personalName = personalName
                     )
                 } else current
             }
@@ -487,16 +495,16 @@ object CallManager {
                 appContext?.let { ctx ->
                     if (!isManagement) {
                         // Replaced in-memory observer with WorkManager implementation
-                        val deleteData = workDataOf("number" to rawNumber)
-                        val deleteWorkRequest = OneTimeWorkRequestBuilder<DeleteCallLogWorker>()
-                            .setInputData(deleteData)
-                            .build()
-
-                        WorkManager.getInstance(ctx).enqueueUniqueWork(
-                            "delete_log_$rawNumber",
-                            ExistingWorkPolicy.REPLACE,
-                            deleteWorkRequest
-                        )
+//                        val deleteData = workDataOf("number" to rawNumber)
+//                        val deleteWorkRequest = OneTimeWorkRequestBuilder<DeleteCallLogWorker>()
+//                            .setInputData(deleteData)
+//                            .build()
+//
+//                        WorkManager.getInstance(ctx).enqueueUniqueWork(
+//                            "delete_log_$rawNumber",
+//                            ExistingWorkPolicy.REPLACE,
+//                            deleteWorkRequest
+//                        )
 
                         val uploadWorkRequest = OneTimeWorkRequestBuilder<UploadCallLogWorker>()
                             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())

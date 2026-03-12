@@ -67,13 +67,13 @@ class MyInCallService : InCallService() {
         super.onCallAdded(call)
         CallManager.onCallAdded(call)
 
-        // 2. ACTIVATE SENSOR ON CALL START
         if (wakeLock?.isHeld == false) {
             wakeLock?.acquire()
         }
 
         showNotification()
 
+        // Handles screen-ON case — fullScreenIntent alone doesn't launch when screen is on
         val intent = Intent(this, InCallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
@@ -87,7 +87,7 @@ class MyInCallService : InCallService() {
 
         if (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 call.details.state == Call.STATE_DISCONNECTED &&
-                    call.details.disconnectCause.code == DisconnectCause.MISSED
+                        call.details.disconnectCause.code == DisconnectCause.MISSED
             } else {
                 TODO("VERSION.SDK_INT < S")
             }
@@ -184,7 +184,7 @@ class MyInCallService : InCallService() {
     private fun createMissedCallChannel() {
         val name = "Missed Calls"
         val descriptionText = "Notifications for missed calls"
-        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val importance = NotificationManager.IMPORTANCE_MAX
         val channel = NotificationChannel(MISSED_CHANNEL_ID, name, importance).apply {
             description = descriptionText
             setShowBadge(true) // Ensures the launcher icon badge appears
@@ -234,7 +234,7 @@ class MyInCallService : InCallService() {
     private fun createNotificationChannel() {
         val name = "Ongoing Calls"
         val descriptionText = "Active call status"
-        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val importance = NotificationManager.IMPORTANCE_MAX // FIX 3: was IMPORTANCE_DEFAULT, too low for full-screen intents
         val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
             description = descriptionText
             setSound(null, null)
@@ -261,7 +261,11 @@ class MyInCallService : InCallService() {
         val activityIntent = Intent(this, InCallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val pendingIntent = PendingIntent.getActivity(
+        val fullScreenIntent = PendingIntent.getActivity(
+            this, 2, activityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val pendingIntent = PendingIntent.getActivity( // FIX 1: was missing, caused compile error
             this, 0, activityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -295,9 +299,10 @@ class MyInCallService : InCallService() {
                 .setOngoing(true)
                 .setCategory(Notification.CATEGORY_CALL)
                 .setColor(getColor(R.color.holo_green_dark))
+                .setFullScreenIntent(fullScreenIntent, true)
                 .setContentIntent(pendingIntent)
                 .setUsesChronometer(isActive)
-                .setWhen(displayTime)
+                .setWhen(if (isActive && currentState.connectTimeMillis > 0) currentState.connectTimeMillis else 0L)
             startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
 
         } else {
@@ -309,11 +314,12 @@ class MyInCallService : InCallService() {
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOngoing(true)
                 .setColor(Color.parseColor("#4CAF50"))
+                .setFullScreenIntent(fullScreenIntent, true)
                 .setColorized(true)
                 .setContentIntent(pendingIntent)
                 .addAction(R.drawable.ic_menu_close_clear_cancel, "End", endCallIntent)
                 .setUsesChronometer(true)
-                .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: System.currentTimeMillis())
+                .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: 0L)
 
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTIFICATION_ID, notificationCompatBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)

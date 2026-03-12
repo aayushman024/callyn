@@ -223,7 +223,8 @@ fun UpdateDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
 
                     if (!isHardUpdate) {
@@ -233,9 +234,9 @@ fun UpdateDialog(
                         ) {
 
                             Text(
-                                "Later",
-                                color =
-                                    Color.White.copy(alpha = 0.6f)
+                                text = "Later",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 15.ssp()
                             )
                         }
 
@@ -247,44 +248,24 @@ fun UpdateDialog(
                     Button(
                         enabled = enabled,
                         onClick = { onUpdate(downloadUrl) },
-                        modifier = Modifier.height(52.sdp()),
-                        shape = RoundedCornerShape(14.sdp()),
-                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(8.sdp()),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.Transparent
+                            containerColor = Color(0xFF4F46E5),
+                            contentColor = Color.White,
+                            disabledContainerColor = Color(0xFF334155),
+                            disabledContentColor = Color.White.copy(alpha = 0.5f)
+                        ),
+                        contentPadding = PaddingValues(
+                            horizontal = 24.sdp(),
+                            vertical = 12.sdp()
                         )
                     ) {
 
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    if (enabled)
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                Color(0xFF4F46E5), // Indigo
-                                                Color(0xFF6366F1), // Primary
-                                                Color(0xFF8B5CF6)  // Purple
-                                            )
-                                        )
-                                    else
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                Color(0xFF334155),
-                                                Color(0xFF334155)
-                                            )
-                                        )
-                                )
-                                .padding(horizontal = 28.sdp(), vertical = 14.sdp()),
-                            contentAlignment = Alignment.Center
-                        ) {
-
-                            Text(
-                                text = if (enabled) "Download" else "Unavailable",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.ssp()
-                            )
-                        }
+                        Text(
+                            text = if (enabled) "Update App" else "Unavailable",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.ssp()
+                        )
                     }
                 }
             }

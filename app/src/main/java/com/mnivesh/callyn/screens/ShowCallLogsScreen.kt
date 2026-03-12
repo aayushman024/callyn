@@ -251,7 +251,13 @@ fun CallLogsContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Call History", fontWeight = FontWeight.Bold, fontSize = 20.ssp()) },
+                title = {
+                    Text(
+                        text = if (isPowerUser) "Call History" else "My Call Notes",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.ssp()
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -294,7 +300,7 @@ fun CallLogsContent(
             }
 
             // Section 2: Quick Type Filters
-            if (uiState is CallLogsUiState.Success) {
+            if (uiState is CallLogsUiState.Success && isPowerUser) {
                 item {
                     QuickFilterRow(
                         selectedFilter = selectedTypeFilter,
