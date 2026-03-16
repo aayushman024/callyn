@@ -29,6 +29,7 @@ data class ContactResponse(
     val number: String,
     val type: String,
     val pan: String,
+    val dob: String,
     val familyHead: String,
     val rshipManager: String,
     val aum: String,
@@ -306,7 +307,7 @@ interface ApiService {
         @Header("Authorization") token: String
     ): Response<WhitelistResponse>
 
-    @POST("https://mwt9w146-7071.inc1.devtunnels.ms/api/ReportsWatiHttp")
+    @POST("https://hsl-function-apps-ffdpg0g2fcbag7aq.centralindia-01.azurewebsites.net/api/SendInvestwellReportsInitializer?code=yVighGgLef4rbbS2hfu62QLMgOHE7xVmdtbCpANks-cUAzFuQUyJWA==")
     suspend fun generateReport(
         @Body request: ReportRequest
     ): Response<ResponseBody>

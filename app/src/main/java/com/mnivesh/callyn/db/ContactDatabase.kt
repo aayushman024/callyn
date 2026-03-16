@@ -4,9 +4,11 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import net.sqlcipher.database.SupportFactory
 
-@Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class], version = 14, exportSchema = false)
+@Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class], version = 15, exportSchema = false)
 abstract class ContactDatabase : RoomDatabase() {
 
     abstract fun contactDao(): ContactDao
@@ -15,6 +17,12 @@ abstract class ContactDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: ContactDatabase? = null
+
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE contacts ADD COLUMN dob TEXT DEFAULT NULL")
+            }
+        }
 
         // Update method to accept the passphrase
         fun getDatabase(context: Context, passphrase: ByteArray): ContactDatabase {
@@ -27,7 +35,8 @@ abstract class ContactDatabase : RoomDatabase() {
                     ContactDatabase::class.java,
                     "contact_database"
                 )
-                    .openHelperFactory(factory) // 2. Apply the factory here
+                    .openHelperFactory(factory)
+                    .addMigrations(MIGRATION_14_15)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

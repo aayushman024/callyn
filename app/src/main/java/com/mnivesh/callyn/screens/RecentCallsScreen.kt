@@ -206,100 +206,99 @@ class RecentCallsViewModel(
     }
 
     // [!code replace]
-    private fun mergeLogs(sysLogs: List<RecentCallUiItem>, dbLogs: List<WorkCallLog>): List<RecentCallUiItem> {
+    private fun mergeLogs(
+        sysLogs: List<RecentCallUiItem>,
+        dbLogs: List<WorkCallLog>
+    ): List<RecentCallUiItem> {
+
         val TIME_BUFFER_MS = 5 * 1000L
         val DUR_BUFFER_SEC = 5
 
-        // 1. Convert DB logs to UI items (include raw duration for comparison)
-        val workUiLogs = dbLogs.map {
-            val isIncomingCall = it.direction.equals("incoming", ignoreCase = true) ||
-                    it.direction.equals("missed", ignoreCase = true)
-            RecentCallUiItem(
-                id = "w_${it.id}",
-                name = it.name,
-                number = it.number,
-                type = "Work",
-                date = it.timestamp,
-                rawDuration = it.duration, // integer seconds
-                duration = formatDuration(it.duration),
-                isIncoming = isIncomingCall,
-                isMissed = it.direction.equals("missed", ignoreCase = true),
-                simSlot = it.simSlot
-            )
-        }.sortedByDescending { it.date }
+        fun normalize(num: String) =
+            num.filter { it.isDigit() }.takeLast(10)
 
-        // Ensure system logs are also sorted to make matching predictable
-        val sortedSysLogs = sysLogs.sortedByDescending { it.date }
-
-        // 2. Comparison Logic
         fun isSameCall(primary: RecentCallUiItem, candidate: RecentCallUiItem): Boolean {
-            // A. Number Check (Strip non-digits, compare last 10)
-            val n1 = primary.number.filter { it.isDigit() }.takeLast(10)
-            val n2 = candidate.number.filter { it.isDigit() }.takeLast(10)
-            if (n1 != n2) return false
 
-            // B. Direction Check
+            if (normalize(primary.number) != normalize(candidate.number)) return false
             if (primary.isIncoming != candidate.isIncoming) return false
 
-            // C. Time Drift Check
-            val timeDiff = kotlin.math.abs(primary.date - candidate.date)
+            val timeDiff = abs(primary.date - candidate.date)
             if (timeDiff > TIME_BUFFER_MS) return false
 
-            // D. Duration Check (Skip for Missed/Rejected calls as they are often 0 vs 1s)
             if (!primary.isMissed && !candidate.isMissed) {
-                val durDiff = kotlin.math.abs(primary.rawDuration - candidate.rawDuration)
+                val durDiff = abs(primary.rawDuration - candidate.rawDuration)
                 if (durDiff > DUR_BUFFER_SEC) return false
             }
 
             return true
         }
 
-        // 3. Merging with "Consumption" logic
-        val result = ArrayList<RecentCallUiItem>()
-        val usedWorkIndices = HashSet<Int>()
+        val workUiLogs = dbLogs.map {
+            val isIncomingCall =
+                it.direction.equals("incoming", true) ||
+                        it.direction.equals("missed", true)
+
+            RecentCallUiItem(
+                id = "w_${it.id}",
+                name = it.name,
+                number = it.number,
+                type = "Work",
+                date = it.timestamp,
+                rawDuration = it.duration,
+                duration = formatDuration(it.duration),
+                isIncoming = isIncomingCall,
+                isMissed = it.direction.equals("missed", true),
+                simSlot = it.simSlot
+            )
+        }.sortedByDescending { it.date }
+
+        val sortedSysLogs = sysLogs.sortedByDescending { it.date }
+
+        // 🔹 HashMap index by normalized number
+        val workMap = workUiLogs.groupBy { normalize(it.number) }
+
+        val usedWork = HashSet<RecentCallUiItem>()
         val usedSysIndices = HashSet<Int>()
 
+        val result = ArrayList<RecentCallUiItem>()
+
         if (department == "Management") {
-            // Single pass: match + enrich simultaneously
-            val enrichedSysLogs = sortedSysLogs.map { sysItem ->
-                var matched: Pair<Int, RecentCallUiItem>? = null
-                for ((index, workItem) in workUiLogs.withIndex()) {
-                    if (!usedWorkIndices.contains(index) && isSameCall(sysItem, workItem)) {
-                        matched = Pair(index, workItem)
-                        break
-                    }
+
+            val enriched = sortedSysLogs.map { sysItem ->
+
+                val candidates = workMap[normalize(sysItem.number)] ?: emptyList()
+
+                val match = candidates.firstOrNull {
+                    !usedWork.contains(it) && isSameCall(sysItem, it)
                 }
 
-                if (matched != null) {
-                    usedWorkIndices.add(matched.first)
-                    val workItem = matched.second
-                    // Unknown contact: enrich name + type from work DB
-                    val isUnknown = sysItem.name == sysItem.number || sysItem.name.isBlank()
+                if (match != null) {
+                    usedWork.add(match)
+
+                    val isUnknown =
+                        sysItem.name == sysItem.number || sysItem.name.isBlank()
+
                     if (isUnknown) {
-                        sysItem.copy(name = workItem.name, type = "Work")
+                        sysItem.copy(name = match.name, type = "Work")
                     } else {
-                        sysItem // known device contact, keep as-is
+                        sysItem
                     }
-                } else {
-                    sysItem // no work match, show as personal
-                }
+
+                } else sysItem
             }
 
-            result.addAll(enrichedSysLogs)
-
-            // Add work logs that had no matching system log
-            workUiLogs.forEachIndexed { index, item ->
-                if (!usedWorkIndices.contains(index)) {
-                    result.add(item)
-                }
-            }
+            result.addAll(enriched)
 
         } else {
-            // Priority: Work Logs
+
             result.addAll(workUiLogs)
 
             workUiLogs.forEach { workItem ->
-                for ((index, sysItem) in sortedSysLogs.withIndex()) {
+
+                val candidates = sortedSysLogs.withIndex()
+                    .filter { normalize(it.value.number) == normalize(workItem.number) }
+
+                for ((index, sysItem) in candidates) {
                     if (!usedSysIndices.contains(index) && isSameCall(workItem, sysItem)) {
                         usedSysIndices.add(index)
                         break
@@ -307,11 +306,8 @@ class RecentCallsViewModel(
                 }
             }
 
-            // Add only unmatched System logs
             sortedSysLogs.forEachIndexed { index, item ->
-                if (!usedSysIndices.contains(index)) {
-                    result.add(item)
-                }
+                if (!usedSysIndices.contains(index)) result.add(item)
             }
         }
 

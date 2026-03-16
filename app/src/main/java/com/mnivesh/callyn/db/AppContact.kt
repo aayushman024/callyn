@@ -19,6 +19,7 @@ data class AppContact(
     val number: String,
     val type: String = "work",
     val pan: String,
+    val dob: String?,
     val rshipManager: String,
     val familyHead: String,
     val aum: String?,

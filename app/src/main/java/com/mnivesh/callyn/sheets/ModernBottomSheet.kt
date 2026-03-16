@@ -552,6 +552,19 @@ fun ModernBottomSheet(
                                     )
 
                                     ModernDetailRow(Icons.Default.AccountBox, "Relationship Manager", contact.rshipManager ?: "N/A", Color(0xFFC084FC))
+
+                                    if(contact.dob != "N/A") {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 12.sdp()),
+                                            color = textSecondary.copy(alpha = 0.1f)
+                                        )
+                                        ModernDetailRow(
+                                            Icons.Default.Cake,
+                                            "DOB",
+                                            contact.dob,
+                                            Color(0xFF81C784)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -718,17 +731,17 @@ fun ModernBottomSheet(
                                 textSecondary = textSecondary
                             ) { selectedFormat = "pdf" }
                         }
-                        Box(modifier = Modifier.weight(1f)) {
-                            ReportOptionItem(
-                                text = "Excel",
-                                icon = Icons.Default.TableChart,
-                                isSelected = selectedFormat == "excel",
-                                primaryColor = primaryColor,
-                                surfaceColor = backgroundColor,
-                                textPrimary = textPrimary,
-                                textSecondary = textSecondary
-                            ) { selectedFormat = "excel" }
-                        }
+//                        Box(modifier = Modifier.weight(1f)) {
+//                            ReportOptionItem(
+//                                text = "Excel",
+//                                icon = Icons.Default.TableChart,
+//                                isSelected = selectedFormat == "excel",
+//                                primaryColor = primaryColor,
+//                                surfaceColor = backgroundColor,
+//                                textPrimary = textPrimary,
+//                                textSecondary = textSecondary
+//                            ) { selectedFormat = "excel" }
+//                        }
                     }
 
                     // 3. Send To Selection
@@ -824,7 +837,7 @@ fun ModernBottomSheet(
                                 }
 
                                 // default fallback messages
-                                var msg = if (response.isSuccessful) "Report generated successfully" else "Failed to generate report"
+                                var msg = if (response.isSuccessful) "Report Generation Request Sent for ${contact.name}. Kindly wait for sometime" else "Failed to generate report"
 
                                 // try to extract a better message if backend sent json, otherwise just show whatever string we got
                                 if (!responseString.isNullOrEmpty()) {
@@ -836,7 +849,7 @@ fun ModernBottomSheet(
                                     }
                                 }
 
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG)
 
                             } catch (e: Exception) {
                                 Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
@@ -1044,7 +1057,7 @@ fun ModernBottomSheet(
 
 // reusable internal component for selectable options
 @Composable
-private fun ReportOptionItem(
+fun ReportOptionItem(
     text: String,
     icon: ImageVector?,
     customIconRes: Int? = null,

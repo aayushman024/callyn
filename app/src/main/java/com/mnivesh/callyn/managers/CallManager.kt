@@ -40,6 +40,7 @@ data class CallState(
     val name: String,
     val personalName: String? = null,
     val number: String,
+    val pan: String,
     val status: String,
     val type: String = "unknown",
     val isMuted: Boolean = false,
@@ -190,7 +191,7 @@ object CallManager {
 
         // --- EMIT STATE atomically to prevent lost updates ---
         _callState.update { current ->
-            (current ?: CallState(name = finalName, number = displayNumber, status = "Connecting")).copy(
+            (current ?: CallState(name = finalName, number = displayNumber, pan = "",status = "Connecting")).copy(
                 name = finalName,
                 number = displayNumber,
                 status = primary.getStateString(),
@@ -333,6 +334,7 @@ object CallManager {
         coroutineScope.launch {
             var resolvedName: String? = null
             var type = "unknown"
+            var pan: String = ""
             var familyHead: String? = null
             var rshipManager: String? = null
             var aum: String? = null
@@ -349,6 +351,7 @@ object CallManager {
                     rshipManager = workContact.rshipManager
                     aum = workContact.aum
                     familyAum = workContact.familyAum
+                    pan = workContact.pan
                 } else if (workContact != null) {
                     resolvedName = workContact.name
                     type = "work"
@@ -356,6 +359,7 @@ object CallManager {
                     rshipManager = workContact.rshipManager
                     aum = workContact.aum
                     familyAum = workContact.familyAum
+                    pan = workContact.pan
                 } else {
                     val crmContact = repository?.findCrmContactByNumber(normalized)
                     if (crmContact != null) {
@@ -395,6 +399,7 @@ object CallManager {
                     current.copy(
                         name = finalName,
                         type = type,
+                        pan = pan,
                         familyHead = familyHead,
                         rshipManager = rshipManager,
                         aum = aum,

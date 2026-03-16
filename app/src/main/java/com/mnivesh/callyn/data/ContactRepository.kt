@@ -58,6 +58,7 @@ class ContactRepository(
                         familyHead = employee.department,
                         rshipManager = "Employee",
                         aum = "0",
+                        dob = null,
                         familyAum = "0",
                     )
                 }
@@ -90,6 +91,7 @@ class ContactRepository(
                         number = it.number,
                         type = it.type,
                         pan = it.pan,
+                        dob = it.dob,
                         familyHead = it.familyHead,
                         rshipManager = it.rshipManager,
                         aum = it.aum,
@@ -165,23 +167,53 @@ class ContactRepository(
     }
 
     suspend fun findWorkContactByNumber(normalizedNumber: String): AppContact? {
-        val matches = contactDao.getContactsByNumber(normalizedNumber).ifEmpty {
-            if (normalizedNumber.length > 10)
-                contactDao.getContactsByNumber(normalizedNumber.takeLast(10))
-            else emptyList()
-        }
-        if (matches.size <= 1) return matches.firstOrNull()
+        val primaryMatches = contactDao.getContactsByNumber(normalizedNumber)
 
-        // 1. Employee always wins over everything
-        val employeeContact = matches.firstOrNull { it.rshipManager == "Employee" }
+        // Always search with last 10 digits when number is long
+        // This ensures employees stored with 10-digit numbers are found
+        // even when the caller sends a 12-digit ISD-prefixed number
+        val combinedMatches = if (normalizedNumber.length > 10) {
+            val shortMatches = contactDao.getContactsByNumber(normalizedNumber.takeLast(10))
+            (primaryMatches + shortMatches).distinctBy { it.number } // deduplicate
+        } else {
+            primaryMatches
+        }
+
+        if (combinedMatches.isEmpty()) return null
+        if (combinedMatches.size == 1) return combinedMatches.first()
+
+        // 1. Employee always wins
+        val employeeContact = combinedMatches.firstOrNull { it.rshipManager == "Employee" }
         if (employeeContact != null) return employeeContact
 
         // 2. Among clients only, prefer the family head
-        val familyHeadContact = matches.firstOrNull { candidate ->
-            matches.any { other -> other != candidate && other.familyHead == candidate.name }
+        val familyHeadContact = combinedMatches.firstOrNull { candidate ->
+            combinedMatches.any { other -> other != candidate && other.familyHead == candidate.name }
         }
 
-        return familyHeadContact ?: matches.first()
+//        return familyHeadContact ?: combinedMatches.first()
+
+        if (familyHeadContact != null) return familyHeadContact
+
+        // 3. Unrelated contacts sharing a number (diff name, diff familyHead) — resolve by DOB
+        fun AppContact.hasValidDob() = !dob.isNullOrBlank() && dob != "N/A"
+
+        fun AppContact.parsedDob(): java.time.LocalDate? = try {
+            java.time.LocalDate.parse(dob!!, java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy"))
+        } catch (e: Exception) { null }
+
+        val withDob = combinedMatches.filter { it.hasValidDob() }
+        return when {
+            // Only one contact has a DOB — prefer it
+            withDob.size == 1 -> withDob.first()
+
+            // Multiple have DOB — pick the oldest (smallest date)
+            withDob.size > 1 -> withDob.minByOrNull { it.parsedDob() ?: java.time.LocalDate.MAX }
+                ?: combinedMatches.first()
+
+            // Nobody has a DOB — fall back to alphabetical (already sorted by query)
+            else -> combinedMatches.first()
+        }
     }
 
     suspend fun findCrmContactByNumber(normalizedNumber: String): CrmContact? {

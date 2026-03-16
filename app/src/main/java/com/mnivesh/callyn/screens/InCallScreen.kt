@@ -69,6 +69,15 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import android.content.ContextWrapper
+import android.util.Log
+import android.widget.Toast
+import com.mnivesh.callyn.api.RetrofitInstance
+import com.mnivesh.callyn.api.ReportRequest
+import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.sheets.ReportOptionItem
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 // Recursively unwrap the context to get the actual Activity
 tailrec fun Context.getActivity(): Activity? = when (this) {
@@ -170,6 +179,14 @@ fun InCallContent(
     var showConferenceSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showMessageSheet by remember { mutableStateOf(false) }
+    // Report dialog states
+    val context = LocalContext.current
+    val authManager = remember { AuthManager(context) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var selectedReportType by remember { mutableStateOf<String?>(null) }
+    var selectedFormat by remember { mutableStateOf<String?>(null) }
+    var selectedDestination by remember { mutableStateOf<String?>(null) }
+    var isReportSubmitting by remember { mutableStateOf(false) }
 
     // State for Details Popup
     var showDetailsPopup by remember { mutableStateOf(false) }
@@ -537,6 +554,281 @@ fun InCallContent(
                     }
                 }
             }
+        }
+
+        // --- Report Button (Top Left, Work Calls Only) ---
+        if (currentState.type == "work" && currentState.rshipManager != "Employee" && currentState.status != "Ended") {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .systemBarsPadding()
+                    .padding(top = 30.sdp(), start = 10.sdp())
+            ) {
+                Surface(
+                    onClick = {
+                        selectedReportType = null
+                        selectedFormat = null
+                        selectedDestination = null
+                        showReportDialog = true
+                    },
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.sdp())
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Assessment,
+                            contentDescription = "Generate Report",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.sdp())
+                        )
+                        Text(
+                            text = "Report",
+                            color = Color.White,
+                            fontSize = 12.ssp(),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- Generate Report Dialog (In-Call) ---
+        if (showReportDialog) {
+            val primaryColor   = Color(0xFF10B981)
+            val surfaceColor   = Color(0xFF1E293B)
+            val backgroundColor = Color(0xFF0F172A)
+            val textPrimary    = Color.White
+            val textSecondary  = Color.White.copy(alpha = 0.6f)
+            val workColor      = Color(0xFF60A5FA)
+
+            val isSubmitEnabled = selectedReportType != null
+                    && selectedFormat != null
+                    && selectedDestination != null
+                    && !isReportSubmitting
+
+            AlertDialog(
+                onDismissRequest = {
+                    if (!isReportSubmitting) {
+                        showReportDialog = false
+                        selectedFormat = null
+                        selectedDestination = null
+                        selectedReportType = null
+                    }
+                },
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+                modifier = Modifier.fillMaxWidth(0.9f),
+                containerColor = surfaceColor,
+                title = {
+                    Text(
+                        "Generate Report",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = textPrimary
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        // 1. Report Type
+                        Text(
+                            "Report Type",
+                            fontSize = 12.ssp(),
+                            color = textSecondary,
+                            modifier = Modifier.padding(bottom = 8.sdp(), top = 8.sdp())
+                        )
+                        listOf("Portfolio Valuation", "Capital Gain Report").forEach { type ->
+                            ReportOptionItem(
+                                text = type,
+                                icon = Icons.Default.Assessment,
+                                isSelected = selectedReportType == type,
+                                primaryColor = primaryColor,
+                                surfaceColor = backgroundColor,
+                                textPrimary = textPrimary,
+                                textSecondary = textSecondary
+                            ) { selectedReportType = type }
+                        }
+
+                        // 2. Format
+                        Text(
+                            "Select File Format",
+                            fontSize = 12.ssp(),
+                            color = textSecondary,
+                            modifier = Modifier.padding(bottom = 8.sdp(), top = 16.sdp())
+                        )
+                        ReportOptionItem(
+                            text = "PDF",
+                            icon = Icons.Default.Description,
+                            isSelected = selectedFormat == "pdf",
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) { selectedFormat = "pdf" }
+
+                        // 3. Send To
+                        Text(
+                            "Send To",
+                            fontSize = 12.ssp(),
+                            color = textSecondary,
+                            modifier = Modifier.padding(bottom = 8.sdp(), top = 16.sdp())
+                        )
+                        ReportOptionItem(
+                            text = "Client (via WhatsApp)",
+                            icon = Icons.Default.Chat,
+                           // customIconRes = R.drawable.whatsapp,
+                            isSelected = selectedDestination == "client_wa",
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) { selectedDestination = "client_wa" }
+
+                        ReportOptionItem(
+                            text = "Client (via Email)",
+                            icon = Icons.Default.Email,
+                            isSelected = selectedDestination == "client_email",
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) { selectedDestination = "client_email" }
+
+                        ReportOptionItem(
+                            text = "Myself (on WhatsApp)",
+                            icon = Icons.Default.Chat,
+                            //customIconRes = R.drawable.whatsapp,
+                            isSelected = selectedDestination == "self_wa",
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) { selectedDestination = "self_wa" }
+
+                        ReportOptionItem(
+                            text = "Myself (via Email)",
+                            icon = Icons.Default.Email,
+                            isSelected = selectedDestination == "self_email",
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) { selectedDestination = "self_email" }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (isReportSubmitting) return@Button
+                            scope.launch {
+                                isReportSubmitting = true
+                                try {
+                                    val mode = if (selectedDestination?.endsWith("_wa") == true) "wa" else "email"
+
+                                    val rawPhone = if (selectedDestination?.startsWith("client") == true) {
+                                        currentState.number
+                                    } else {
+                                        authManager.getWorkPhone() ?: ""
+                                    }
+
+                                    var cleanPhone = rawPhone.replace(Regex("[^0-9]"), "")
+                                    if (cleanPhone.length == 10) cleanPhone = "91$cleanPhone"
+                                    if (cleanPhone.startsWith("0")) cleanPhone = "91${cleanPhone.drop(1)}"
+
+                                    val request = ReportRequest(
+                                        report = selectedReportType?.lowercase() ?: "",
+                                        format = selectedFormat ?: "pdf",
+                                        mode = mode,
+                                        phone = cleanPhone,
+                                        rmemail = authManager.getUserEmail() ?: "",
+                                        pan = currentState.pan,   // add `pan` to CallState if not present
+                                        name = currentState.name
+                                    )
+
+                                    val response = RetrofitInstance.api.generateReport(request)
+
+                                    val responseString = if (response.isSuccessful) {
+                                        response.body()?.string()
+                                    } else {
+                                        response.errorBody()?.string()
+                                    }
+
+                                    var msg = if (response.isSuccessful)
+                                        "Report request sent for ${currentState.name}. Please wait."
+                                    else "Failed to generate report"
+
+                                    if (!responseString.isNullOrEmpty()) {
+                                        try {
+                                            val json = org.json.JSONObject(responseString)
+                                            msg = json.optString("message", json.optString("error", responseString))
+                                        } catch (e: Exception) {
+                                            msg = responseString
+                                        }
+                                    }
+
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    Log.e("InCallScreen", "Report API error", e)
+                                } finally {
+                                    isReportSubmitting = false
+                                    showReportDialog = false
+                                    selectedFormat = null
+                                    selectedDestination = null
+                                    selectedReportType = null
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = primaryColor,
+                            disabledContainerColor = primaryColor.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(12.sdp()),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.sdp()),
+                        enabled = isSubmitEnabled
+                    ) {
+                        if (isReportSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.sdp()),
+                                color = Color.White,
+                                strokeWidth = 2.sdp()
+                            )
+                        } else {
+                            Text(
+                                "Submit",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.ssp(),
+                                color = if (isSubmitEnabled) Color.White else textSecondary
+                            )
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            if (!isReportSubmitting) {
+                                showReportDialog = false
+                                selectedFormat = null
+                                selectedDestination = null
+                                selectedReportType = null
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cancel", color = textSecondary, fontWeight = FontWeight.Medium)
+                    }
+                },
+                shape = RoundedCornerShape(20.sdp())
+            )
         }
 
         // --- Details Popup (Glass Blur Like) ---
@@ -1486,6 +1778,7 @@ fun PreviewPersonalActiveCall() {
         isSpeakerOn = true,
         isBluetoothOn = false,
         isIncoming = false,
+        pan = "",
         connectTimeMillis = System.currentTimeMillis() - 125000
     )
 
@@ -1520,6 +1813,7 @@ fun PreviewWorkIncomingCall() {
         isIncoming = true,
         rshipManager = "Employee",
         familyHead = "Tech Team",
+        pan = "",
         aum = null
     )
 
@@ -1556,7 +1850,8 @@ fun PreviewClientWorkCall() {
         rshipManager = "Amit Verma",
         familyHead = "Raina Family",
         aum = "₹5,00,000",
-        familyAum = "₹20,00,000"
+        familyAum = "₹20,00,000",
+        pan = ""
     )
 
     InCallContent(
