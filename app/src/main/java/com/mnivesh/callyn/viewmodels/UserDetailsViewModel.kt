@@ -20,7 +20,6 @@ class UserDetailsViewModel : ViewModel() {
     var uiState: UserDetailsUiState by mutableStateOf(UserDetailsUiState.Loading)
         private set
 
-    // [!code ++] New separate list for Usernames only, accessible elsewhere
     var userNamesList: List<String> by mutableStateOf(emptyList())
         private set
 
@@ -30,56 +29,28 @@ class UserDetailsViewModel : ViewModel() {
             try {
                 val response = RetrofitInstance.api.getAllUserDetails("Bearer $token")
 
-                // Handle 404 with Hardcoded Data
-                if (response.code() == 404) {
-                    val dummyList = listOf(
-                        UserDetailsResponse(
-                            _id = "1",
-                            username = "Aayushman Ranjan",
-                            email = "aayushman@niveshonline",
-                            phoneModel = "Samsung Galaxy S24",
-                            osLevel = "Android 14 (SDK 34)",
-                            appVersion = "1.0.5",
-                            department = "IT Desk",
-                            lastSeen = "2025-12-31T10:00:00.000Z"
-                        ),
-                        UserDetailsResponse(
-                            _id = "2",
-                            username = "Demo User 2",
-                            email = "aayushman@niveshonline",
-                            phoneModel = "Pixel 8 Pro",
-                            osLevel = "Android 15 (SDK 35)",
-                            appVersion = "1.0.4",
-                            department = "Management",
-                            lastSeen = "2025-12-29T15:30:00.000Z"
-                        ),
-                        UserDetailsResponse(
-                            _id = "3",
-                            username = "Ishu Mavar",
-                            email = "aayushman@niveshonline",
-                            phoneModel = "OnePlus 12",
-                            osLevel = "Android 13 (SDK 33)",
-                            appVersion = "1.0.5",
-                            department = "Mutual Funds",
-                            lastSeen = "2025-12-31T09:15:00.000Z"
-                        )
-                    )
-
-                    // [!code ++] Extract usernames from dummy list
-                    userNamesList = dummyList.map { it.username }
-
-                    uiState = UserDetailsUiState.Success(dummyList)
+                when {
+                    response.isSuccessful && response.body() != null -> {
+                        val users = response.body()!!
+                        userNamesList = users.map { it.username }
+                        uiState = UserDetailsUiState.Success(users)
+                    }
+                    response.code() == 404 -> {
+                        uiState = UserDetailsUiState.Error("No users found")
+                    }
+                    response.code() == 401 -> {
+                        uiState = UserDetailsUiState.Error("Unauthorized: Please log in again")
+                    }
+                    response.code() in 500..599 -> {
+                        uiState = UserDetailsUiState.Error("Server error, please try again later")
+                    }
+                    else -> {
+                        uiState = UserDetailsUiState.Error("Unexpected error: ${response.code()}")
+                    }
                 }
-                // Existing Success Logic
-                else if (response.isSuccessful && response.body() != null) {
-                    val users = response.body()!!
 
-                    uiState = UserDetailsUiState.Success(users)
-                } else {
-                    uiState = UserDetailsUiState.Error("Failed to fetch data: ${response.code()}")
-                }
             } catch (e: Exception) {
-                Log.e("UserDetailsVM", "Error", e)
+                Log.e("UserDetailsVM", "Error fetching user details", e)
                 uiState = UserDetailsUiState.Error("Network Error: ${e.localizedMessage}")
             }
         }

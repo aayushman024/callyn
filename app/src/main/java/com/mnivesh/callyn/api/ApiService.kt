@@ -119,18 +119,34 @@ data class UserDetailsRequest(
     val osLevel: String,
     val appVersion: String,
     val department: String?,
-    val lastSeen: Long
+    val lastSeen: Long,
+    val ramAvailableMb: Long,
+    val storageAvailableGb: String,
+    val appCacheMb: Long,       // heap bytes actively used by app
+    val batteryPercent: Int,
+    val thermalStatus: String,
+    val networkStatus: String
+)
+
+data class DeviceMetrics(
+    val ramAvailableMb: Long?,
+    val storageAvailableGb: String?,
+    val appCacheMb: Long?,
+    val batteryPercent: Int?,
+    val thermalStatus: String?,
+    val networkStatus: String?
 )
 
 data class UserDetailsResponse(
     val _id: String,
-    val email: String,
     val username: String,
+    val email: String?,
+    val department: String?,
     val phoneModel: String?,
     val osLevel: String?,
     val appVersion: String?,
-    val department: String,
-    val lastSeen: String? // Received as ISO date string
+    val lastSeen: String?,
+    val deviceMetrics: DeviceMetrics? = null   // null-safe — old records won't break
 )
 
 data class SmsLogRequest(
