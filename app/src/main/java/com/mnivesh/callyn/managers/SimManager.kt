@@ -9,6 +9,7 @@ import android.os.Build
 import android.telephony.SubscriptionManager
 import android.util.Log
 import androidx.core.app.ActivityCompat
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 object SimManager {
     var workSimSlot: Int? = null
@@ -73,6 +74,7 @@ object SimManager {
                         rawSimNumber = sub.number
                     }
                 } catch (e: Exception) {
+                    FirebaseCrashlytics.getInstance().recordException(e)
                     Log.e("SimManager", "Error fetching number for slot ${sub.simSlotIndex}: ${e.message}")
                 }
 
@@ -111,6 +113,7 @@ object SimManager {
             }
 
         } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
             Log.e("SimManager", "Error detecting SIM roles", e)
         } finally {
             Log.d("SimManager", "--- Detection Finished. isWorkSimDetected=$isWorkSimDetected ---")

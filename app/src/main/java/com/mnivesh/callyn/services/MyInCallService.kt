@@ -184,7 +184,7 @@ class MyInCallService : InCallService() {
     private fun createMissedCallChannel() {
         val name = "Missed Calls"
         val descriptionText = "Notifications for missed calls"
-        val importance = NotificationManager.IMPORTANCE_MAX
+        val importance = NotificationManager.IMPORTANCE_HIGH
         val channel = NotificationChannel(MISSED_CHANNEL_ID, name, importance).apply {
             description = descriptionText
             setShowBadge(true) // Ensures the launcher icon badge appears
@@ -234,7 +234,7 @@ class MyInCallService : InCallService() {
     private fun createNotificationChannel() {
         val name = "Ongoing Calls"
         val descriptionText = "Active call status"
-        val importance = NotificationManager.IMPORTANCE_MAX // FIX 3: was IMPORTANCE_DEFAULT, too low for full-screen intents
+        val importance = NotificationManager.IMPORTANCE_HIGH // FIX 3: was IMPORTANCE_DEFAULT, too low for full-screen intents
         val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
             description = descriptionText
             setSound(null, null)
@@ -298,6 +298,7 @@ class MyInCallService : InCallService() {
                 .setContentText(callStatus)
                 .setOngoing(true)
                 .setCategory(Notification.CATEGORY_CALL)
+                .setOnlyAlertOnce(true)
                 .setColor(getColor(R.color.holo_green_dark))
                 .setFullScreenIntent(fullScreenIntent, true)
                 .setContentIntent(pendingIntent)
@@ -312,6 +313,7 @@ class MyInCallService : InCallService() {
                 .setContentText(callStatus)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
+                .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setColor(Color.parseColor("#4CAF50"))
                 .setFullScreenIntent(fullScreenIntent, true)

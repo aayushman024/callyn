@@ -39,7 +39,7 @@ import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.screens.RecentCallUiItem
-import com.mnivesh.callyn.screens.sheets.CallHistoryRow // Imported from existing structure
+import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 
@@ -59,10 +59,12 @@ fun ModernDeviceBottomSheet(
     val context = LocalContext.current
     var isHistoryExpanded by remember { mutableStateOf(initialHistoryExpanded) }
 
-    // Modern Dark Theme Colors
-    val backgroundColor = Color(0xFF0F172A) // Deep Slate
-    val surfaceColor = Color(0xFF1E293B)    // Lighter Slate
-    val primaryColor = Color(0xFF10B981)    // Emerald
+    // If name matches the primary number, it's an unsaved contact
+    val isUnknownNumber = contact.numbers.firstOrNull()?.number == contact.name
+
+    val backgroundColor = Color(0xFF0F172A)
+    val surfaceColor = Color(0xFF1E293B)
+    val primaryColor = Color(0xFF10B981)
     val textPrimary = Color.White
     val textSecondary = Color.White.copy(alpha = 0.6f)
 
@@ -84,66 +86,67 @@ fun ModernDeviceBottomSheet(
         }
     ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(start = 24.sdp(), end = 24.sdp(), bottom = 24.sdp()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // --- Header Section: Avatar & Actions ---
+            // --- Header Section ---
             item {
                 Box(modifier = Modifier.fillMaxWidth()) {
-                    // Top Right Actions (Edit/View)
-                    Row(
-                        modifier = Modifier.align(Alignment.TopEnd),
-                        horizontalArrangement = Arrangement.spacedBy(8.sdp())
-                    ) {
-                        val actionButtonColors = IconButtonDefaults.iconButtonColors(
-                            containerColor = surfaceColor,
-                            contentColor = textSecondary
-                        )
 
-                        IconButton(
-                            onClick = {
-                                try {
-                                    val intent = Intent(Intent.ACTION_EDIT).apply {
-                                        data = Uri.withAppendedPath(
-                                            ContactsContract.Contacts.CONTENT_URI,
-                                            contact.id
-                                        )
-                                        putExtra("finishActivityOnSaveCompleted", true)
-                                    }
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Could not edit contact", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            colors = actionButtonColors,
-                            modifier = Modifier.size(40.sdp()).clip(CircleShape)
-                        ) { Icon(Icons.Default.Edit, "Edit Contact", modifier = Modifier.size(20.sdp())) }
-
-                        IconButton(
-                            onClick = {
-                                try {
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        data = Uri.withAppendedPath(
-                                            ContactsContract.Contacts.CONTENT_URI,
-                                            contact.id
-                                        )
-                                    }
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Could not open contact", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            colors = actionButtonColors,
-                            modifier = Modifier.size(40.sdp()).clip(CircleShape)
+                    // Hide edit/view actions if the contact isn't saved in the DB yet
+                    if (!isUnknownNumber) {
+                        Row(
+                            modifier = Modifier.align(Alignment.TopEnd),
+                            horizontalArrangement = Arrangement.spacedBy(8.sdp())
                         ) {
-                            Icon(Icons.Default.OpenInNew, "View Contact", modifier = Modifier.size(20.sdp()))
+                            val actionButtonColors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
+                                contentColor = textSecondary
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_EDIT).apply {
+                                            data = Uri.withAppendedPath(
+                                                ContactsContract.Contacts.CONTENT_URI,
+                                                contact.id
+                                            )
+                                            putExtra("finishActivityOnSaveCompleted", true)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Could not edit contact", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = actionButtonColors,
+                                modifier = Modifier.size(40.sdp()).clip(CircleShape)
+                            ) { Icon(Icons.Default.Edit, "Edit Contact", modifier = Modifier.size(20.sdp())) }
+
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            data = Uri.withAppendedPath(
+                                                ContactsContract.Contacts.CONTENT_URI,
+                                                contact.id
+                                            )
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Could not open contact", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = actionButtonColors,
+                                modifier = Modifier.size(40.sdp()).clip(CircleShape)
+                            ) {
+                                Icon(Icons.Default.OpenInNew, "View Contact", modifier = Modifier.size(20.sdp()))
+                            }
                         }
                     }
 
-                    // Centered Avatar
                     Box(
                         modifier = Modifier
                             .size(110.sdp())
@@ -172,7 +175,6 @@ fun ModernDeviceBottomSheet(
 
                 Spacer(modifier = Modifier.height(16.sdp()))
 
-                // --- Name & Type ---
                 Text(
                     text = contact.name,
                     fontSize = 26.ssp(),
@@ -183,29 +185,60 @@ fun ModernDeviceBottomSheet(
 
                 Spacer(modifier = Modifier.height(12.sdp()))
 
-                // "Personal Contact" Pill
-                Surface(
-                    color = primaryColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.height(32.sdp())
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 16.sdp())
+                // Show "Add to Contacts" for unknown numbers, otherwise show the Personal Contact pill
+                if (isUnknownNumber) {
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_INSERT).apply {
+                                type = ContactsContract.RawContacts.CONTENT_TYPE
+                                putExtra(ContactsContract.Intents.Insert.PHONE, contact.numbers.firstOrNull()?.number ?: contact.name)
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Could not open contacts app", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.height(36.sdp()),
+                        border = BorderStroke(1.sdp(), primaryColor),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = primaryColor)
                     ) {
                         Icon(
-                            Icons.Default.Person,
-                            null,
-                            tint = primaryColor,
-                            modifier = Modifier.size(14.sdp())
+                            Icons.Default.PersonAdd,
+                            contentDescription = "Add to Contacts",
+                            modifier = Modifier.size(16.sdp())
                         )
                         Spacer(modifier = Modifier.width(6.sdp()))
                         Text(
-                            "Personal Contact",
+                            "Add to Contacts",
                             fontSize = 13.ssp(),
-                            color = primaryColor,
                             fontWeight = FontWeight.SemiBold
                         )
+                    }
+                } else {
+                    Surface(
+                        color = primaryColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.height(32.sdp())
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 16.sdp())
+                        ) {
+                            Icon(
+                                Icons.Default.Person,
+                                null,
+                                tint = primaryColor,
+                                modifier = Modifier.size(14.sdp())
+                            )
+                            Spacer(modifier = Modifier.width(6.sdp()))
+                            Text(
+                                "Personal Contact",
+                                fontSize = 13.ssp(),
+                                color = primaryColor,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 
@@ -218,7 +251,6 @@ fun ModernDeviceBottomSheet(
 
             item {
                 if (contact.numbers.size > 1) {
-                    // --- Multiple Numbers Card ---
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             "PHONE NUMBERS",
@@ -234,7 +266,6 @@ fun ModernDeviceBottomSheet(
                             shape = RoundedCornerShape(20.sdp()),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            // Using Column instead of nested LazyColumn for smooth main scrolling
                             Column(
                                 modifier = Modifier.padding(vertical = 8.sdp())
                             ) {
@@ -303,7 +334,6 @@ fun ModernDeviceBottomSheet(
                         }
                     }
                 } else {
-                    // --- Single Number Card ---
                     val number = contact.numbers.firstOrNull()?.number ?: ""
                     Surface(
                         color = surfaceColor,

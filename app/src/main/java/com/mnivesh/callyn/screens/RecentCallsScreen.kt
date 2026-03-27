@@ -651,7 +651,9 @@ fun RecentCallsScreen(
                         RecentCallItem(
                             log = log,
                             onBodyClick = { handleItemClick(log) },
-                            onCallClick = { onCallClick(log.number, log.type.equals("Work", ignoreCase = true), null) },
+                            onCallClick = {
+                                val slotIndex = log.simSlot?.filter { it.isDigit() }?.toIntOrNull()?.let { it - 1 }
+                                onCallClick(log.number, log.type.equals("Work", ignoreCase = true), slotIndex) },
                             onDelete = { viewModel.deleteLog(log.providerId) },
                             onBlock = { viewModel.blockNumber(log.number) }
                         )

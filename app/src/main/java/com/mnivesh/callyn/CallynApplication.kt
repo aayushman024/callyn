@@ -20,6 +20,7 @@ class CallynApplication : Application() {
         ContactRepository(
             database.contactDao(),
             database.workCallLogDao(),
+            database.personalCallLogDao(),
             RetrofitInstance.api
         )
     }

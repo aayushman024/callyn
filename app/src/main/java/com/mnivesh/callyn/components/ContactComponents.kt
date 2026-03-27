@@ -55,11 +55,18 @@ fun getColorForName(name: String): Color {
 }
 
 fun getInitials(name: String): String {
-    return name.split(" ")
+    val trimmed = name.trim()
+
+    // If it's a number (ignore +)
+    if (trimmed.replace("+", "").all { it.isDigit() }) {
+        return trimmed.replace("+", "").take(2)
+    }
+
+    return trimmed.split(" ")
         .mapNotNull { word -> word.firstOrNull { it.isLetter() }?.uppercaseChar() }
         .take(2)
         .joinToString("")
-        .ifEmpty { name.firstOrNull { it.isLetter() }?.uppercase() ?: "" }
+        .ifEmpty { trimmed.firstOrNull { it.isLetter() }?.uppercase() ?: "" }
 }
 
 fun sanitizePhoneNumber(number: String): String {

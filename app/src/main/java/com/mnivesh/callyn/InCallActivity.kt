@@ -8,7 +8,11 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.lifecycleScope
+import com.mnivesh.callyn.managers.CallManager
 import com.mnivesh.callyn.screens.InCallScreen
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class InCallActivity : ComponentActivity() {
 
@@ -35,6 +39,14 @@ class InCallActivity : ComponentActivity() {
 
         // 4. Edge-to-Edge UI
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        lifecycleScope.launch {
+            CallManager.callState.collectLatest { state ->
+                if (state == null || state.status == "Disconnected") {
+                    finishAndRemoveTask()
+                }
+            }
+        }
 
         setContent {
             InCallScreen()

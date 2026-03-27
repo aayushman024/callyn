@@ -102,6 +102,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import androidx.compose.ui.graphics.Color as ComposeColor
+import com.mnivesh.callyn.components.CallLogSyncTrigger
 
 private const val TAG = "MainActivity"
 
@@ -277,6 +278,11 @@ class MainActivity : ComponentActivity() {
                         }
 
                         is MainActivityUiState.LoggedIn -> {
+                            val app = application as CallynApplication
+
+                            // 2. Call the Sync Trigger (it runs invisibly in the background)
+                            CallLogSyncTrigger(repository = app.repository)
+
                             MainScreenWithDialerLogic(
                                 userName = state.userName,
                                 onLogout = { performLogout() }

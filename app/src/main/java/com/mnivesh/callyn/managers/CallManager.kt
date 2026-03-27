@@ -22,7 +22,7 @@ import com.mnivesh.callyn.services.MyInCallService
 import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.workers.DeleteCallLogWorker
-import com.mnivesh.callyn.workers.PersonalUploadWorker
+import com.mnivesh.callyn.workers.PersonalCallLogUploadWorker
 import com.mnivesh.callyn.workers.UploadCallLogWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -524,20 +524,26 @@ object CallManager {
 
             } else {
                 if (!isManagement) {
-                    val personalData = workDataOf(
-                        "duration" to durationSeconds,
-                        "timestamp" to startTimestamp,
-                        "direction" to direction,
-                        "simSlot" to simSlot
+                    val personalLog = com.mnivesh.callyn.db.PersonalCallLog(
+                        duration = durationSeconds,
+                        timestamp = startTimestamp,
+                        direction = direction,
+                        simSlot = simSlot
                     )
 
-                    val personalWorkRequest = OneTimeWorkRequestBuilder<PersonalUploadWorker>()
-                        .setInputData(personalData)
+                    // persist locally first
+                    repository?.insertPersonalLog(personalLog)
+
+                    val personalWorkRequest = OneTimeWorkRequestBuilder<PersonalCallLogUploadWorker>()
                         .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                         .build()
 
                     appContext?.let { ctx ->
-                        WorkManager.getInstance(ctx).enqueue(personalWorkRequest)
+                        WorkManager.getInstance(ctx).enqueueUniqueWork(
+                            "SyncPersonalLogs",
+                            ExistingWorkPolicy.APPEND_OR_REPLACE,
+                            personalWorkRequest
+                        )
                     }
                 }
             }

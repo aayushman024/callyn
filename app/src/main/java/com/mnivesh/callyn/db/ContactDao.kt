@@ -60,6 +60,10 @@ interface ContactDao {
     @Query("UPDATE work_call_logs SET isSynced = 1 WHERE id = :logId")
     suspend fun markLogAsSynced(logId: Int)
 
+    // batch update to avoid hammering DB during sync
+    @Query("UPDATE work_call_logs SET isSynced = 1 WHERE id IN (:logIds)")
+    suspend fun markLogsAsSynced(logIds: List<Int>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCrmContacts(contacts: List<CrmContact>)
 

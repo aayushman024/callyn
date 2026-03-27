@@ -1,6 +1,7 @@
 package com.mnivesh.callyn.data
 
 import android.util.Log
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.mnivesh.callyn.api.RetrofitInstance.api
 import com.mnivesh.callyn.api.ApiService
 import com.mnivesh.callyn.api.EmployeeDirectory
@@ -10,6 +11,8 @@ import com.mnivesh.callyn.api.UpdateRequestStatusBody
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.ContactDao
 import com.mnivesh.callyn.db.CrmContact
+import com.mnivesh.callyn.db.PersonalCallLog
+import com.mnivesh.callyn.db.PersonalCallLogDao
 import com.mnivesh.callyn.db.WorkCallLog
 import com.mnivesh.callyn.db.WorkCallLogDao
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +27,7 @@ import java.time.Instant
 class ContactRepository(
     private val contactDao: ContactDao,
     private val workCallLogDao: WorkCallLogDao,
+    private val personalCallLogDao: PersonalCallLogDao,
     val apiService: ApiService // Changed to 'val' so it's accessible if needed, or keep 'private' if only used internally
 ) {
     private val TAG = "ContactRepository"
@@ -36,6 +40,19 @@ class ContactRepository(
 
     private val _isCrmLoading = MutableStateFlow(false)
     val isCrmLoading = _isCrmLoading.asStateFlow()
+
+    // --- PERSONAL LOGS ---
+    suspend fun insertPersonalLog(log: PersonalCallLog) {
+        personalCallLogDao.insert(log)
+    }
+
+    suspend fun getPendingPersonalLogs(): List<PersonalCallLog> {
+        return personalCallLogDao.getAllPending()
+    }
+
+    suspend fun deleteSyncedPersonalLogs(ids: List<Int>) {
+        if (ids.isNotEmpty()) personalCallLogDao.deleteByIds(ids)
+    }
 
     // [!code change] Updated getEmployees function
     suspend fun getEmployees(token: String, forceRefresh: Boolean = false): Result<List<EmployeeDirectory>> {
@@ -74,6 +91,7 @@ class ContactRepository(
                 Result.failure(Exception("Failed to fetch employees: ${response.message()}"))
             }
         } catch (e: Exception) {
+            FirebaseCrashlytics.getInstance().recordException(e)
             Result.failure(e)
         }
     }
@@ -114,6 +132,7 @@ class ContactRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to refresh contacts", e)
+            FirebaseCrashlytics.getInstance().recordException(e)
             return false // [!code ++] Return Failure
         }
     }
@@ -163,6 +182,7 @@ class ContactRepository(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync initial data", e)
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 
@@ -236,6 +256,49 @@ class ContactRepository(
 
     suspend fun markLogSynced(id: Int) {
         contactDao.markLogAsSynced(id)
+    }
+
+    // --- WORK LOGS BATCH UPLOAD ---
+    suspend fun batchUploadUnsyncedWorkLogs(token: String): Boolean {
+        val unsyncedLogs = contactDao.getUnsyncedWorkLogs()
+        if (unsyncedLogs.isEmpty()) return true
+
+        val successfulLogIds = mutableListOf<Int>()
+
+        unsyncedLogs.forEach { log ->
+            try {
+                // fallback to finding RM locally if missing
+                val contactInfo = findWorkContactByNumber(log.number.takeLast(10))
+                val rmName = contactInfo?.rshipManager ?: "Unknown"
+
+                val request = com.mnivesh.callyn.api.CallLogRequest(
+                    callerName = log.name,
+                    familyHead = log.familyHead,
+                    rshipManagerName = rmName,
+                    type = log.direction,
+                    timestamp = log.timestamp,
+                    duration = log.duration,
+                    notes = log.notes,
+                    simSlot = log.simSlot,
+                    isWork = true
+                )
+
+                val response = apiService.uploadCallLog("Bearer $token", request)
+                if (response.isSuccessful) {
+                    successfulLogIds.add(log.id)
+                }
+            } catch (e: Exception) {
+                FirebaseCrashlytics.getInstance().log("Failed to batch upload log ID: ${log.id}")
+                FirebaseCrashlytics.getInstance().recordException(e)
+            }
+        }
+
+        // flush to db once
+        if (successfulLogIds.isNotEmpty()) {
+            contactDao.markLogsAsSynced(successfulLogIds)
+        }
+
+        return successfulLogIds.size == unsyncedLogs.size
     }
 
     // --- NEW FUNCTION: Request Personal Contact ---
