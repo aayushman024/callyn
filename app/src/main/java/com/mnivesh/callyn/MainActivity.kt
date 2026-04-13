@@ -563,15 +563,17 @@ class MainActivity : ComponentActivity() {
             }
 
             // 2. Proceed with normal login handling
-            val token = data.getQueryParameter("token")
-            val department = data.getQueryParameter("department")
+            val token = data.getQueryParameter("accessToken")
+            val refreshToken = data.getQueryParameter("refreshToken")
+            val department = data.getQueryParameter("departmentName")
             val email = data.getQueryParameter("email")
             val name = data.getQueryParameter("name")
             // Note: The Store app doesn't save work_phone yet based on AuthManager, but we'll accept it if added later
-            val workPhone = data.getQueryParameter("work_phone")
+            val workPhone = data.getQueryParameter("associatedNumber")
 
             if (!token.isNullOrEmpty()) {
                 authManager.saveToken(token)
+                authManager.saveRefreshToken(refreshToken)
                 authManager.setSetupCompleted(false)
                 // Save Department if present
                 if (department != null) {

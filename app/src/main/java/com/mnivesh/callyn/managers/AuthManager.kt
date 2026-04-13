@@ -8,6 +8,7 @@ class AuthManager(context: Context) {
         context.getSharedPreferences("AuthPrefs", Context.MODE_PRIVATE)
 
     private val AUTH_TOKEN = "AuthToken"
+    private val REFRESH_TOKEN = "RefreshToken"
     private val USER_NAME = "UserName"
 
     private val USER_EMAIL = "UserEmail"
@@ -19,6 +20,8 @@ class AuthManager(context: Context) {
 
     fun saveToken(token: String) = prefs.edit().putString(AUTH_TOKEN, token).apply()
     fun getToken(): String? = prefs.getString(AUTH_TOKEN, null)
+    fun saveRefreshToken(token: String) = prefs.edit().putString(REFRESH_TOKEN, token).apply()
+    fun getRefreshToken(): String? = prefs.getString(REFRESH_TOKEN, null)
 
     fun saveUserName(name: String?) = prefs.edit().putString(USER_NAME, name).apply()
     fun getUserName(): String? = prefs.getString(USER_NAME, null)
