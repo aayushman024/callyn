@@ -85,19 +85,23 @@ class MyInCallService : InCallService() {
         super.onCallRemoved(call)
         CallManager.onCallRemoved(call)
 
-        if (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                call.details.state == Call.STATE_DISCONNECTED &&
-                        call.details.disconnectCause.code == DisconnectCause.MISSED
-            } else {
-                TODO("VERSION.SDK_INT < S")
-            }
-        ) {
+        // Check if the call was missed based on SDK version
+        val isMissed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            call.details.state == Call.STATE_DISCONNECTED &&
+                    call.details.disconnectCause.code == DisconnectCause.MISSED
+        } else {
+            // For older versions, we check the state and disconnect cause code manually
+            call.state == Call.STATE_DISCONNECTED &&
+                    call.details.disconnectCause.code == DisconnectCause.MISSED
+        }
+
+        if (isMissed) {
             val rawNumber = call.details.handle?.schemeSpecificPart ?: "Unknown"
             showMissedCallNotification(rawNumber)
         }
 
         if (calls.isEmpty()) {
-            // 3. RELEASE SENSOR ON CALL END
+            // Kill the proximity sensor when no calls are active
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()
             }

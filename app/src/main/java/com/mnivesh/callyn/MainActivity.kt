@@ -279,8 +279,9 @@ class MainActivity : ComponentActivity() {
 
                         is MainActivityUiState.LoggedIn -> {
                             val app = application as CallynApplication
-
+                            val department = authManager.getDepartment()
                             // 2. Call the Sync Trigger (it runs invisibly in the background)
+                            if(department != "Management")
                             CallLogSyncTrigger(repository = app.repository)
 
                             MainScreenWithDialerLogic(

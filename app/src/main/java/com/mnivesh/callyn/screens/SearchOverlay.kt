@@ -45,10 +45,17 @@ import com.mnivesh.callyn.R
 import com.mnivesh.callyn.components.*
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.CrmContact
+import com.mnivesh.callyn.managers.SearchHistoryManager
 import com.mnivesh.callyn.tabs.CrmContactCard
 import com.mnivesh.callyn.viewmodels.CrmUiState
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+fun String.matchesQuery(query: String): Boolean {
+    val tokens = query.lowercase().split(" ").filter { it.isNotBlank() }
+    val text = this.lowercase()
+    return tokens.all { token -> text.contains(token) }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -134,7 +141,7 @@ fun SearchOverlay(
                 callLogs.take(500)
                     .filter { log ->
                         // 1. Match Query
-                        val matchesQuery = log.name.contains(debouncedQuery, true) ||
+                        val matchesQuery = log.name.matchesQuery(debouncedQuery) ||
                                 log.number.contains(debouncedQuery)
 
                         // 2. Match Universal Filter (Personal/Work)
@@ -174,8 +181,8 @@ fun SearchOverlay(
                 val results = mutableListOf<Any>()
 
                 fun AppContact.matches(): Boolean {
-                    return name.contains(debouncedQuery, true) ||
-                            familyHead.contains(debouncedQuery, true) ||
+                    return name.matchesQuery(debouncedQuery) ||
+                            familyHead.matchesQuery(debouncedQuery) ||
                             pan.contains(debouncedQuery, true) ||
                             (department == "Management" && number.contains(debouncedQuery)) ||
                             (isCodeSearch && uniqueCode.equals(debouncedQuery, ignoreCase = true))
@@ -183,7 +190,7 @@ fun SearchOverlay(
 
                 if (selectedFilter == "All" || selectedFilter == "Personal") {
                     results.addAll(deviceContacts.filter { contact ->
-                        contact.name.contains(debouncedQuery, true) ||
+                        contact.name.matchesQuery(debouncedQuery) ||
                                 contact.numbers.any { it.number.contains(debouncedQuery) }
                     })
                 }
@@ -211,11 +218,11 @@ fun SearchOverlay(
                         }
                         if (!passModule) return@filter false
 
-                        contact.name.contains(debouncedQuery, true) ||
+                        contact.name.matchesQuery(debouncedQuery) ||
                                 contact.number.contains(debouncedQuery) ||
                                 contact.recordId.contains(debouncedQuery, true) ||
                                 (contact.product?.contains(debouncedQuery, true) == true) ||
-                                contact.ownerName.contains(debouncedQuery, true)
+                                contact.ownerName.matchesQuery(debouncedQuery)
                     }
                     results.addAll(filteredCrm)
                 }
@@ -381,7 +388,7 @@ fun SearchOverlay(
                                 log = log,
                                 onBodyClick = {
                                     onCallLogClick?.invoke(log)
-                                    SearchHistoryManager.addSearch(context, debouncedQuery)
+                                    com.mnivesh.callyn.managers.SearchHistoryManager.addSearch(context, debouncedQuery)
                                 },
                                 onCallClick = {
                                     onMakeCall?.invoke(log.number, log.type == "Work", log.simSlot?.filter { it.isDigit() }?.toIntOrNull()?.minus(1))
@@ -420,8 +427,8 @@ fun SearchOverlay(
 
                     items(combinedResults) { item ->
                         val onResultClick: () -> Unit = {
-                            SearchHistoryManager.addSearch(context, debouncedQuery)
-                            searchHistory = SearchHistoryManager.getHistory(context)
+                            com.mnivesh.callyn.managers.SearchHistoryManager.addSearch(context, debouncedQuery)
+                            searchHistory = com.mnivesh.callyn.managers.SearchHistoryManager.getHistory(context)
                             keyboardController?.hide()
                             focusManager.clearFocus()
                         }

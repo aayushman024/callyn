@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.LocalClipboardManager // [!code ++]
+import com.mnivesh.callyn.managers.SearchHistoryManager
 
 
 // --- SEARCH RESULT SEALED CLASS ---
