@@ -20,7 +20,7 @@ class AuthManager(context: Context) {
 
     fun saveToken(token: String) = prefs.edit().putString(AUTH_TOKEN, token).apply()
     fun getToken(): String? = prefs.getString(AUTH_TOKEN, null)
-    fun saveRefreshToken(token: String) = prefs.edit().putString(REFRESH_TOKEN, token).apply()
+    fun saveRefreshToken(token: String?) = prefs.edit().putString(REFRESH_TOKEN, token).apply()
     fun getRefreshToken(): String? = prefs.getString(REFRESH_TOKEN, null)
 
     fun saveUserName(name: String?) = prefs.edit().putString(USER_NAME, name).apply()
