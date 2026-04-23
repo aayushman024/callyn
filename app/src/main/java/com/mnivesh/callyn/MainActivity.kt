@@ -567,19 +567,19 @@ class MainActivity : ComponentActivity() {
             val department = data.getQueryParameter("departmentName")
             val email = data.getQueryParameter("email")
             val name = data.getQueryParameter("name")
-            // Note: The Store app doesn't save work_phone yet based on AuthManager, but we'll accept it if added later
             val workPhone = data.getQueryParameter("associatedNumber")
 
             if (!token.isNullOrEmpty()) {
                 authManager.saveToken(token)
                 authManager.saveRefreshToken(refreshToken)
                 authManager.setSetupCompleted(false)
-                // Save Department if present
-                if (department != null) {
-                    authManager.saveUserName(name)
-                    authManager.saveDepartment(department)
-                    authManager.saveUserEmail(email)
+                authManager.saveUserName(name)
+                authManager.saveUserEmail(email)
+                if(!workPhone.isNullOrEmpty()) {
                     authManager.saveWorkPhone(workPhone)
+                }
+                if (department != null) {
+                    authManager.saveDepartment(department)
                 }
                // checkLoginState()
 
@@ -725,14 +725,18 @@ class MainActivity : ComponentActivity() {
         if (!isDefaultDialer()) { offerDefaultDialer(); return }
         if (!checkAllPermissions()) { requestPermissions(); return }
 
-        // Strip everything except digits and existing plus signs
-        val cleanNumber = number.filter { it.isDigit() || it == '+' }
+        // Strip everything except digits, plus signs, and USSD characters
+        val cleanNumber = number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }
 
-        // Handle Indian telecom routing (Toll-free, STD, and standard mobile)
+        // Handle Indian telecom routing (Toll-free, STD, USSD, and standard mobile)
+        // Strip + first to check for toll-free/STD patterns that should never have +
+        val stripped = cleanNumber.removePrefix("+")
         val numberToDial = when {
-            cleanNumber.startsWith("+") -> cleanNumber
-            cleanNumber.startsWith("1800") -> cleanNumber
-            cleanNumber.startsWith("0") -> cleanNumber
+            cleanNumber.contains('*') || cleanNumber.contains('#') -> cleanNumber // USSD codes
+            stripped.startsWith("1800") -> stripped  // Toll-free (strip + if present)
+            stripped.startsWith("1860") -> stripped  // Toll-free (strip + if present)
+            stripped.startsWith("0") -> stripped      // STD codes (strip + if present)
+            cleanNumber.startsWith("+") -> cleanNumber // International (keep +)
             cleanNumber.length > 10 -> "+$cleanNumber"
             else -> cleanNumber
         }

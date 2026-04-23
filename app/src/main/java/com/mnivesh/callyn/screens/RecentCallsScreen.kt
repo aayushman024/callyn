@@ -824,6 +824,31 @@ fun formatDuration(seconds: Long): String {
     return if (m > 0) "${m}m ${s}s" else "${s}s"
 }
 
+/**
+ * Live lookup against device contacts. Resolves names for numbers
+ * that were saved AFTER the call was made (stale CACHED_NAME fix).
+ */
+fun resolveContactName(context: Context, number: String): String? {
+    try {
+        val uri = android.net.Uri.withAppendedPath(
+            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+            android.net.Uri.encode(number)
+        )
+        context.contentResolver.query(
+            uri,
+            arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
+            null, null, null
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                return cursor.getString(0)
+            }
+        }
+    } catch (e: Exception) {
+        // Ignore lookup failures
+    }
+    return null
+}
+
 @SuppressLint("MissingPermission")
 suspend fun fetchSystemCallLogs(
     context: Context,
@@ -897,19 +922,26 @@ suspend fun fetchSystemCallLogs(
 
                 while (it.moveToNext()) {
                     val realId = it.getLong(idIdx)
-                    val number = it.getString(numberIdx) ?: "Unknown"
-                    val name = it.getString(nameIdx) ?: "Unknown"
+                    val number = (it.getString(numberIdx) ?: "Unknown").removePrefix("+")
+                    val cachedName = it.getString(nameIdx)
                     val type = it.getInt(typeIdx)
                     val date = it.getLong(dateIdx)
                     val durationSec = it.getLong(durationIdx)
                     val accountId = it.getString(accountIdIdx)
                     val simLabel = if (accountId != null) simMap[accountId] else null
 
+                    // Resolve name: use cached name if available, else do live lookup
+                    val name = if (!cachedName.isNullOrBlank() && cachedName != "Unknown") {
+                        cachedName
+                    } else {
+                        resolveContactName(context, number) ?: number
+                    }
+
                     logs.add(
                         RecentCallUiItem(
                             id = "s_${date}_${number.takeLast(4)}",
                             providerId = realId,
-                            name = if (name != "Unknown") name else number,
+                            name = name,
                             number = number,
                             type = "Personal",
                             date = date,

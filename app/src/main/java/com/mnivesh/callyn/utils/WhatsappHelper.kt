@@ -30,7 +30,7 @@ object WhatsAppHelper {
             .replace("+", "")
             .replace("-", "")
 
-        val withCountryCode = if (cleaned.length == 10) "91$cleaned" else cleaned
+        val withCountryCode = if (cleaned.length == 10) "+91$cleaned" else cleaned
 
         val intents = listOf(WHATSAPP_PACKAGE, WHATSAPP_BUSINESS_PACKAGE)
             .filter { isAppInstalled(context, it) }

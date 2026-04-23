@@ -27,6 +27,7 @@ class CallynApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        RetrofitInstance.init(this)
         CallManager.initialize(repository, this)
     }
 }

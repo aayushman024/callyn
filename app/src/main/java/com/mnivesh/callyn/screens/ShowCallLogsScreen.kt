@@ -51,6 +51,8 @@ import com.mnivesh.callyn.api.CallLogResponse
 import com.mnivesh.callyn.managers.AuthManager
 import java.text.SimpleDateFormat
 import java.util.*
+import android.content.Intent
+import android.net.Uri
 
 // --- Color Palette ---
 val BackgroundColor = Color(0xFF0F172A)
@@ -267,7 +269,47 @@ fun CallLogsContent(
                     containerColor = BackgroundColor,
                     titleContentColor = Color.White,
                     navigationIconContentColor = Color.White
-                )
+                ),
+                actions = {
+                    val context = LocalContext.current
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 8.sdp())
+                    ) {
+                        // Pill Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(PrimaryColor.copy(alpha = 0.15f))
+                                .border(1.sdp(), PrimaryColor, RoundedCornerShape(50))
+                                .clickable {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("mniveshcentral://module?name=Callyn%20Analytics")
+                                    }
+                                    context.startActivity(intent)
+                                }
+                                .padding(horizontal = 12.sdp(), vertical = 6.sdp())
+                        ) {
+                            Text(
+                                text = "View Analytics",
+                                color = PrimaryColor,
+                                fontSize = 12.ssp(),
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            Spacer(modifier = Modifier.width(6.sdp()))
+
+                            Icon(
+                                imageVector = Icons.Default.ArrowForward,
+                                contentDescription = null,
+                                tint = PrimaryColor,
+                                modifier = Modifier.size(16.sdp())
+                            )
+                        }
+                    }
+                }
             )
         },
         containerColor = BackgroundColor

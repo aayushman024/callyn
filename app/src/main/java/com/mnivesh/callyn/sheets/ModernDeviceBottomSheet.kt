@@ -1,5 +1,6 @@
 package com.mnivesh.callyn.sheets
 
+import WhatsAppHelper
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mnivesh.callyn.R
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
@@ -42,6 +44,7 @@ import com.mnivesh.callyn.screens.RecentCallUiItem
 import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import androidx.compose.ui.res.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +97,31 @@ fun ModernDeviceBottomSheet(
             // --- Header Section ---
             item {
                 Box(modifier = Modifier.fillMaxWidth()) {
+
+                    // WhatsApp button (top-start)
+                    Box(modifier = Modifier.align(Alignment.TopStart)) {
+                        IconButton(
+                            onClick = {
+                                WhatsAppHelper.openChat(
+                                    context = context,
+                                    phoneNumber = contact.numbers.firstOrNull()?.number ?: ""
+                                )
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
+                            ),
+                            modifier = Modifier
+                                .size(40.sdp())
+                                .clip(CircleShape)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.whatsapp),
+                                contentDescription = "WhatsApp",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(35.sdp())
+                            )
+                        }
+                    }
 
                     // Hide edit/view actions if the contact isn't saved in the DB yet
                     if (!isUnknownNumber) {

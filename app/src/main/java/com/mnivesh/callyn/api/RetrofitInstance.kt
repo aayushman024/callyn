@@ -1,5 +1,7 @@
 package com.mnivesh.callyn.api
 
+import android.content.Context
+import android.util.Log
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -9,21 +11,32 @@ object RetrofitInstance {
 
     private const val BASE_URL_PROD = "https://callyn-backend-avh8cae5dpdnckg8.centralindia-01.azurewebsites.net/"
     private const val BASE_URL_LOCAL = "http://localhost:5500/"
-    private const val BASE_URL_IP = "http://192.168.1.34:5500/"
+    private const val BASE_URL_IP = "http://192.168.1.34:5000/"
 
-    // 1. Create a custom OkHttpClient with 2-minute timeouts
+    private var appContext: Context? = null
+
+    // Call this from CallynApplication.kt's onCreate()
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
     private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(4, TimeUnit.MINUTES) // Connect timeout
-            .readTimeout(4, TimeUnit.MINUTES)    // Socket read timeout
-            .writeTimeout(4, TimeUnit.MINUTES)   // Socket write timeout
-            .build()
+        val builder = OkHttpClient.Builder()
+            .connectTimeout(4, TimeUnit.MINUTES)
+            .readTimeout(4, TimeUnit.MINUTES)
+            .writeTimeout(4, TimeUnit.MINUTES)
+
+        appContext?.let {
+            builder.addInterceptor(AuthInterceptor(it))
+        } ?: Log.e("RetrofitInstance", "Forgot to call RetrofitInstance.init() in Application class!")
+
+        builder.build()
     }
 
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL_PROD)
-            .client(client) // 2. Attach the client here
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
