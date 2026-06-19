@@ -35,6 +35,7 @@ import com.mnivesh.callyn.api.SmsLogResponse
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -65,11 +66,11 @@ fun SmsLogsScreen(
     onRefresh: () -> Unit,
     onBack: () -> Unit
 ) {
-    // Theme Colors (Matched to Callyn but utilizing modern accents)
-    val backgroundColor = Color(0xFF0F172A)
-    val bubbleColor = Color(0xFF1E293B)
+    val colors = AppTheme.colors
+    val backgroundColor = colors.background
+    val bubbleColor = colors.cardBackground
     val primaryColor = Color(0xFF3B82F6)
-    val borderSubtle = Color(0xFF334155)
+    val borderSubtle = colors.border
 
     val context = LocalContext.current
     var showWhitelistDialog by remember { mutableStateOf(false) }
@@ -112,14 +113,14 @@ fun SmsLogsScreen(
                     Column {
                         Text(
                             "Live SMS Logs",
-                            color = Color.White,
+                            color = colors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.ssp()
                         )
                         if (isRefreshing) {
                             Text(
                                 "Refreshing...",
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = colors.textSecondary,
                                 fontSize = 12.ssp()
                             )
                         } else {
@@ -134,7 +135,7 @@ fun SmsLogsScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.Default.ArrowBack, "Back", tint = colors.textPrimary)
                     }
                 },
                 actions = {
@@ -143,11 +144,11 @@ fun SmsLogsScreen(
                         if (isRefreshing) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.sdp()),
-                                color = Color.White,
+                                color = colors.textPrimary,
                                 strokeWidth = 2.sdp()
                             )
                         } else {
-                            Icon(Icons.Default.Refresh, "Refresh", tint = Color.White)
+                            Icon(Icons.Default.Refresh, "Refresh", tint = colors.textPrimary)
                         }
                     }
                 },
@@ -168,19 +169,19 @@ fun SmsLogsScreen(
                     Icon(
                         Icons.Rounded.Timer,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.2f),
+                        tint = colors.textSecondary.copy(alpha = 0.4f),
                         modifier = Modifier.size(48.sdp())
                     )
                     Spacer(modifier = Modifier.height(12.sdp()))
                     Text(
                         "No active messages",
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = colors.textPrimary.copy(alpha = 0.8f),
                         fontSize = 16.ssp(),
                         fontWeight = FontWeight.Medium
                     )
                     Text(
                         "Messages are deleted after 5 minutes",
-                        color = Color.White.copy(alpha = 0.4f),
+                        color = colors.textSecondary,
                         fontSize = 13.ssp(),
                         modifier = Modifier.padding(top = 4.sdp())
                     )
@@ -273,6 +274,7 @@ fun SmsBubbleItem(
     primaryColor: Color,
     borderSubtle: Color
 ) {
+    val colors = AppTheme.colors
     val timestampMs = parseServerTimestamp(log.timestamp)
     val expiryTime = timestampMs + (5 * 60 * 1000)
     val remainingMs = (expiryTime - currentTime).coerceAtLeast(0)
@@ -354,7 +356,7 @@ fun SmsBubbleItem(
                     .fillMaxWidth()
                     .height(3.sdp())
                     .clip(RoundedCornerShape(2.sdp()))
-                    .background(Color.White.copy(alpha = 0.05f))
+                    .background(colors.surfaceVariant)
             ) {
                 Box(
                     Modifier
@@ -382,12 +384,12 @@ fun SmsBubbleItem(
                 ) {
                     Text(
                         text = "From: ",
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = colors.textSecondary,
                         fontSize = 12.ssp()
                     )
                     Text(
                         text = log.sender,
-                        color = Color.White,
+                        color = colors.textPrimary,
                         fontSize = 14.ssp(),
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
@@ -402,13 +404,13 @@ fun SmsBubbleItem(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.sdp()))
-                    .background(Color(0xFF0F172A).copy(alpha = 0.5f)) // Darker inset for message
+                    .background(colors.background) // Darker inset for message
                     .padding(12.sdp())
             ) {
                 SelectionContainer {
                     Text(
                         text = log.message,
-                        color = Color.White,
+                        color = colors.textPrimary,
                         fontSize = 15.ssp(),
                         lineHeight = 22.ssp()
                     )
@@ -426,13 +428,13 @@ fun SmsBubbleItem(
                 Icon(
                     Icons.Rounded.Schedule,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.4f),
+                    tint = colors.textSecondary,
                     modifier = Modifier.size(12.sdp())
                 )
                 Spacer(Modifier.width(4.sdp()))
                 Text(
                     text = formatDisplayTime(log.timestamp),
-                    color = Color.White.copy(alpha = 0.4f),
+                    color = colors.textSecondary,
                     fontSize = 11.ssp()
                 )
             }

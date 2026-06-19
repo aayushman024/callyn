@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
@@ -31,6 +32,8 @@ fun PersonalTabContent(
     onGrantPermission: () -> Unit,
     onContactSelected: (DeviceContact) -> Unit
 ) {
+    val colors = AppTheme.colors
+
     if (!hasContactsPermission) {
         PermissionRequiredCard(onGrantPermission = onGrantPermission)
     } else if (filteredDeviceContacts.isEmpty() && favoriteContacts.isEmpty()) {
@@ -75,7 +78,7 @@ fun PersonalTabContent(
                             }
                         }
                         Spacer(modifier = Modifier.height(16.sdp()))
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        HorizontalDivider(color = colors.border)
                     }
                 }
             }
@@ -84,7 +87,7 @@ fun PersonalTabContent(
                 item {
                     Text(
                         text = "All Contacts",
-                        color = Color.White.copy(alpha = 0.5f),
+                        color = colors.textSecondary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.ssp(),
                         modifier = Modifier.padding(top = 8.sdp(), start = 4.sdp())

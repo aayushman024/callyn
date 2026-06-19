@@ -88,6 +88,9 @@ class ContactRepository(
 
                 Result.success(cachedEmployees!!)
             } else {
+                val errorMsg = "getEmployees API failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("Failed to fetch employees: status code ${response.code()}"))
                 Result.failure(Exception("Failed to fetch employees: ${response.message()}"))
             }
         } catch (e: Exception) {
@@ -127,8 +130,11 @@ class ContactRepository(
 
                 return true // [!code ++] Return Success
             } else {
-                Log.e(TAG, "API Error: ${response.message()}")
-                return false // [!code ++] Return Failure
+                val errorMsg = "refreshContacts API failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e(TAG, errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("refreshContacts failed: status code ${response.code()}"))
+                return false
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to refresh contacts", e)
@@ -178,7 +184,10 @@ class ContactRepository(
                     }
                 }
             } else {
-                Log.d(TAG, "Initial data sync completed successfully.")
+                val errorMsg = "syncInitialData API failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e(TAG, errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("syncInitialData failed: status code ${response.code()}"))
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync initial data", e)
@@ -286,6 +295,10 @@ class ContactRepository(
                 val response = apiService.uploadCallLog("Bearer $token", request)
                 if (response.isSuccessful) {
                     successfulLogIds.add(log.id)
+                } else {
+                    val errorMsg = "uploadCallLog failed for log ${log.id}: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                    Log.e(TAG, errorMsg)
+                    FirebaseCrashlytics.getInstance().log(errorMsg)
                 }
             } catch (e: Exception) {
                 FirebaseCrashlytics.getInstance().log("Failed to batch upload log ID: ${log.id}")
@@ -318,9 +331,11 @@ class ContactRepository(
                 Log.d(TAG, "Personal request submitted successfully.")
                 true
             } else {
-                // --- UPDATED LOGGING HERE ---
-                val errorMsg = response.errorBody()?.string()
-                Log.e(TAG, "Personal request failed: ${response.code()} - Body: $errorMsg")
+                val errorBodyStr = response.errorBody()?.string()
+                val errorMsg = "submitPersonalRequest failed: code=${response.code()} - Body: ${errorBodyStr ?: response.message()}"
+                Log.e(TAG, errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("submitPersonalRequest failed: status code ${response.code()}"))
                 false
             }
         } catch (e: Exception) {
@@ -334,6 +349,10 @@ class ContactRepository(
             if (response.isSuccessful && response.body() != null) {
                 response.body()!!
             } else {
+                val errorMsg = "getPendingRequests failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e(TAG, errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("getPendingRequests failed: status code ${response.code()}"))
                 emptyList()
             }
         } catch (e: Exception) {
@@ -348,6 +367,12 @@ class ContactRepository(
                 "Bearer $token",
                 UpdateRequestStatusBody(requestId, status)
             )
+            if (!response.isSuccessful) {
+                val errorMsg = "updateRequestStatus failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e(TAG, errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("updateRequestStatus failed: status code ${response.code()}"))
+            }
             response.isSuccessful
         } catch (e: Exception) {
             e.printStackTrace()
@@ -400,6 +425,10 @@ class ContactRepository(
                     Result.failure(Exception(body.message))
                 }
             } else {
+                val errorMsg = "refreshCrmData failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e(TAG, errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("refreshCrmData failed: status code ${response.code()}"))
                 Result.failure(Exception("Failed to fetch CRM data: ${response.message()}"))
             }
         } catch (e: Exception) {

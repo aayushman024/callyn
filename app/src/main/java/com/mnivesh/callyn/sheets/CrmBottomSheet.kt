@@ -12,6 +12,7 @@ import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import android.widget.Toast
 import androidx.compose.foundation.*
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,9 +44,10 @@ import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import kotlinx.coroutines.launch
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -79,18 +81,25 @@ fun CrmBottomSheet(
             val response = ViewLimitManager.getStatus(authManager)
             if (response.isSuccessful) {
                 remainingViews = response.body()?.remaining ?: 0
+            } else {
+                val errorMsg = "getStatus failed in CrmBottomSheet: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e("CrmBottomSheet", errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("getStatus failed: status code ${response.code()}"))
             }
         } catch (e: Exception) {
-            Log.e("ModernBottomSheet", "Failed to fetch initial status", e)
+            Log.e("CrmBottomSheet", "Failed to fetch initial status", e)
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 
     // Theme Colors
-    val backgroundColor = Color(0xFF0F172A)
-    val surfaceColor = Color(0xFF1E293B)
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val crmColor = Color(0xFF2C7BE5)
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -339,14 +348,14 @@ fun CrmBottomSheet(
                                             Text(
                                                 "Mobile Number",
                                                 fontSize = 11.ssp(),
-                                                color = Color.White.copy(alpha = 0.5f),
+                                                color = textSecondary,
                                                 fontWeight = FontWeight.Medium
                                             )
                                             val masked = if (contact.number.length > 2) "******" + contact.number.takeLast(2) else "******"
                                             Text(
                                                 masked,
                                                 fontSize = 16.ssp(),
-                                                color = Color.White,
+                                                color = textPrimary,
                                                 fontWeight = FontWeight.Medium
                                             )
                                         }
@@ -367,14 +376,25 @@ fun CrmBottomSheet(
                                                                 isNumberVisible = true
                                                                 remainingViews = incRes.body()?.remaining ?: 0
                                                                 Toast.makeText(context, "Remaining views for today: $remainingViews", Toast.LENGTH_SHORT).show()
+                                                            } else {
+                                                                val errorMsg = "increment failed in CrmBottomSheet: code=${incRes.code()}, message=${incRes.message()}, error=${incRes.errorBody()?.string()}"
+                                                                Log.e("CrmBottomSheet", errorMsg)
+                                                                FirebaseCrashlytics.getInstance().log(errorMsg)
+                                                                FirebaseCrashlytics.getInstance().recordException(Exception("increment failed: status code ${incRes.code()}"))
                                                             }
                                                         } else {
                                                             Toast.makeText(context, "You have exhausted daily view.", Toast.LENGTH_LONG).show()
                                                         }
                                                     } else {
+                                                        val errorMsg = "getStatus check failed in CrmBottomSheet: code=${statusRes.code()}, message=${statusRes.message()}, error=${statusRes.errorBody()?.string()}"
+                                                        Log.e("CrmBottomSheet", errorMsg)
+                                                        FirebaseCrashlytics.getInstance().log(errorMsg)
+                                                        FirebaseCrashlytics.getInstance().recordException(Exception("getStatus check in increment failed: status code ${statusRes.code()}"))
                                                         Toast.makeText(context, "Server error. Please try again.", Toast.LENGTH_SHORT).show()
                                                     }
                                                 } catch (e: Exception) {
+                                                    Log.e("CrmBottomSheet", "Network error in increment", e)
+                                                    FirebaseCrashlytics.getInstance().recordException(e)
                                                     Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
                                                 } finally {
                                                     isViewLimitLoading = false
@@ -409,8 +429,8 @@ fun CrmBottomSheet(
                                 }
                                 Spacer(modifier = Modifier.width(16.sdp()))
                                 Column {
-                                    Text("Product / Subject", fontSize = 11.ssp(), color = Color.White.copy(alpha = 0.5f), fontWeight = FontWeight.Medium)
-                                    Text(text = contact.product ?: "N/A", fontSize = 16.ssp(), color = Color.White, fontWeight = FontWeight.Medium)
+                                    Text("Product / Subject", fontSize = 11.ssp(), color = textSecondary, fontWeight = FontWeight.Medium)
+                                    Text(text = contact.product ?: "N/A", fontSize = 16.ssp(), color = textPrimary, fontWeight = FontWeight.Medium)
                                 }
                             }
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
@@ -424,7 +444,7 @@ fun CrmBottomSheet(
 
             // --- History Toggle Section ---
             item {
-                HorizontalDivider(color = textSecondary.copy(alpha = 0.1f))
+                HorizontalDivider(color = AppTheme.colors.border)
                 Spacer(modifier = Modifier.height(16.sdp()))
 
                 OutlinedButton(
@@ -435,7 +455,7 @@ fun CrmBottomSheet(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(40.sdp()),
-                    border = BorderStroke(1.sdp(), textSecondary.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.sdp(), AppTheme.colors.border),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = textSecondary)
                 ) {
                     Text(

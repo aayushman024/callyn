@@ -40,11 +40,12 @@ import com.mnivesh.callyn.R
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.ui.res.painterResource
+import com.mnivesh.callyn.ui.theme.AppTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,11 +66,12 @@ fun ModernDeviceBottomSheet(
     // If name matches the primary number, it's an unsaved contact
     val isUnknownNumber = contact.numbers.firstOrNull()?.number == contact.name
 
-    val backgroundColor = Color(0xFF0F172A)
-    val surfaceColor = Color(0xFF1E293B)
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val primaryColor = Color(0xFF10B981)
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -461,7 +463,7 @@ fun ModernDeviceBottomSheet(
 
             // --- History Toggle Section ---
             item {
-                HorizontalDivider(color = textSecondary.copy(alpha = 0.1f))
+                HorizontalDivider(color = AppTheme.colors.border)
                 Spacer(modifier = Modifier.height(16.sdp()))
 
                 OutlinedButton(
@@ -472,7 +474,7 @@ fun ModernDeviceBottomSheet(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(40.sdp()),
-                    border = BorderStroke(1.sdp(), textSecondary.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.sdp(), AppTheme.colors.border),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = textSecondary)
                 ) {
                     Text(

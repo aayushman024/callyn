@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
 import android.provider.CallLog
 import com.mnivesh.callyn.api.RetrofitInstance
 import kotlinx.coroutines.flow.first
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import java.util.Date
 
 // UI State for the ContactsScreen
@@ -138,6 +138,9 @@ class ContactsViewModel(
     }
 
     fun checkSmsWhitelist(token: String) {
+        if (_isSmsWhitelisted.value != null) {
+            return
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _isSmsWhitelisted.value = null
 
@@ -280,14 +283,29 @@ class ContactsViewModel(
         }
     }
 
-    fun onRefresh(token: String, managerName: String) {
+    private var lastSyncTime = 0L
+
+    fun onRefresh(token: String, managerName: String, force: Boolean = false) {
+        val currentTime = System.currentTimeMillis()
+        if (!force && (currentTime - lastSyncTime < 5 * 60 * 1000)) {
+            // Already synced recently, skip redundant network call
+            return
+        }
+        lastSyncTime = currentTime
+
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            if (force) {
+                _uiState.value = _uiState.value.copy(isLoading = true)
+            }
             try {
                 repository.refreshContacts(token, managerName)
-                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = null)
+                if (force) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = null)
+                }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = e.message)
+                if (force) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, errorMessage = e.message)
+                }
             }
         }
     }

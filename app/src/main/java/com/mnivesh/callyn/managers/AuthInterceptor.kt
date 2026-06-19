@@ -11,9 +11,16 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 class AuthInterceptor(private val context: Context) : Interceptor {
     private val authManager = AuthManager(context)
+
+    private sealed class RefreshResult {
+        data class Success(val accessToken: String) : RefreshResult()
+        object InvalidToken : RefreshResult()
+        object NetworkError : RefreshResult()
+    }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
@@ -33,18 +40,31 @@ class AuthInterceptor(private val context: Context) : Interceptor {
                     return chain.proceed(newRequestWithToken(originalRequest, currentToken))
                 }
 
-                // Actually try the refresh
+                val savedToken = authManager.getToken()
                 val refreshToken = authManager.getRefreshToken()
-                if (!refreshToken.isNullOrEmpty()) {
-                    val refreshedToken = performRefresh(refreshToken)
-                    if (refreshedToken != null) {
-                        response.close()
-                        return chain.proceed(newRequestWithToken(originalRequest, refreshedToken))
-                    }
+
+                // If the user has no saved access token or refresh token, they are already logged out.
+                // We should let the 401 propagate naturally rather than redirecting/restarting the app.
+                if (savedToken.isNullOrEmpty() || refreshToken.isNullOrEmpty()) {
+                    return response
                 }
 
-                // If everything fails, kick them out
-                logoutAndRedirect()
+                val refreshResult = performRefresh(refreshToken)
+                when (refreshResult) {
+                    is RefreshResult.Success -> {
+                        response.close()
+                        return chain.proceed(newRequestWithToken(originalRequest, refreshResult.accessToken))
+                    }
+                    is RefreshResult.NetworkError -> {
+                        // Network error or 5xx: user session is still valid.
+                        // Propagate the 401 without logging out or redirecting.
+                        return response
+                    }
+                    is RefreshResult.InvalidToken -> {
+                        // Backend explicitly rejected the refresh token (4xx): session expired.
+                        logoutAndRedirect()
+                    }
+                }
             }
         }
 
@@ -59,9 +79,12 @@ class AuthInterceptor(private val context: Context) : Interceptor {
             .build()
     }
 
-    private fun performRefresh(refreshToken: String): String? {
+    private fun performRefresh(refreshToken: String): RefreshResult {
         // Fresh client to avoid infinite interceptor loops
-        val client = OkHttpClient()
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
 
         val json = JSONObject().apply {
             put("refreshToken", refreshToken)
@@ -74,7 +97,7 @@ class AuthInterceptor(private val context: Context) : Interceptor {
             .post(body)
             .build()
 
-        try {
+        return try {
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
                 val responseBody = response.body?.string()
@@ -90,14 +113,31 @@ class AuthInterceptor(private val context: Context) : Interceptor {
                         if (newRefreshToken.isNotEmpty()) {
                             authManager.saveRefreshToken(newRefreshToken)
                         }
-                        return newAccessToken
+                        RefreshResult.Success(newAccessToken)
+                    } else {
+                        RefreshResult.InvalidToken
                     }
+                } else {
+                    RefreshResult.InvalidToken
+                }
+            } else {
+                val errorMsg = "Token refresh failed with HTTP code ${response.code}: ${response.message}"
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().log(errorMsg)
+                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(Exception("Token refresh failed: HTTP ${response.code}"))
+
+                // 4xx errors except transient rate limits mean invalid token/session expired.
+                // 5xx or other status codes represent backend/network-level errors.
+                if (response.code in 400..404) {
+                    RefreshResult.InvalidToken
+                } else {
+                    RefreshResult.NetworkError
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
+            RefreshResult.NetworkError
         }
-        return null
     }
 
     private fun logoutAndRedirect() {

@@ -41,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -82,8 +84,11 @@ import com.mnivesh.callyn.viewmodels.CrmViewModelFactory
 import kotlinx.coroutines.joinAll
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
-// [!code ++] Import CrmContactCard
+import com.mnivesh.callyn.ui.theme.AppTheme
 import com.mnivesh.callyn.tabs.CrmContactCard
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallsViewModel
+import com.mnivesh.callyn.viewmodels.RecentCallsViewModelFactory
 
 // --- Main Contact Screen Composable ---
 @SuppressLint("SuspiciousIndentation")
@@ -103,16 +108,20 @@ fun ContactsScreen(
         return
     }
 
+    val activity = LocalContext.current as androidx.activity.ComponentActivity
     val viewModel: ContactsViewModel = viewModel(
+        viewModelStoreOwner = activity,
         factory = ContactsViewModelFactory(application, application.repository)
     )
 
     val crmViewModel: CrmViewModel = viewModel(
+        viewModelStoreOwner = activity,
         factory = CrmViewModelFactory(application, application.repository)
     )
-    val crmUiState by crmViewModel.uiState.collectAsState()
+    val rawCrmUiState by crmViewModel.uiState.collectAsState()
 
     val recentCallsViewModel: RecentCallsViewModel = viewModel(
+        viewModelStoreOwner = activity,
         factory = RecentCallsViewModelFactory(application, application.repository)
     )
     val callLogs by recentCallsViewModel.mergedCalls.collectAsState()
@@ -125,6 +134,27 @@ fun ContactsScreen(
     val userName by remember(authManager) { mutableStateOf(authManager.getUserName() ?: "") }
     val userEmail by remember(authManager) { mutableStateOf(authManager.getUserEmail() ?: "") }
     val department by remember(authManager) { mutableStateOf(authManager.getDepartment()) }
+
+    val crmUiState = remember(rawCrmUiState, department, userName) {
+        if (department == "GUEST") {
+            com.mnivesh.callyn.viewmodels.CrmUiState(
+                isLoading = false,
+                tickets = listOf(
+                    CrmContact(
+                        localId = 100002,
+                        recordId = "TICKET-1",
+                        name = "Demo Client",
+                        number = "9304504962",
+                        ownerName = userName,
+                        module = "Tickets",
+                        product = "Mutual Funds"
+                    )
+                )
+            )
+        } else {
+            rawCrmUiState
+        }
+    }
 
     var searchQuery by remember { mutableStateOf("") }
     val workListState = rememberLazyListState()
@@ -237,8 +267,26 @@ fun ContactsScreen(
 
     // --- FILTER LOGIC ---
     val myContacts = remember(workContacts, userName, department, userEmail) {
-        if (SimManager.workSimSlot == null) {
-            emptyList()
+        if (department == "GUEST") {
+            listOf(
+                AppContact(
+                    id = 100001,
+                    name = "Demo Client",
+                    number = "9304504962",
+                    rshipManager = userName,
+                    familyHead = "N/A",
+                    pan = "DEMOPAN123",
+                    aum = "0",
+                    familyAum = "0",
+                    dob = "N/A",
+                    type = "work"
+                )
+            )
+        } else if (SimManager.workSimSlot == null) {
+            workContacts.filter { contact ->
+                val rshipManager = contact.rshipManager ?: ""
+                !rshipManager.equals("Employee", ignoreCase = true) && rshipManager.equals(userName, ignoreCase = true)
+            }.sortedBy { it.name }
         } else {
             workContacts.filter { contact ->
                 val rshipManager = contact.rshipManager ?: ""
@@ -301,14 +349,19 @@ fun ContactsScreen(
         }
     }
 
-    var filteredWorkContacts by remember { mutableStateOf(emptyList<AppContact>()) }
-    var filteredDeviceContacts by remember { mutableStateOf(emptyList<DeviceContact>()) }
+    var filteredWorkContacts by remember(myContacts) { mutableStateOf(myContacts) }
+    var filteredDeviceContacts by remember(deviceContacts) { mutableStateOf(deviceContacts) }
 
     val favoriteContacts = remember(deviceContacts, searchQuery) {
         if (searchQuery.isBlank()) deviceContacts.filter { it.isStarred } else emptyList()
     }
 
     LaunchedEffect(searchQuery, workContacts, myContacts, department, deviceContacts) {
+        if (searchQuery.isBlank()) {
+            filteredWorkContacts = myContacts
+            filteredDeviceContacts = deviceContacts
+            return@LaunchedEffect
+        }
         withContext(Dispatchers.Default) {
             val workResult = if (searchQuery.isBlank()) {
                 myContacts
@@ -367,7 +420,15 @@ fun ContactsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier.fillMaxSize()
-                .background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0F172A))))
+                .background(
+                    Brush.verticalGradient(
+                        if (AppTheme.colors.isDark) {
+                            listOf(Color(0xFF020617), Color(0xFF0F172A))
+                        } else {
+                            listOf(Color(0xFFF1F5F9), Color(0xFFF8FAFC))
+                        }
+                    )
+                )
         )
 
         fun handleCallLogClick(item: RecentCallUiItem) {
@@ -411,11 +472,24 @@ fun ContactsScreen(
             containerColor = Color.Transparent,
             topBar = {
                 CenterAlignedTopAppBar(
+                    modifier = Modifier.background(
+                        if (AppTheme.colors.isDark) {
+                            Brush.verticalGradient(
+                                colors = listOf(Color(0xFF090D16), Color(0xFF0F172A))
+                            )
+                        } else {
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFFE2E8F0), Color(0xFFF1F5F9)),
+                                start = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f),
+                                end = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
+                            )
+                        }
+                    ),
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "Callyn",
-                                color = Color.White,
+                                color = AppTheme.colors.textPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.ssp()
                             )
@@ -446,7 +520,7 @@ fun ContactsScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = onOpenDrawer) {
-                            Icon(Icons.Default.Menu, "Menu", tint = Color.White)
+                            Icon(Icons.Default.Menu, "Menu", tint = AppTheme.colors.textPrimary)
                         }
                     },
                     actions = {
@@ -455,7 +529,7 @@ fun ContactsScreen(
                                 // Show a small async progress indicator while checking
                                 Box(modifier = Modifier.padding(end = 16.sdp())) {
                                     CircularProgressIndicator(
-                                        color = Color.White,
+                                        color = AppTheme.colors.textPrimary,
                                         modifier = Modifier.size(20.sdp()),
                                         strokeWidth = 2.sdp()
                                     )
@@ -488,8 +562,8 @@ fun ContactsScreen(
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White
+                        titleContentColor = AppTheme.colors.textPrimary,
+                        navigationIconContentColor = AppTheme.colors.textPrimary
                     ),
                     scrollBehavior = scrollBehavior
                 )
@@ -502,73 +576,87 @@ fun ContactsScreen(
                 val screenWidth = configuration.screenWidthDp.dp
                 val tabWidth = screenWidth * 0.4f
 
-                Spacer(modifier = Modifier.height(16.sdp()))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = if (AppTheme.colors.isDark) {
+                                    listOf(Color(0xFF0F172A), Color(0xFF0F172A).copy(alpha = 0f))
+                                } else {
+                                    listOf(Color(0xFFF1F5F9), Color(0xFFF8FAFC).copy(alpha = 0f))
+                                }
+                            )
+                        )
+                ) {
+                    Spacer(modifier = Modifier.height(16.sdp()))
 
-                // [!code ++] Create separate interaction sources to disable ripples
-                val interactionSource1 = remember { MutableInteractionSource() }
-                val interactionSource2 = remember { MutableInteractionSource() }
-                val interactionSource3 = remember { MutableInteractionSource() }
+                    // Create separate interaction sources to disable ripples
+                    val interactionSource1 = remember { MutableInteractionSource() }
+                    val interactionSource2 = remember { MutableInteractionSource() }
+                    val interactionSource3 = remember { MutableInteractionSource() }
 
-                CompositionLocalProvider(LocalRippleConfiguration provides null) {
-                    ScrollableTabRow(
-                        selectedTabIndex = selectedTabIndex,
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White,
-                        edgePadding = 0.sdp(),
-                        indicator = { tabPositions ->
-                            if (selectedTabIndex < tabPositions.size) {
-                                TabRowDefaults.SecondaryIndicator(
-                                    Modifier.tabIndicatorOffset(
-                                        tabPositions[selectedTabIndex]
-                                    ), color = Color(0xFF3B82F6), height = 3.sdp()
-                                )
-                            }
-                        },
-                        divider = { HorizontalDivider(color = Color.White.copy(alpha = 0.1f)) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Tab(
-                            selected = selectedTabIndex == 0,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                            text = {
-                                CustomTabContent(
-                                    "Personal",
-                                    Icons.Default.Person,
-                                    deviceContacts.size,
-                                    selectedTabIndex == 0
-                                )
+                    CompositionLocalProvider(LocalRippleConfiguration provides null) {
+                        ScrollableTabRow(
+                            selectedTabIndex = selectedTabIndex,
+                            containerColor = Color.Transparent,
+                            contentColor = AppTheme.colors.textPrimary,
+                            edgePadding = 0.sdp(),
+                            indicator = { tabPositions ->
+                                if (selectedTabIndex < tabPositions.size) {
+                                    TabRowDefaults.SecondaryIndicator(
+                                        Modifier.tabIndicatorOffset(
+                                            tabPositions[selectedTabIndex]
+                                        ), color = Color(0xFF3B82F6), height = 3.sdp()
+                                    )
+                                }
                             },
-                            modifier = Modifier.width(tabWidth),
-                            interactionSource = interactionSource1
-                        )
-                        Tab(
-                            selected = selectedTabIndex == 1,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                            text = {
-                                CustomTabContent(
-                                    "Work",
-                                    Icons.Default.BusinessCenter,
-                                    myContacts.size,
-                                    selectedTabIndex == 1
-                                )
-                            },
-                            modifier = Modifier.width(tabWidth),
-                            interactionSource = interactionSource2
-                        )
-                        Tab(
-                            selected = selectedTabIndex == 2,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
-                            text = {
-                                CustomTabContent(
-                                    "CRM Data",
-                                    icon = painterResource(id = R.drawable.zoho_logo),
-                                    null,
-                                    selectedTabIndex == 2
-                                )
-                            },
-                            modifier = Modifier.width(tabWidth),
-                            interactionSource = interactionSource3
-                        )
+                            divider = { HorizontalDivider(color = AppTheme.colors.border) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Tab(
+                                selected = selectedTabIndex == 0,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                                text = {
+                                    CustomTabContent(
+                                        "Personal",
+                                        Icons.Default.Person,
+                                        deviceContacts.size,
+                                        selectedTabIndex == 0
+                                    )
+                                },
+                                modifier = Modifier.width(tabWidth),
+                                interactionSource = interactionSource1
+                            )
+                            Tab(
+                                selected = selectedTabIndex == 1,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                                text = {
+                                    CustomTabContent(
+                                        "Work",
+                                        Icons.Default.BusinessCenter,
+                                        myContacts.size,
+                                        selectedTabIndex == 1
+                                    )
+                                },
+                                modifier = Modifier.width(tabWidth),
+                                interactionSource = interactionSource2
+                            )
+                            Tab(
+                                selected = selectedTabIndex == 2,
+                                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                                text = {
+                                    CustomTabContent(
+                                        "CRM Data",
+                                        icon = painterResource(id = R.drawable.zoho_logo),
+                                        null,
+                                        selectedTabIndex == 2
+                                    )
+                                },
+                                modifier = Modifier.width(tabWidth),
+                                interactionSource = interactionSource3
+                            )
+                        }
                     }
                 }
 
@@ -596,18 +684,20 @@ fun ContactsScreen(
                                     value = searchQuery,
                                     onValueChange = { },
                                     modifier = Modifier.fillMaxWidth()
-                                        .clip(RoundedCornerShape(16.sdp())),
+                                        .shadow(if (AppTheme.colors.isDark) 0.sdp() else 5.sdp(), RoundedCornerShape(16.sdp()))
+                                        .clip(RoundedCornerShape(16.sdp()))
+                                        .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(16.sdp())),
                                     placeholder = {
                                         Text(
                                             "Search contacts...",
-                                            color = Color.White.copy(alpha = 0.5f)
+                                            color = AppTheme.colors.textSecondary
                                         )
                                     },
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.Search,
                                             "Search",
-                                            tint = Color.White.copy(alpha = 0.6f)
+                                            tint = AppTheme.colors.textSecondary
                                         )
                                     },
                                     trailingIcon = {
@@ -618,7 +708,7 @@ fun ContactsScreen(
                                                 Icon(
                                                     Icons.Default.Close,
                                                     "Clear",
-                                                    tint = Color.White.copy(alpha = 0.6f)
+                                                    tint = AppTheme.colors.textSecondary
                                                 )
                                             }
                                         }
@@ -626,18 +716,18 @@ fun ContactsScreen(
                                     singleLine = true,
                                     enabled = false,
                                     colors = TextFieldDefaults.colors(
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White,
-                                        focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                        unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
-                                        disabledContainerColor = Color.White.copy(alpha = 0.08f),
-                                        disabledTextColor = Color.White,
-                                        disabledPlaceholderColor = Color.White.copy(alpha = 0.5f),
-                                        disabledLeadingIconColor = Color.White.copy(alpha = 0.6f),
+                                        focusedTextColor = AppTheme.colors.textPrimary,
+                                        unfocusedTextColor = AppTheme.colors.textPrimary,
+                                        focusedContainerColor = AppTheme.colors.surfaceVariant,
+                                        unfocusedContainerColor = AppTheme.colors.surfaceVariant,
+                                        disabledContainerColor = AppTheme.colors.surfaceVariant,
+                                        disabledTextColor = AppTheme.colors.textPrimary,
+                                        disabledPlaceholderColor = AppTheme.colors.textSecondary,
+                                        disabledLeadingIconColor = AppTheme.colors.textSecondary,
                                         focusedIndicatorColor = Color.Transparent,
                                         unfocusedIndicatorColor = Color.Transparent,
                                         disabledIndicatorColor = Color.Transparent,
-                                        cursorColor = Color.White
+                                        cursorColor = AppTheme.colors.textPrimary
                                     )
                                 )
                                 Box(
@@ -843,7 +933,7 @@ fun ContactsScreen(
                 sheetState = rememberModalBottomSheetState(
                     skipPartiallyExpanded = true,
                     confirmValueChange = { newState -> newState != SheetValue.Hidden }),
-                containerColor = Color(0xFF1E293B), contentColor = Color.White, dragHandle = null
+                containerColor = AppTheme.colors.surface, contentColor = AppTheme.colors.textPrimary, dragHandle = null
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.sdp(), vertical = 8.sdp())
@@ -857,7 +947,7 @@ fun ContactsScreen(
                             "Duplicate Contacts Found",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.ssp(),
-                            color = Color.White
+                            color = AppTheme.colors.textPrimary
                         )
                         Button(
                             onClick = {
@@ -917,7 +1007,7 @@ fun ContactsScreen(
                         items(conflictingContacts) { contact ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().background(
-                                    Color.White.copy(alpha = 0.05f),
+                                    AppTheme.colors.surfaceVariant,
                                     RoundedCornerShape(12.sdp())
                                 ).padding(12.sdp()),
                                 verticalAlignment = Alignment.CenterVertically
@@ -925,7 +1015,7 @@ fun ContactsScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = contact.name,
-                                        color = Color.White,
+                                        color = AppTheme.colors.textPrimary,
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 16.ssp()
                                     )
@@ -943,7 +1033,7 @@ fun ContactsScreen(
                                         showGlobalRequestDialog = true
                                     },
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color.White.copy(
+                                        containerColor = AppTheme.colors.textSecondary.copy(
                                             alpha = 0.1f
                                         )
                                     ),
@@ -969,11 +1059,11 @@ fun ContactsScreen(
             // ... (Keep existing global request dialog)
             AlertDialog(
                 onDismissRequest = { showGlobalRequestDialog = false },
-                containerColor = Color(0xFF1E293B),
+                containerColor = AppTheme.colors.surface,
                 title = {
                     Text(
                         "Request Change",
-                        color = Color.White,
+                        color = AppTheme.colors.textPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 20.ssp()
                     )
@@ -982,7 +1072,7 @@ fun ContactsScreen(
                     Column {
                         Text(
                             "Why do you want to mark ${contactForRequest ?: "this contact"} as Personal?",
-                            color = Color.White.copy(alpha = 0.8f),
+                            color = AppTheme.colors.textSecondary,
                             fontSize = 14.ssp(),
                             modifier = Modifier.padding(bottom = 16.sdp())
                         )
@@ -990,15 +1080,15 @@ fun ContactsScreen(
                             value = globalRequestReason,
                             onValueChange = { globalRequestReason = it },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("Enter reason...", color = Color.Gray) },
+                            placeholder = { Text("Enter reason...", color = AppTheme.colors.textSecondary.copy(alpha = 0.5f)) },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color(0xFF3B82F6),
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
+                                unfocusedBorderColor = AppTheme.colors.border,
+                                focusedTextColor = AppTheme.colors.textPrimary,
+                                unfocusedTextColor = AppTheme.colors.textPrimary,
                                 cursorColor = Color(0xFF3B82F6),
-                                focusedContainerColor = Color.White.copy(alpha = 0.05f),
-                                unfocusedContainerColor = Color.White.copy(alpha = 0.05f)
+                                focusedContainerColor = AppTheme.colors.surfaceVariant.copy(alpha = 0.3f),
+                                unfocusedContainerColor = AppTheme.colors.surfaceVariant.copy(alpha = 0.3f)
                             ),
                             shape = RoundedCornerShape(12.sdp()),
                             minLines = 3,
@@ -1031,7 +1121,7 @@ fun ContactsScreen(
                 dismissButton = {
                     TextButton(onClick = {
                         showGlobalRequestDialog = false
-                    }) { Text("Cancel", color = Color.White.copy(alpha = 0.6f)) }
+                    }) { Text("Cancel", color = AppTheme.colors.textSecondary) }
                 }
             )
         }
@@ -1054,6 +1144,7 @@ fun ContactsScreen(
             onCallLogClick = { log -> handleCallLogClick(log) },
             onMakeCall = { number, isWork, simSlot ->
                 onContactClick(number, isWork, simSlot)
+                showFullSearch = false
             },
             onSelectWorkContact = { contact ->
                 selectedWorkContact = contact

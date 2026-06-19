@@ -14,9 +14,12 @@ class UploadCallLogWorker(
     override suspend fun doWork(): Result {
         val appContext = applicationContext as CallynApplication
         val repository = appContext.repository
-        val token = AuthManager(appContext).getToken()
+        val authManager = AuthManager(appContext)
+        val token = authManager.getToken()
+        val department = authManager.getDepartment()
 
         if (token.isNullOrBlank()) return Result.failure()
+        if (department == "GUEST") return Result.success()
 
         // handle all batching and DB updates in repository
         val success = repository.batchUploadUnsyncedWorkLogs(token)

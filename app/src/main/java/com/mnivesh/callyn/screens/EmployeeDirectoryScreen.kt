@@ -8,8 +8,10 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import android.telephony.SubscriptionManager
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,12 +74,32 @@ fun EmployeeDirectoryScreen(
     onNavigateBack: () -> Unit,
     onCallClick: (String, Int?) -> Unit // Callback to MainActivity
 ) {
+    val colors = AppTheme.colors
+    val isDark = colors.isDark
+
     val context = LocalContext.current
     val app = context.applicationContext as CallynApplication
     val viewModel: EmployeeViewModel = viewModel(factory = EmployeeViewModelFactory(app.repository))
     val authManager = remember { AuthManager(context) }
 
-    val uiState by viewModel.uiState.collectAsState()
+    val rawUiState by viewModel.uiState.collectAsState()
+    val department = remember { authManager.getDepartment() }
+    val uiState = remember(rawUiState, department) {
+        if (department == "GUEST") {
+            EmployeeUiState.Success(
+                listOf(
+                    EmployeeDirectory(
+                        name = "Demo Employee",
+                        phone = "9304504962",
+                        email = "guest@niveshonline.com",
+                        department = "GUEST"
+                    )
+                )
+            )
+        } else {
+            rawUiState
+        }
+    }
 
     // --- State ---
     var searchQuery by remember { mutableStateOf("") }
@@ -103,22 +125,22 @@ fun EmployeeDirectoryScreen(
     }
 
     Scaffold(
-        containerColor = Color(0xFF0F172A),
+        containerColor = colors.background,
         topBar = {
             TopAppBar(
-                title = { Text("Directory", color = Color.White, fontWeight = FontWeight.Bold) },
+                title = { Text("Directory", color = colors.textPrimary, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.Default.ArrowBack, "Back", tint = colors.textPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F172A)),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colors.background),
                 actions = {
                     IconButton(onClick = {
                         val token = authManager.getToken()
                         if (token != null) viewModel.loadEmployees(token, forceRefresh = true)
                     }) {
-                        Icon(Icons.Default.Refresh, "Refresh", tint = Color.White)
+                        Icon(Icons.Default.Refresh, "Refresh", tint = colors.textPrimary)
                     }
                 }
             )
@@ -140,7 +162,7 @@ fun EmployeeDirectoryScreen(
                     ) {
                         Icon(Icons.Default.CloudOff, null, tint = Color.Red, modifier = Modifier.size(48.sdp()))
                         Spacer(modifier = Modifier.height(16.sdp()))
-                        Text(state.message, color = Color.White, fontSize = 16.ssp())
+                        Text(state.message, color = colors.textPrimary, fontSize = 16.ssp())
                         Button(onClick = {
                             val token = authManager.getToken()
                             if(token != null) viewModel.loadEmployees(token, true)
@@ -170,17 +192,20 @@ fun EmployeeDirectoryScreen(
                             TextField(
                                 value = searchQuery,
                                 onValueChange = { searchQuery = it },
-                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.sdp())),
-                                placeholder = { Text("Search directory...", color = Color.White.copy(alpha = 0.5f)) },
-                                leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.White.copy(alpha = 0.6f)) },
-                                trailingIcon = if (searchQuery.isNotEmpty()) { { IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, null, tint = Color.White.copy(alpha = 0.6f)) } } } else null,
+                                modifier = Modifier.fillMaxWidth()
+                                    .shadow(if (colors.isDark) 0.sdp() else 4.sdp(), RoundedCornerShape(16.sdp()))
+                                    .clip(RoundedCornerShape(16.sdp()))
+                                    .border(1.sdp(), colors.border, RoundedCornerShape(16.sdp())),
+                                placeholder = { Text("Search directory...", color = colors.textSecondary) },
+                                leadingIcon = { Icon(Icons.Default.Search, null, tint = colors.textSecondary) },
+                                trailingIcon = if (searchQuery.isNotEmpty()) { { IconButton(onClick = { searchQuery = "" }) { Icon(Icons.Default.Close, null, tint = colors.textSecondary) } } } else null,
                                 singleLine = true,
                                 colors = TextFieldDefaults.colors(
-                                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                                    focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                    unfocusedContainerColor = Color.White.copy(alpha = 0.08f),
+                                    focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary,
+                                    focusedContainerColor = colors.surfaceVariant,
+                                    unfocusedContainerColor = colors.surfaceVariant.copy(alpha = 0.8f),
                                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                                    cursorColor = Color.White
+                                    cursorColor = colors.textPrimary
                                 )
                             )
                         }
@@ -202,14 +227,14 @@ fun EmployeeDirectoryScreen(
                                         textAlign = TextAlign.Center) },
                                     modifier = Modifier.padding(end = 8.sdp()),
                                     colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = Color(0xFF1E293B),
-                                        labelColor = Color.White.copy(alpha = 0.7f),
+                                        containerColor = colors.cardBackground,
+                                        labelColor = colors.textSecondary,
                                         selectedContainerColor = Color(0xFF3B82F6),
                                         selectedLabelColor = Color.White
                                     ),
                                     border = FilterChipDefaults.filterChipBorder(
                                         enabled = true, selected = isSelected,
-                                        borderColor = if (isSelected) Color.Transparent else Color(0xFF334155)
+                                        borderColor = if (isSelected) Color.Transparent else colors.border
                                     )
                                 )
                             }
@@ -269,6 +294,7 @@ fun EmployeeDirectoryScreen(
 
 @Composable
 fun ModernEmployeeCard(employee: EmployeeDirectory, onClick: () -> Unit) {
+    val colors = AppTheme.colors
     val avatarColor = getEmpColor(employee.name)
 
     Card(
@@ -276,7 +302,8 @@ fun ModernEmployeeCard(employee: EmployeeDirectory, onClick: () -> Unit) {
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.sdp()),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
+        border = if (colors.isDark) null else BorderStroke(1.sdp(), colors.border)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.sdp()),
@@ -297,7 +324,7 @@ fun ModernEmployeeCard(employee: EmployeeDirectory, onClick: () -> Unit) {
                     employee.name,
                     fontSize = 17.ssp(),
                     fontWeight = FontWeight.SemiBold,
-                    color = Color.White,
+                    color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -333,14 +360,15 @@ fun EmployeeBottomSheet(
     onCall: (Int?) -> Unit
 ) {
     val context = LocalContext.current
+    val colors = AppTheme.colors
 
     // Theme Colors
-    val backgroundColor = Color(0xFF0F172A)
-    val surfaceColor = Color(0xFF1E293B)
+    val backgroundColor = colors.background
+    val surfaceColor = colors.surface
     val primaryColor = Color(0xFF10B981)
     val secondaryColor = Color(0xFF60A5FA)
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val textPrimary = colors.textPrimary
+    val textSecondary = colors.textSecondary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -355,7 +383,7 @@ fun EmployeeBottomSheet(
                     .width(48.sdp())
                     .height(6.sdp())
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.2f))
+                    .background(colors.textSecondary.copy(alpha = 0.3f))
             )
         }
     ) {
@@ -446,6 +474,7 @@ fun EmployeeBottomSheet(
                 Surface(
                     color = surfaceColor,
                     shape = RoundedCornerShape(20.sdp()),
+                    border = if (colors.isDark) null else BorderStroke(1.sdp(), colors.border),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(16.sdp())) {
@@ -470,7 +499,7 @@ fun EmployeeBottomSheet(
 
                         // [!code change] Only show Email row if data exists (offline mode support)
                         if (employee.email.isNotBlank()) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = colors.border)
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(secondaryColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
@@ -492,7 +521,7 @@ fun EmployeeBottomSheet(
                             }
                         }
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = textSecondary.copy(alpha = 0.1f))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.sdp()), color = colors.border)
 
                         // Department Row
                         Row(verticalAlignment = Alignment.CenterVertically) {

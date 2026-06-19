@@ -73,11 +73,12 @@ class MyInCallService : InCallService() {
 
         showNotification()
 
-        // Handles screen-ON case — fullScreenIntent alone doesn't launch when screen is on
-        val intent = Intent(this, InCallActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        startActivity(intent)
+        // Android 10+ restricts starting activities from the background.
+        // If the screen is ON, Android will intentionally show a Heads-Up Notification instead of launching the fullScreenIntent.
+        // Forcing startActivity() from the background throws a SecurityException/AndroidRuntimeException on many OEM devices
+        // (like Xiaomi, Samsung) when the app is in deep background. This crashes the InCallService, causing the
+        // Telecom framework to automatically reject the call. 
+        // REMOVED: startActivity(intent)
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -290,10 +291,23 @@ class MyInCallService : InCallService() {
                 .setImportant(true)
                 .build()
 
-            val callStyle = Notification.CallStyle.forOngoingCall(
-                person,
-                endCallIntent
+            val answerIntent = PendingIntent.getActivity(
+                this, 3, activityIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+
+            val callStyle = if (currentState.isIncoming) {
+                Notification.CallStyle.forIncomingCall(
+                    person,
+                    endCallIntent,
+                    answerIntent
+                )
+            } else {
+                Notification.CallStyle.forOngoingCall(
+                    person,
+                    endCallIntent
+                )
+            }
 
             notificationBuilder = Notification.Builder(this, CHANNEL_ID)
                 .setStyle(callStyle)

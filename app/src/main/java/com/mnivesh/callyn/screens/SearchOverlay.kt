@@ -17,12 +17,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -48,6 +51,7 @@ import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.managers.SearchHistoryManager
 import com.mnivesh.callyn.tabs.CrmContactCard
 import com.mnivesh.callyn.viewmodels.CrmUiState
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -267,7 +271,7 @@ fun SearchOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0F172A))
+                .background(AppTheme.colors.background)
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
                 .nestedScroll(nestedScrollConnection)
         ) {
@@ -289,8 +293,8 @@ fun SearchOverlay(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Recent Searches", color = Color.White.copy(alpha = 0.5f), fontSize = 13.ssp(), fontWeight = FontWeight.Bold)
-                                Text("Clear All", color = Color(0xFF60A5FA), fontSize = 12.ssp(), modifier = Modifier.clickable { SearchHistoryManager.clearHistory(context); searchHistory = emptyList() })
+                                Text("Recent Searches", color = AppTheme.colors.textSecondary, fontSize = 13.ssp(), fontWeight = FontWeight.Bold)
+                                Text("Clear All", color = if (AppTheme.colors.isDark) Color(0xFF60A5FA) else Color(0xFF2563EB), fontSize = 12.ssp(), modifier = Modifier.clickable { SearchHistoryManager.clearHistory(context); searchHistory = emptyList() })
                             }
                         }
                         items(searchHistory) { historyItem ->
@@ -298,10 +302,10 @@ fun SearchOverlay(
                                 modifier = Modifier.fillMaxWidth().clickable { internalQuery = historyItem }.padding(vertical = 12.sdp()),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.History, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(20.sdp()))
+                                Icon(Icons.Default.History, null, tint = AppTheme.colors.textSecondary.copy(alpha = 0.6f), modifier = Modifier.size(20.sdp()))
                                 Spacer(modifier = Modifier.width(16.sdp()))
-                                Text(historyItem, color = Color.White.copy(alpha = 0.9f), fontSize = 16.ssp(), modifier = Modifier.weight(1f))
-                                Icon(Icons.Default.NorthWest, null, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(16.sdp()))
+                                Text(historyItem, color = AppTheme.colors.textPrimary, fontSize = 16.ssp(), modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.NorthWest, null, tint = AppTheme.colors.textSecondary.copy(alpha = 0.4f), modifier = Modifier.size(16.sdp()))
                             }
                         }
                     }
@@ -347,14 +351,14 @@ fun SearchOverlay(
                                     ) {
                                         Text(
                                             text = callTypeFilter,
-                                            color = Color.White.copy(alpha = 0.7f),
+                                            color = AppTheme.colors.textSecondary,
                                             fontSize = 12.ssp(),
                                             fontWeight = FontWeight.Medium
                                         )
                                         Icon(
                                             imageVector = Icons.Default.ArrowDropDown,
                                             contentDescription = null,
-                                            tint = Color.White.copy(alpha = 0.7f),
+                                            tint = AppTheme.colors.textSecondary,
                                             modifier = Modifier.size(18.sdp())
                                         )
                                     }
@@ -362,15 +366,15 @@ fun SearchOverlay(
                                     DropdownMenu(
                                         expanded = isCallFilterExpanded,
                                         onDismissRequest = { isCallFilterExpanded = false },
-                                        containerColor = Color(0xFF1E293B),
-                                        border = androidx.compose.foundation.BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f))
+                                        containerColor = AppTheme.colors.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.sdp(), AppTheme.colors.border)
                                     ) {
                                         listOf("All Calls", "Incoming", "Outgoing", "Missed").forEach { type ->
                                             DropdownMenuItem(
                                                 text = {
                                                     Text(
                                                         type,
-                                                        color = if(callTypeFilter == type) Color(0xFF3B82F6) else Color.White
+                                                        color = if(callTypeFilter == type) Color(0xFF3B82F6) else AppTheme.colors.textPrimary
                                                     )
                                                 },
                                                 onClick = {
@@ -398,25 +402,25 @@ fun SearchOverlay(
                             )
                         }
                         item {
-                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.sdp()))
+                            HorizontalDivider(color = AppTheme.colors.border, modifier = Modifier.padding(vertical = 8.sdp()))
                         }
                     }
 
                     if (combinedResults.isEmpty() && debouncedQuery.isNotEmpty() && filteredCallLogs.isEmpty()) {
-                        item { Box(modifier = Modifier.fillMaxWidth().padding(top = 50.sdp()), contentAlignment = Alignment.Center) { Text("No matching results", color = Color.White.copy(alpha = 0.5f)) } }
+                        item { Box(modifier = Modifier.fillMaxWidth().padding(top = 50.sdp()), contentAlignment = Alignment.Center) { Text("No matching results", color = AppTheme.colors.textSecondary) } }
                     }
 
                     // All Contacts Header Pill
                     if (combinedResults.isNotEmpty()) {
                         item {
                             Surface(
-                                color = Color.White.copy(alpha = 0.1f),
+                                color = AppTheme.colors.surfaceVariant,
                                 shape = RoundedCornerShape(50),
                                 modifier = Modifier.padding(top = 8.sdp(), bottom = 4.sdp())
                             ) {
                                 Text(
                                     text = "All Contacts",
-                                    color = Color.White.copy(alpha = 0.8f),
+                                    color = AppTheme.colors.textSecondary,
                                     fontSize = 11.ssp(),
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 10.sdp(), vertical = 4.sdp())
@@ -459,7 +463,7 @@ fun SearchOverlay(
                     .align(Alignment.TopCenter)
                     .onGloballyPositioned { searchBarHeight = it.size.height }
                     .zIndex(2f)
-                    .background(Color(0xFF1E293B))
+                    .background(AppTheme.colors.surface)
             ) {
                 Column(
                     modifier = Modifier
@@ -474,7 +478,7 @@ fun SearchOverlay(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onDismiss) {
-                            Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                            Icon(Icons.Default.ArrowBack, "Back", tint = AppTheme.colors.textPrimary)
                         }
                         TextField(
                             value = internalQuery,
@@ -482,14 +486,16 @@ fun SearchOverlay(
                             modifier = Modifier
                                 .weight(1f)
                                 .focusRequester(searchFocusRequester)
-                                .clip(RoundedCornerShape(16.sdp())),
-                            placeholder = { Text("Search...", color = Color.White.copy(alpha = 0.5f)) },
+                                .shadow(if (AppTheme.colors.isDark) 0.sdp() else 4.sdp(), RoundedCornerShape(16.sdp()))
+                                .clip(RoundedCornerShape(16.sdp()))
+                                .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(16.sdp())),
+                            placeholder = { Text("Search...", color = AppTheme.colors.textSecondary) },
                             singleLine = true,
                             colors = TextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedContainerColor = Color.White.copy(alpha = 0.1f),
-                                unfocusedContainerColor = Color.White.copy(alpha = 0.1f),
+                                focusedTextColor = AppTheme.colors.textPrimary,
+                                unfocusedTextColor = AppTheme.colors.textPrimary,
+                                focusedContainerColor = AppTheme.colors.surfaceVariant,
+                                unfocusedContainerColor = AppTheme.colors.surfaceVariant,
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent,
                                 cursorColor = Color(0xFF3B82F6)
@@ -497,7 +503,7 @@ fun SearchOverlay(
                             trailingIcon = {
                                 if (internalQuery.isNotEmpty()) {
                                     IconButton(onClick = { internalQuery = "" }) {
-                                        Icon(Icons.Default.Close, "Clear", tint = Color.White.copy(alpha = 0.6f))
+                                        Icon(Icons.Default.Close, "Clear", tint = AppTheme.colors.textSecondary)
                                     }
                                 }
                             }
@@ -515,7 +521,7 @@ fun SearchOverlay(
                     .offset { IntOffset(x = 0, y = filtersOffsetPx.roundToInt()) }
                     .onGloballyPositioned { filtersHeight = it.size.height }
                     .zIndex(1f)
-                    .background(Color(0xFF1E293B))
+                    .background(AppTheme.colors.surface)
             ) {
                 Column {
                     Row(
@@ -533,7 +539,7 @@ fun SearchOverlay(
                         )
                         Text(
                             "  Include CRM data   ",
-                            color = Color.White.copy(alpha = 0.9f),
+                            color = AppTheme.colors.textPrimary,
                             fontSize = 13.ssp()
                         )
                         Switch(
@@ -546,8 +552,8 @@ fun SearchOverlay(
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
                                 checkedTrackColor = Color(0xFF3B82F6),
-                                uncheckedThumbColor = Color.White.copy(alpha = 0.6f),
-                                uncheckedTrackColor = Color.White.copy(alpha = 0.1f)
+                                uncheckedThumbColor = if (AppTheme.colors.isDark) Color.White.copy(alpha = 0.6f) else Color.Gray,
+                                uncheckedTrackColor = if (AppTheme.colors.isDark) Color.White.copy(alpha = 0.1f) else AppTheme.colors.border
                             ),
                             modifier = Modifier.scale(0.8f)
                         )
@@ -579,11 +585,11 @@ fun SearchOverlay(
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Color(0xFF3B82F6),
                                     selectedLabelColor = Color.White,
-                                    containerColor = Color.White.copy(alpha = 0.05f),
-                                    labelColor = Color.White.copy(alpha = 0.7f)
+                                    containerColor = AppTheme.colors.surfaceVariant,
+                                    labelColor = AppTheme.colors.textSecondary
                                 ),
                                 border = FilterChipDefaults.filterChipBorder(
-                                    borderColor = Color.Transparent,
+                                    borderColor = if (isSelected) Color.Transparent else AppTheme.colors.border,
                                     enabled = true,
                                     selected = isSelected
                                 )
@@ -591,7 +597,7 @@ fun SearchOverlay(
                         }
                     }
                     Spacer(modifier = Modifier.height(8.sdp()))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    HorizontalDivider(color = AppTheme.colors.border)
                 }
             }
         }

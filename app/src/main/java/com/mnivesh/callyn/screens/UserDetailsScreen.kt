@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -38,6 +39,7 @@ import com.mnivesh.callyn.api.UserDetailsResponse
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import com.mnivesh.callyn.viewmodels.UserDetailsUiState
 import com.mnivesh.callyn.viewmodels.UserDetailsViewModel
 import java.text.SimpleDateFormat
@@ -67,6 +69,15 @@ fun UserDetailsScreen(
     onNavigateBack: () -> Unit,
     viewModel: UserDetailsViewModel = viewModel()
 ) {
+    val colors = AppTheme.colors
+    val ScreenBg = colors.background
+    val CardBg = colors.cardBackground
+    val Text1 = colors.textPrimary
+    val Text2 = colors.textSecondary
+    val DeptChipBg = colors.surfaceVariant
+    val DialogBg = colors.surface
+    val MetricRowBg = colors.background
+
     val context     = LocalContext.current
     val authManager = remember { AuthManager(context) }
     val uiState     = viewModel.uiState
@@ -152,12 +163,12 @@ fun UserDetailsScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 IconButton(onClick = onNavigateBack) {
-                                    Icon(Icons.Default.ArrowBack, null, tint = Color.White)
+                                    Icon(Icons.Default.ArrowBack, null, tint = Text1)
                                 }
                                 Spacer(Modifier.width(4.sdp()))
                                 Icon(Icons.Default.Group, null, tint = AccentBlue, modifier = Modifier.size(24.sdp()))
                                 Spacer(Modifier.width(8.sdp()))
-                                Text("Team Status", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.ssp())
+                                Text("Team Status", color = Text1, fontWeight = FontWeight.Bold, fontSize = 22.ssp())
                             }
                         }
 
@@ -182,7 +193,7 @@ fun UserDetailsScreen(
                                             onClick = { showSortMenu = true },
                                             color = CardBg,
                                             shape = RoundedCornerShape(12.sdp()),
-                                            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f)),
+                                            border = BorderStroke(1.sdp(), colors.border),
                                             modifier = Modifier.height(50.sdp())
                                         ) {
                                             Box(
@@ -253,6 +264,14 @@ fun UserDetailsScreen(
 // ─── Card ─────────────────────────────────────────────────────
 @Composable
 fun UserDetailCard(user: UserDetailsResponse) {
+    val colors = AppTheme.colors
+    val CardBg = colors.cardBackground
+    val Text1 = colors.textPrimary
+    val Text2 = colors.textSecondary
+    val DeptChipBg = colors.surfaceVariant
+    val DialogBg = colors.surface
+    val MetricRowBg = colors.background
+
     var showMetricsDialog by remember { mutableStateOf(false) }
 
     val lastSeenText = remember(user.lastSeen) { formatLastSeen(user.lastSeen) }
@@ -271,7 +290,7 @@ fun UserDetailCard(user: UserDetailsResponse) {
         elevation = CardDefaults.cardElevation(defaultElevation = 8.sdp()),
         shape = RoundedCornerShape(24.sdp()),
         colors = CardDefaults.cardColors(containerColor = CardBg),
-        border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f)),
+        border = BorderStroke(1.sdp(), colors.border),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(24.sdp())) {
@@ -313,7 +332,7 @@ fun UserDetailCard(user: UserDetailsResponse) {
                 ) {
                     Text(
                         text = user.department ?: "General",
-                        color = Color(0xFFCBD5E1),
+                        color = if (colors.isDark) Color(0xFFCBD5E1) else Text2,
                         fontSize = 11.ssp(),
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 10.sdp(), vertical = 5.sdp())
@@ -328,7 +347,7 @@ fun UserDetailCard(user: UserDetailsResponse) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.sdp()))
-                    .background(Color(0xFF0F172A).copy(alpha = 0.6f))
+                    .background(colors.background.copy(alpha = 0.6f))
                     .padding(16.sdp()),
                 verticalArrangement = Arrangement.spacedBy(12.sdp())
             ) {
@@ -338,7 +357,7 @@ fun UserDetailCard(user: UserDetailsResponse) {
                     value = "v${user.appVersion ?: "—"}",
                     color = AccentBlue
                 )
-                HorizontalDivider(color = Color.White.copy(alpha = 0.05f), thickness = 1.sdp())
+                HorizontalDivider(color = colors.border, thickness = 1.sdp())
                 InfoRowModern(
                     icon  = Icons.Default.History,
                     label = "Last Active",
@@ -389,6 +408,15 @@ fun DeviceMetricsDialog(
     metrics: DeviceMetrics?,
     onDismiss: () -> Unit
 ) {
+    val colors = AppTheme.colors
+    val ScreenBg = colors.background
+    val CardBg = colors.cardBackground
+    val Text1 = colors.textPrimary
+    val Text2 = colors.textSecondary
+    val DeptChipBg = colors.surfaceVariant
+    val DialogBg = colors.surface
+    val MetricRowBg = colors.background
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -396,7 +424,7 @@ fun DeviceMetricsDialog(
         Surface(
             shape = RoundedCornerShape(28.sdp()),
             color = DialogBg,
-            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.08f)),
+            border = BorderStroke(1.sdp(), colors.border),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.sdp())
@@ -428,7 +456,7 @@ fun DeviceMetricsDialog(
                         modifier = Modifier
                             .size(32.sdp())
                             .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.05f))
+                            .background(colors.surfaceVariant)
                     ) {
                         Icon(Icons.Default.Close, null, tint = Text2, modifier = Modifier.size(16.sdp()))
                     }
@@ -583,6 +611,9 @@ fun MetricSection(
     iconColor: Color,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val colors = AppTheme.colors
+    val MetricRowBg = colors.background
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -603,7 +634,7 @@ fun MetricSection(
                 letterSpacing = 1.sp
             )
         }
-        HorizontalDivider(color = Color.White.copy(alpha = 0.05f), thickness = 1.sdp())
+        HorizontalDivider(color = colors.border, thickness = 1.sdp())
         content()
     }
 }
@@ -650,7 +681,17 @@ fun MetricRow(
 // ─── Reused components ────────────────────────────────────────
 @Composable
 fun SearchBar(query: String, onQueryChange: (String) -> Unit, onClear: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, shape = RoundedCornerShape(16.sdp()), color = CardBg, border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f))) {
+    val colors = AppTheme.colors
+    val CardBg = colors.cardBackground
+    val Text1 = colors.textPrimary
+    val Text2 = colors.textSecondary
+
+    Surface(
+        modifier = modifier.shadow(if (colors.isDark) 0.sdp() else 4.sdp(), RoundedCornerShape(16.sdp())),
+        shape = RoundedCornerShape(16.sdp()),
+        color = CardBg,
+        border = BorderStroke(1.sdp(), colors.border)
+    ) {
         Row(modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 14.sdp()), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Search, null, tint = AccentBlue, modifier = Modifier.size(22.sdp()))
             Spacer(Modifier.width(12.sdp()))
@@ -662,6 +703,10 @@ fun SearchBar(query: String, onQueryChange: (String) -> Unit, onClear: () -> Uni
 
 @Composable
 fun InfoRowModern(icon: ImageVector, label: String, value: String, color: Color) {
+    val colors = AppTheme.colors
+    val Text1 = colors.textPrimary
+    val Text2 = colors.textSecondary
+
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(36.sdp()).clip(RoundedCornerShape(10.sdp())).background(color.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = color, modifier = Modifier.size(20.sdp()))

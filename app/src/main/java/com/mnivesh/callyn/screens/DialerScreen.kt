@@ -8,8 +8,10 @@ import android.provider.CallLog
 import android.provider.ContactsContract
 import android.telephony.SubscriptionManager
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -41,26 +43,27 @@ import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.DeviceNumber
 import com.mnivesh.callyn.db.AppContact
-import com.mnivesh.callyn.db.CrmContact // [!code ++]
+import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.sheets.CrmBottomSheet // [!code ++] 8750756516
+import com.mnivesh.callyn.sheets.CrmBottomSheet
 import com.mnivesh.callyn.sheets.ModernBottomSheet
 import com.mnivesh.callyn.sheets.ModernDeviceBottomSheet
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.platform.LocalClipboardManager // [!code ++]
+import androidx.compose.ui.platform.LocalClipboardManager
 import com.mnivesh.callyn.managers.SearchHistoryManager
-
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 
 // --- SEARCH RESULT SEALED CLASS ---
 sealed class DialerSearchResult {
     data class Work(val contact: AppContact) : DialerSearchResult()
-    data class Crm(val contact: CrmContact) : DialerSearchResult() // [!code ++]
+    data class Crm(val contact: CrmContact) : DialerSearchResult()
     data class Device(val contact: DeviceContact) : DialerSearchResult()
 }
 
@@ -75,15 +78,15 @@ fun DialerScreen(
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val application = context.applicationContext as CallynApplication
-    val clipboardManager = LocalClipboardManager.current // [!code ++]
+    val clipboardManager = LocalClipboardManager.current
+    
     // Auth & Work Contacts Setup
     val authManager = remember { AuthManager(context) }
     val department = remember { authManager.getDepartment() }
     val workContacts by application.repository.allContacts.collectAsState(initial = emptyList())
-    // [!code ++] CRM Contacts
     val crmContacts by application.repository.crmContacts.collectAsState(initial = emptyList())
 
-    // [!code ++] Prefs for CRM
+    // Prefs for CRM
     val sharedPrefs = remember { context.getSharedPreferences("callyn_prefs", Context.MODE_PRIVATE) }
     val isCrmSearchEnabled = remember { sharedPrefs.getBoolean("pref_crm_search_enabled", false) }
 
@@ -97,15 +100,14 @@ fun DialerScreen(
     val deviceSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedDeviceContact by remember { mutableStateOf<DeviceContact?>(null) }
 
-    // [!code ++] CRM Sheet State
     val crmSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedCrmContact by remember { mutableStateOf<CrmContact?>(null) }
 
-    // SIM sheet (Manual Dial)
     var showSimSheet by remember { mutableStateOf(false) }
     val simSheetState = rememberModalBottomSheetState()
 
     var isDualSim by remember { mutableStateOf(false) }
+    var isWorkCallState by remember { mutableStateOf(false) }
 
     // --- History State ---
     var history by remember { mutableStateOf<List<RecentCallUiItem>>(emptyList()) }
@@ -228,7 +230,7 @@ fun DialerScreen(
     }
 
     // ---------------- SEARCH LOGIC ----------------
-    LaunchedEffect(phoneNumber, workContacts, crmContacts, isCrmSearchEnabled) { // [!code ++] Trigger on CRM changes
+    LaunchedEffect(phoneNumber, workContacts, crmContacts, isCrmSearchEnabled) {
         if (phoneNumber.isEmpty()) {
             searchResults = emptyList()
             return@LaunchedEffect
@@ -257,7 +259,7 @@ fun DialerScreen(
                 }
             }
 
-            // [!code ++] 2. Search CRM Contacts (If Enabled)
+            // 2. Search CRM Contacts (If Enabled)
             if (isCrmSearchEnabled) {
                 val crmMatches = crmContacts.filter {
                     it.name.contains(phoneNumber, ignoreCase = true) ||
@@ -323,28 +325,30 @@ fun DialerScreen(
 
         val cleanInput = phoneNumber.filter { it.isDigit() }
 
-        // Check Work & CRM for matches to decide SIM logic
         val isWorkMatch = workContacts.any {
             it.number.filter { c -> c.isDigit() }.endsWith(cleanInput.takeLast(10))
         } || (isCrmSearchEnabled && crmContacts.any {
             it.number.filter { c -> c.isDigit() }.endsWith(cleanInput.takeLast(10))
         })
+        isWorkCallState = isWorkMatch
 
         if (isWorkMatch && SimManager.workSimSlot != null) {
             onCallClick(phoneNumber, true, SimManager.workSimSlot)
         } else if (isDualSim) {
             showSimSheet = true
         } else {
-            onCallClick(phoneNumber, false, null)
+            onCallClick(phoneNumber, isWorkMatch, null)
         }
     }
+
+    val isDark = AppTheme.colors.isDark
 
     // ---------------- UI ----------------
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF121212))
+                .background(if (isDark) Color(0xFF111111) else AppTheme.colors.background)
                 .statusBarsPadding()
                 .padding(horizontal = 24.sdp())
                 .padding(bottom = 94.sdp()),
@@ -361,11 +365,16 @@ fun DialerScreen(
                 contentPadding = PaddingValues(bottom = 20.sdp())
             ) {
                 items(searchResults) { result ->
-                    // [!code ++] Handle CRM type
                     val (name, number, isWork, isCrm) = when(result) {
                         is DialerSearchResult.Work -> Triple(result.contact.name, result.contact.number, true).let { Quad(it.first, it.second, it.third, false) }
                         is DialerSearchResult.Crm -> Triple(result.contact.name, result.contact.number, true).let { Quad(it.first, it.second, it.third, true) }
                         is DialerSearchResult.Device -> Triple(result.contact.name, result.contact.numbers.first().number, false).let { Quad(it.first, it.second, it.third, false) }
+                    }
+
+                    val containerColor = if (isWork) {
+                        if (isDark) AppTheme.colors.cardBackground else AppTheme.colors.surfaceVariant
+                    } else {
+                        AppTheme.colors.surface
                     }
 
                     Surface(
@@ -378,14 +387,15 @@ fun DialerScreen(
                                 }
                                 when (result) {
                                     is DialerSearchResult.Work -> selectedWorkContact = result.contact
-                                    is DialerSearchResult.Crm -> selectedCrmContact = result.contact // [!code ++]
+                                    is DialerSearchResult.Crm -> selectedCrmContact = result.contact
                                     is DialerSearchResult.Device -> selectedDeviceContact = result.contact
                                 }
                                 phoneNumber = number
                             },
-                        color = if (isWork) Color(0xFF1E293B) else Color(0xFF1A1A1A),
+                        color = containerColor,
                         tonalElevation = if (isWork) 4.sdp() else 2.sdp(),
-                        shadowElevation = if (isWork) 2.sdp() else 0.sdp()
+                        shadowElevation = if (isWork) 2.sdp() else 0.sdp(),
+                        border = if (isDark) null else BorderStroke(1.sdp(), AppTheme.colors.border)
                     ) {
                         Row(
                             modifier = Modifier.padding(14.sdp()),
@@ -397,11 +407,11 @@ fun DialerScreen(
                                     .size(48.sdp())
                                     .background(
                                         if (isWork) {
-                                            // [!code ++] Distinct gradient for CRM? Using same Blue for now, or maybe different shade.
                                             if (isCrm) Brush.linearGradient(listOf(Color(0xFF2C7BE5), Color(0xFF1E40AF)))
                                             else Brush.linearGradient(listOf(Color(0xFF3B82F6), Color(0xFF2563EB)))
                                         } else {
-                                            Brush.linearGradient(listOf(Color(0xFF2D2D2D), Color(0xFF242424)))
+                                            if (isDark) Brush.linearGradient(listOf(Color(0xFF2D2D2D), Color(0xFF242424)))
+                                            else Brush.linearGradient(listOf(Color(0xFFE2E8F0), Color(0xFFCBD5E1)))
                                         },
                                         CircleShape
                                     ),
@@ -409,7 +419,7 @@ fun DialerScreen(
                             ) {
                                 Text(
                                     text = name.firstOrNull()?.uppercase() ?: "?",
-                                    color = Color.White,
+                                    color = if (isWork) Color.White else AppTheme.colors.textPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 18.ssp()
                                 )
@@ -425,7 +435,7 @@ fun DialerScreen(
                                     Text(
                                         text = name,
                                         fontSize = 16.ssp(),
-                                        color = Color.White,
+                                        color = AppTheme.colors.textPrimary,
                                         fontWeight = FontWeight.SemiBold,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -438,7 +448,7 @@ fun DialerScreen(
                                             shape = RoundedCornerShape(6.sdp())
                                         ) {
                                             Text(
-                                                text = if (isCrm) "CRM" else "Work", // [!code ++]
+                                                text = if (isCrm) "CRM" else "Work",
                                                 fontSize = 10.ssp(),
                                                 color = Color(0xFF60A5FA),
                                                 fontWeight = FontWeight.Bold,
@@ -451,14 +461,14 @@ fun DialerScreen(
                                 Text(
                                     text = number,
                                     fontSize = 14.ssp(),
-                                    color = Color(0xFF9CA3AF)
+                                    color = AppTheme.colors.textSecondary
                                 )
                             }
 
                             Icon(
                                 Icons.Filled.ChevronRight,
                                 null,
-                                tint = Color.White.copy(alpha = 0.3f),
+                                tint = AppTheme.colors.textSecondary.copy(alpha = 0.5f),
                                 modifier = Modifier.size(20.sdp())
                             )
                         }
@@ -470,7 +480,7 @@ fun DialerScreen(
                 value = phoneNumber,
                 onValueChange = { phoneNumber = it },
                 textStyle = TextStyle(
-                    color = Color.White,
+                    color = AppTheme.colors.textPrimary,
                     fontSize = 36.ssp(),
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
@@ -487,7 +497,7 @@ fun DialerScreen(
                         if (phoneNumber.isEmpty()) {
                             Text(
                                 text = "Enter Number",
-                                color = Color.Gray,
+                                color = AppTheme.colors.textSecondary,
                                 fontSize = 36.ssp(),
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = TextAlign.Center
@@ -498,14 +508,11 @@ fun DialerScreen(
                             modifier = Modifier
                                 .matchParentSize()
                                 .combinedClickable(
-                                    onClick = {
-                                        // Optional: Handle cursor positioning or focus here if needed
-                                    },
+                                    onClick = { },
                                     onLongClick = {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         val pastedText = clipboardManager.getText()?.text
                                         if (!pastedText.isNullOrBlank()) {
-                                            // Sanitize: Keep only valid dialer characters
                                             val sanitized = pastedText.filter { it.isDigit() || "+*#".contains(it) }
                                             if (sanitized.isNotEmpty()) {
                                                 phoneNumber += sanitized
@@ -555,16 +562,24 @@ fun DialerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
 
+                    val utilityBgColor = if (phoneNumber.isNotEmpty()) {
+                        AppTheme.colors.surfaceVariant
+                    } else {
+                        AppTheme.colors.surfaceVariant.copy(alpha = 0.3f)
+                    }
+
                     Box(
                         modifier = Modifier
                             .size(64.sdp())
                             .shadow(
                                 elevation = if (phoneNumber.isNotEmpty()) 4.sdp() else 0.sdp(),
                                 shape = CircleShape,
-                                ambientColor = Color(0xFF3B82F6).copy(alpha = 0.3f)
+                                ambientColor = if (isDark) Color(0xFF3B82F6).copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f)
                             )
-                            .background(
-                                if (phoneNumber.isNotEmpty()) Color(0xFF1E293B) else Color(0xFF1A1A1A),
+                            .background(utilityBgColor, CircleShape)
+                            .border(
+                                1.sdp(),
+                                if (isDark) Color.Transparent else AppTheme.colors.border,
                                 CircleShape
                             )
                             .clickable(enabled = phoneNumber.isNotEmpty()) {
@@ -584,7 +599,7 @@ fun DialerScreen(
                             Icons.Filled.PersonAdd,
                             null,
                             modifier = Modifier.size(28.sdp()),
-                            tint = if (phoneNumber.isNotEmpty()) Color(0xFF60A5FA) else Color(0xFF4A4A4A)
+                            tint = if (phoneNumber.isNotEmpty()) Color(0xFF3B82F6) else AppTheme.colors.textSecondary.copy(alpha = 0.5f)
                         )
                     }
 
@@ -623,10 +638,12 @@ fun DialerScreen(
                             .shadow(
                                 elevation = if (phoneNumber.isNotEmpty()) 4.sdp() else 0.sdp(),
                                 shape = CircleShape,
-                                ambientColor = Color(0xFFEF4444).copy(alpha = 0.3f)
+                                ambientColor = if (isDark) Color(0xFFEF4444).copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f)
                             )
-                            .background(
-                                if (phoneNumber.isNotEmpty()) Color(0xFF1E293B) else Color(0xFF1A1A1A),
+                            .background(utilityBgColor, CircleShape)
+                            .border(
+                                1.sdp(),
+                                if (isDark) Color.Transparent else AppTheme.colors.border,
                                 CircleShape
                             )
                             .clip(CircleShape)
@@ -647,7 +664,7 @@ fun DialerScreen(
                             Icons.Filled.Backspace,
                             null,
                             modifier = Modifier.size(28.sdp()),
-                            tint = if (phoneNumber.isNotEmpty()) Color(0xFFF87171) else Color(0xFF4A4A4A)
+                            tint = if (phoneNumber.isNotEmpty()) Color(0xFFEF4444) else AppTheme.colors.textSecondary.copy(alpha = 0.5f)
                         )
                     }
                 }
@@ -682,7 +699,7 @@ fun DialerScreen(
             )
         }
 
-        // ---------------- SHEET: CRM CONTACT [!code ++] ----------------
+        // ---------------- SHEET: CRM CONTACT ----------------
         if (selectedCrmContact != null) {
             CrmBottomSheet(
                 contact = selectedCrmContact!!,
@@ -733,10 +750,9 @@ fun DialerScreen(
             ModalBottomSheet(
                 onDismissRequest = { showSimSheet = false },
                 sheetState = simSheetState,
-                containerColor = Color(0xFF1E293B),
-                contentColor = Color.White
+                containerColor = AppTheme.colors.surface,
+                contentColor = AppTheme.colors.textPrimary
             ) {
-                // ... (Keep existing SIM selection UI)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -747,7 +763,7 @@ fun DialerScreen(
 
                     Text(
                         "Select SIM to Call",
-                        color = Color.White,
+                        color = AppTheme.colors.textPrimary,
                         fontSize = 18.ssp(),
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 16.sdp())
@@ -761,28 +777,28 @@ fun DialerScreen(
                             onClick = {
                                 scope.launch { simSheetState.hide() }.invokeOnCompletion {
                                     showSimSheet = false
-                                    onCallClick(phoneNumber, false, 0)
+                                    onCallClick(phoneNumber, isWorkCallState, 0)
                                 }
                             },
                             modifier = Modifier.weight(1f).height(64.sdp()),
                             shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
                         ) {
-                            Text("SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                            Text("SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold, color = Color.White)
                         }
 
                         Button(
                             onClick = {
                                 scope.launch { simSheetState.hide() }.invokeOnCompletion {
                                     showSimSheet = false
-                                    onCallClick(phoneNumber, false, 1)
+                                    onCallClick(phoneNumber, isWorkCallState, 1)
                                 }
                             },
                             modifier = Modifier.weight(1f).height(64.sdp()),
                             shape = RoundedCornerShape(20.sdp()),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
                         ) {
-                            Text("SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                            Text("SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -803,6 +819,13 @@ fun DialerButton(
     onLongClick: (() -> Unit)? = null
 ) {
     val haptic = LocalHapticFeedback.current
+    val isDark = AppTheme.colors.isDark
+
+    val bgGradient = if (isDark) {
+        Brush.linearGradient(colors = listOf(Color(0xFF242424), Color(0xFF1A1A1A)))
+    } else {
+        Brush.linearGradient(colors = listOf(Color(0xFFF1F5F9), Color(0xFFE2E8F0)))
+    }
 
     Box(
         modifier = Modifier
@@ -810,12 +833,12 @@ fun DialerButton(
             .shadow(
                 elevation = 2.sdp(),
                 shape = CircleShape,
-                ambientColor = Color.White.copy(alpha = 0.05f)
+                ambientColor = if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.1f)
             )
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(Color(0xFF242424), Color(0xFF1A1A1A))
-                ),
+            .background(bgGradient, CircleShape)
+            .border(
+                1.sdp(),
+                if (isDark) Color.Transparent else AppTheme.colors.border,
                 CircleShape
             )
             .combinedClickable(
@@ -832,10 +855,13 @@ fun DialerButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, fontSize = 32.ssp(), color = Color.White, fontWeight = FontWeight.Medium)
+        Text(
+            label,
+            fontSize = 32.ssp(),
+            color = AppTheme.colors.textPrimary,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
-
-// Extension for absoluteValue if standard lib issues (kotlin.math.absoluteValue is standard though)
 val Int.absoluteValue: Int get() = if (this < 0) -this else this

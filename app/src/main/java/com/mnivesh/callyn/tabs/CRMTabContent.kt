@@ -3,10 +3,13 @@ package com.mnivesh.callyn.tabs
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -16,7 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox // [!code ++]
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,14 +39,16 @@ import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.viewmodels.CrmUiState
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class) // [!code ++]
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrmTabContent(
     uiState: CrmUiState,
     searchQuery: String,
     onContactSelected: (CrmContact) -> Unit,
-    onRefresh: () -> Unit // [!code ++] Added callback
+    onRefresh: () -> Unit
 ) {
+    val colors = AppTheme.colors
+
     // --- Filters ---
     var selectedFilter by remember { mutableStateOf("Tickets") } // Default
     val filters = listOf("Tickets", "Investment_leads", "Insurance_Leads")
@@ -95,7 +100,6 @@ fun CrmTabContent(
         label = "progress"
     )
 
-    // [!code ++] Wrap Content in PullToRefreshBox
     PullToRefreshBox(
         isRefreshing = uiState.isLoading,
         onRefresh = onRefresh,
@@ -116,7 +120,7 @@ fun CrmTabContent(
                     ) {
                         Text(
                             text = "Refreshing CRM Data of last 3 months...",
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = colors.textSecondary,
                             fontSize = 12.ssp()
                         )
                         Text(
@@ -134,7 +138,7 @@ fun CrmTabContent(
                             .height(6.sdp())
                             .clip(RoundedCornerShape(3.sdp())),
                         color = Color(0xFF3B82F6),
-                        trackColor = Color.White.copy(alpha = 0.1f),
+                        trackColor = colors.border,
                     )
                 }
             }
@@ -176,7 +180,7 @@ fun CrmTabContent(
                                         .clip(CircleShape)
                                         .background(
                                             if (isSelected) Color.White
-                                            else Color.White.copy(alpha = 0.15f)
+                                            else (if (colors.isDark) Color.White.copy(alpha = 0.15f) else colors.border)
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -192,7 +196,7 @@ fun CrmTabContent(
                                         color = if (isSelected)
                                             Color(0xFF3B82F6)
                                         else
-                                            Color.White
+                                            colors.textPrimary
                                     )
                                 }
                             }
@@ -200,11 +204,11 @@ fun CrmTabContent(
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Color(0xFF3B82F6),
                             selectedLabelColor = Color.White,
-                            containerColor = Color.White.copy(alpha = 0.1f),
-                            labelColor = Color.White.copy(alpha = 0.7f)
+                            containerColor = if (colors.isDark) Color.White.copy(alpha = 0.1f) else colors.surfaceVariant,
+                            labelColor = colors.textSecondary
                         ),
                         border = FilterChipDefaults.filterChipBorder(
-                            borderColor = Color.Transparent,
+                            borderColor = if (isSelected) Color.Transparent else colors.border,
                             enabled = true,
                             selected = isSelected
                         ),
@@ -258,10 +262,14 @@ fun CrmContactCard(
     contact: CrmContact,
     onClick: () -> Unit
 ) {
+    val colors = AppTheme.colors
+    val isDark = colors.isDark
+
     Card(
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+        colors = CardDefaults.cardColors(containerColor = colors.cardBackground),
         shape = RoundedCornerShape(16.sdp()),
+        border = if (isDark) null else BorderStroke(1.sdp(), colors.border),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -297,7 +305,7 @@ fun CrmContactCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = contact.name,
-                    color = Color.White,
+                    color = colors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.ssp(),
                     maxLines = 1,
@@ -309,13 +317,13 @@ fun CrmContactCard(
                     Icon(
                         Icons.Default.ConfirmationNumber,
                         null,
-                        tint = Color.White.copy(alpha = 0.5f),
+                        tint = colors.textSecondary,
                         modifier = Modifier.size(12.sdp())
                     )
                     Spacer(modifier = Modifier.width(4.sdp()))
                     Text(
                         text = "ID: ${contact.recordId}",
-                        color = Color.White.copy(alpha = 0.6f),
+                        color = colors.textSecondary,
                         fontSize = 12.ssp()
                     )
                 }
@@ -324,7 +332,7 @@ fun CrmContactCard(
                     Spacer(modifier = Modifier.height(2.sdp()))
                     Text(
                         text = contact.product,
-                        color = Color(0xFF60A5FA), // Light Blue
+                        color = Color(0xFF3B82F6), // Accent Blue for consistency
                         fontSize = 11.ssp(),
                         fontWeight = FontWeight.Medium
                     )
@@ -335,7 +343,7 @@ fun CrmContactCard(
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.3f)
+                tint = colors.textSecondary.copy(alpha = 0.6f)
             )
         }
     }

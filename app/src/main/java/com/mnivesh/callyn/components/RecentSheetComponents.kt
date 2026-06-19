@@ -17,10 +17,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import com.mnivesh.callyn.screens.RecentCallUiItem
-import com.mnivesh.callyn.screens.formatTime
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.formatTime
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+
+import com.mnivesh.callyn.ui.theme.AppTheme
 
 @Composable
 fun CallHistoryRow(log: RecentCallUiItem) {
@@ -50,20 +52,20 @@ fun CallHistoryRow(log: RecentCallUiItem) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = formatTime(log.date),
-                color = Color.White,
+                color = AppTheme.colors.textPrimary,
                 fontSize = 14.ssp()
             )
             if (!log.simSlot.isNullOrBlank()) {
                 Text(
                     text = log.simSlot,
-                    color = Color.White.copy(alpha = 0.5f),
+                    color = AppTheme.colors.textSecondary,
                     fontSize = 12.ssp()
                 )
             }
         }
         Text(
             text = log.duration,
-            color = Color.White.copy(alpha = 0.7f),
+            color = AppTheme.colors.textSecondary,
             fontSize = 14.ssp()
         )
     }
@@ -75,7 +77,7 @@ fun ContactDetailRow(icon: ImageVector, label: String, value: String, labelColor
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.sdp()))
-            .background(Color.White.copy(alpha = 0.05f))
+            .background(AppTheme.colors.surfaceVariant)
             .padding(10.sdp()),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -92,7 +94,7 @@ fun ContactDetailRow(icon: ImageVector, label: String, value: String, labelColor
                 value.ifBlank { "N/A" },
                 fontSize = 14.ssp(),
                 fontWeight = FontWeight.SemiBold,
-                color = Color.White.copy(alpha = 0.9f),
+                color = AppTheme.colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

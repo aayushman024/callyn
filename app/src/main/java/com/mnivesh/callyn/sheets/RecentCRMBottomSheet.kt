@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,7 +35,7 @@ import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 
@@ -53,11 +54,12 @@ fun RecentCrmBottomSheet(
     var showShareCodeDialog by remember { mutableStateOf(false) }
 
     // Theme Colors
-    val backgroundColor = Color(0xFF0F172A)
-    val surfaceColor = Color(0xFF1E293B)
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val crmColor = Color(0xFF2C7BE5) // Zoho Blue
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -285,12 +287,12 @@ fun RecentCrmBottomSheet(
                 Spacer(modifier = Modifier.height(24.sdp()))
 
                 // --- HISTORY SECTION ---
-                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                HorizontalDivider(color = AppTheme.colors.border)
                 Spacer(modifier = Modifier.height(16.sdp()))
 
                 Text(
                     text = "Previous Calls",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = textSecondary,
                     fontSize = 14.ssp(),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.Start)
@@ -306,7 +308,7 @@ fun RecentCrmBottomSheet(
                             .height(100.sdp()),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                        CircularProgressIndicator(color = textSecondary)
                     }
                 } else if (history.isNotEmpty()) {
                     LazyColumn(modifier = Modifier.heightIn(max = 250.sdp())) {
@@ -317,7 +319,7 @@ fun RecentCrmBottomSheet(
                 } else {
                     Text(
                         "No recent history",
-                        color = Color.White.copy(alpha = 0.3f),
+                        color = textSecondary.copy(alpha = 0.5f),
                         fontSize = 12.ssp(),
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)

@@ -64,6 +64,7 @@ import com.mnivesh.callyn.managers.CallManager
 import com.mnivesh.callyn.managers.CallState
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -73,6 +74,7 @@ import android.util.Log
 import android.widget.Toast
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.ReportRequest
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.sheets.ReportOptionItem
 import androidx.compose.ui.window.DialogProperties
@@ -211,8 +213,33 @@ fun InCallContent(
     val dialerKeySize = if (isSmallScreen) 60.sdp() else 68.sdp()
     val avatarSize = if (isSmallScreen) 60.sdp() else 80.sdp()
 
-    val backgroundBrush = remember(currentState.type) {
-        if (currentState.type == "work") WorkGradient else PersonalGradient
+    val isDark = AppTheme.colors.isDark
+    val TextPrimary = if (isDark) Color.White else Color(0xFF0F172A)
+    val TextSecondary = if (isDark) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B)
+    val GlassButtonColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
+    val ActiveButtonColor = if (isDark) Color.White else Color.Black
+
+    val PersonalGradientLocal = remember(isDark) {
+        Brush.verticalGradient(
+            colors = if (isDark) {
+                listOf(Color(0xFF2C2C2C), Color(0xFF121212), Color(0xFF000000))
+            } else {
+                listOf(Color(0xFFE5E5E5), Color(0xFFF5F5F5), Color(0xFFFFFFFF))
+            }
+        )
+    }
+    val WorkGradientLocal = remember(isDark) {
+        Brush.verticalGradient(
+            colors = if (isDark) {
+                listOf(Color(0xFF0F172A), Color(0xFF020617), Color(0xFF000000))
+            } else {
+                listOf(Color(0xFFE2E8F0), Color(0xFFF1F5F9), Color(0xFFFFFFFF))
+            }
+        )
+    }
+
+    val backgroundBrush = remember(currentState.type, isDark) {
+        if (currentState.type == "work") WorkGradientLocal else PersonalGradientLocal
     }
 
     Box(
@@ -324,9 +351,9 @@ fun InCallContent(
             ) {
                 Surface(
                     onClick = { showNotePopup = true },
-                    color = Color.White.copy(alpha = 0.1f),
+                    color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f),
                     shape = RoundedCornerShape(50), // Pill shape
-                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f))
+                    border = BorderStroke(1.sdp(), if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.15f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
@@ -335,14 +362,14 @@ fun InCallContent(
                     ) {
                         Text(
                             text = "Add Notes",
-                            color = Color.White,
+                            color = TextPrimary,
                             fontSize = 12.ssp(),
                             fontWeight = FontWeight.SemiBold
                         )
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = "Add Notes",
-                            tint = Color.White,
+                            tint = TextPrimary,
                             modifier = Modifier.size(14.sdp())
                         )
                     }
@@ -426,9 +453,9 @@ fun InCallContent(
                         .padding(20.sdp())
                         .fillMaxWidth()
                         .clickable(enabled = false) {}, // Consume clicks inside
-                    color = Color(0xFF1E293B), // Slate-900 like background
+                    color = if (isDark) Color(0xFF1E293B) else AppTheme.colors.surface, // Slate-900 like background
                     shape = RoundedCornerShape(16.sdp()),
-                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.1f)),
+                    border = BorderStroke(1.sdp(), AppTheme.colors.border),
                     shadowElevation = 12.sdp()
                 ) {
                     Column(
@@ -470,12 +497,12 @@ fun InCallContent(
                                 .fillMaxWidth()
                                 .heightIn(min = 250.sdp(), max = 350.sdp()), // Bigger area
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedContainerColor = Color(0xFF0F172A), // Darker inner bg
-                                unfocusedContainerColor = Color(0xFF0F172A),
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedContainerColor = if (isDark) Color(0xFF0F172A) else AppTheme.colors.surfaceVariant, // Darker inner bg
+                                unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else AppTheme.colors.surfaceVariant,
                                 focusedBorderColor = Color(0xFF60A5FA),
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                unfocusedBorderColor = AppTheme.colors.border,
                                 cursorColor = Color(0xFF60A5FA)
                             ),
                             textStyle = LocalTextStyle.current.copy(
@@ -564,34 +591,74 @@ fun InCallContent(
                     .systemBarsPadding()
                     .padding(top = 30.sdp(), start = 10.sdp())
             ) {
-                Surface(
-                    onClick = {
-                        selectedReportType = null
-                        selectedFormat = null
-                        selectedDestination = null
-                        showReportDialog = true
-                    },
-                    color = Color.White.copy(alpha = 0.1f),
-                    shape = RoundedCornerShape(50),
-                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.sdp())
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.sdp())
+                    // Create Visit Button
+                    Surface(
+                        onClick = {
+                            try {
+                                val timestamp = System.currentTimeMillis()
+                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("mniveshcentral://module?name=Route%20Management?clientName=${android.net.Uri.encode(currentState.name)}&t=$timestamp"))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Failed to open link: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(1.sdp(), if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.15f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Assessment,
-                            contentDescription = "Generate Report",
-                            tint = Color.White,
-                            modifier = Modifier.size(14.sdp())
-                        )
-                        Text(
-                            text = "Report",
-                            color = Color.White,
-                            fontSize = 12.ssp(),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.sdp())
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = "Create Visit",
+                                tint = TextPrimary,
+                                modifier = Modifier.size(14.sdp())
+                            )
+                            Text(
+                                text = "Create FE Visit",
+                                color = TextPrimary,
+                                fontSize = 12.ssp(),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // Report Button
+                    Surface(
+                        onClick = {
+                            selectedReportType = null
+                            selectedFormat = null
+                            selectedDestination = null
+                            showReportDialog = true
+                        },
+                        color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(1.sdp(), if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.15f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.sdp(), vertical = 8.sdp()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.sdp())
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Assessment,
+                                contentDescription = "Generate Report",
+                                tint = TextPrimary,
+                                modifier = Modifier.size(14.sdp())
+                            )
+                            Text(
+                                text = "Report",
+                                color = TextPrimary,
+                                fontSize = 12.ssp(),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
@@ -600,10 +667,10 @@ fun InCallContent(
         // --- Generate Report Dialog (In-Call) ---
         if (showReportDialog) {
             val primaryColor   = Color(0xFF10B981)
-            val surfaceColor   = Color(0xFF1E293B)
-            val backgroundColor = Color(0xFF0F172A)
-            val textPrimary    = Color.White
-            val textSecondary  = Color.White.copy(alpha = 0.6f)
+            val surfaceColor   = if (isDark) Color(0xFF1E293B) else AppTheme.colors.surface
+            val backgroundColor = if (isDark) Color(0xFF0F172A) else AppTheme.colors.surfaceVariant
+            val textPrimary    = AppTheme.colors.textPrimary
+            val textSecondary  = AppTheme.colors.textSecondary
             val workColor      = Color(0xFF60A5FA)
 
             val isSubmitEnabled = selectedReportType != null
@@ -759,6 +826,13 @@ fun InCallContent(
                                         response.errorBody()?.string()
                                     }
 
+                                    if (!response.isSuccessful) {
+                                        val errorMsg = "generateReport failed in InCallScreen: code=${response.code()}, message=${response.message()}, error=$responseString"
+                                        Log.e("InCallScreen", errorMsg)
+                                        FirebaseCrashlytics.getInstance().log(errorMsg)
+                                        FirebaseCrashlytics.getInstance().recordException(Exception("generateReport failed: status code ${response.code()}"))
+                                    }
+
                                     var msg = if (response.isSuccessful)
                                         "Report request sent for ${currentState.name}. Please wait."
                                     else "Failed to generate report"
@@ -777,6 +851,7 @@ fun InCallContent(
                                 } catch (e: Exception) {
                                     Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                                     Log.e("InCallScreen", "Report API error", e)
+                                    FirebaseCrashlytics.getInstance().recordException(e)
                                 } finally {
                                     isReportSubmitting = false
                                     showReportDialog = false
@@ -845,9 +920,9 @@ fun InCallContent(
                         .padding(32.sdp())
                         .fillMaxWidth()
                         .clickable(enabled = false) {}, // Consume clicks inside
-                    color = Color(0xFF1E293B),
+                    color = if (isDark) Color(0xFF1E293B) else AppTheme.colors.surface,
                     shape = RoundedCornerShape(16.sdp()),
-                    border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f)),
+                    border = BorderStroke(1.sdp(), AppTheme.colors.border),
                     shadowElevation = 8.sdp()
                 ) {
                     Column(
@@ -861,7 +936,7 @@ fun InCallContent(
                             fontSize = 18.ssp(),
                             fontWeight = FontWeight.Bold
                         )
-                        HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                        HorizontalDivider(color = AppTheme.colors.border)
 
                         if (!currentState.aum.isNullOrEmpty()) {
                             InfoPill(
@@ -884,10 +959,10 @@ fun InCallContent(
 
                         Button(
                             onClick = { showDetailsPopup = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.1f)),
+                            colors = ButtonDefaults.buttonColors(containerColor = TextSecondary.copy(alpha = 0.1f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Close", color = Color.White)
+                            Text("Close", color = TextPrimary)
                         }
                     }
                 }
@@ -899,9 +974,9 @@ fun InCallContent(
         ModalBottomSheet(
             onDismissRequest = { showConferenceSheet = false },
             sheetState = sheetState,
-            containerColor = Color(0xFF1C1C1E),
-            contentColor = Color.White,
-            dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) },
+            containerColor = if (isDark) Color(0xFF1C1C1E) else AppTheme.colors.surface,
+            contentColor = TextPrimary,
+            dragHandle = { BottomSheetDefaults.DragHandle(color = TextSecondary.copy(alpha = 0.2f)) },
             shape = RoundedCornerShape(topStart = 24.sdp(), topEnd = 24.sdp())
         ) {
             Column(modifier = Modifier.padding(bottom = 48.sdp())) {
@@ -909,6 +984,7 @@ fun InCallContent(
                     text = "Conference Participants",
                     fontSize = 20.ssp(),
                     fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
                     modifier = Modifier.padding(horizontal = 24.sdp(), vertical = 16.sdp())
                 )
 
@@ -939,8 +1015,8 @@ fun InCallContent(
     if (showMessageSheet) {
         ModalBottomSheet(
             onDismissRequest = { showMessageSheet = false },
-            containerColor = Color(0xFF1C1C1E),
-            dragHandle = { BottomSheetDefaults.DragHandle(color = Color.White.copy(alpha = 0.2f)) }
+            containerColor = if (isDark) Color(0xFF1C1C1E) else AppTheme.colors.surface,
+            dragHandle = { BottomSheetDefaults.DragHandle(color = TextSecondary.copy(alpha = 0.2f)) }
         ) {
             val context = LocalContext.current
             QuickResponseSheet(
@@ -1059,6 +1135,10 @@ private fun CallerInfo(
     isSmallScreen: Boolean,
     onShowDetails: () -> Unit
 ) {
+    val isDark = AppTheme.colors.isDark
+    val TextPrimary = if (isDark) Color.White else Color(0xFF0F172A)
+    val TextSecondary = if (isDark) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B)
+
     val spacerHeight = if (isSmallScreen) 10.sdp() else 25.sdp()
     val nameSize = if (isSmallScreen) 26.ssp() else 32.ssp()
     val nameLineHeight = if (isSmallScreen) 30.ssp() else 38.ssp()
@@ -1072,7 +1152,7 @@ private fun CallerInfo(
     ) {
         // --- Status & Duration ---
         Surface(
-            color = Color.White.copy(alpha = 0.1f),
+            color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f),
             shape = RoundedCornerShape(50),
         ) {
             if (currentState.status.equals("Active", ignoreCase = true) && currentState.connectTimeMillis > 0) {
@@ -1098,13 +1178,13 @@ private fun CallerInfo(
             modifier = Modifier
                 .size(avatarSize)
                 .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.1f)),
+                .background(if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = if (currentState.isConference) Icons.Default.Groups else Icons.Default.Person,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.8f),
+                tint = if (isDark) Color.White.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.7f),
                 modifier = Modifier.size(avatarSize * 0.6f)
             )
         }
@@ -1197,9 +1277,9 @@ private fun CallerInfo(
                             Spacer(modifier = Modifier.height(8.sdp()))
                             Surface(
                                 onClick = onShowDetails,
-                                color = Color.White.copy(alpha = 0.1f),
+                                color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f),
                                 shape = RoundedCornerShape(20.sdp()),
-                                border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.2f))
+                                border = BorderStroke(1.sdp(), if (isDark) Color.White.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.15f))
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 8.sdp()),
@@ -1587,8 +1667,19 @@ private fun CallToggleButton(
     buttonSize: Dp,
     onClick: () -> Unit
 ) {
+    val isDark = AppTheme.colors.isDark
+    val TextSecondary = if (isDark) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B)
+    val ActiveButtonColor = if (isDark) Color.White else Color.Black
+    val GlassButtonColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
+
+    val targetContentColor = if (isActive) {
+        if (isDark) Color.Black else Color.White
+    } else {
+        if (isDark) Color.White else Color.Black
+    }
+
     val backgroundColor by animateColorAsState(if (isActive) ActiveButtonColor else GlassButtonColor, label = "bg")
-    val contentColor by animateColorAsState(if (isActive) Color.Black else Color.White, label = "content")
+    val contentColor by animateColorAsState(targetContentColor, label = "content")
     val iconSize = buttonSize * 0.44f // Dynamically scale icon
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1599,7 +1690,7 @@ private fun CallToggleButton(
                 .background(backgroundColor)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(bounded = true, color = Color.White),
+                    indication = ripple(bounded = true, color = if (isDark) Color.White else Color.Black),
                     onClick = onClick
                 ),
             contentAlignment = Alignment.Center
@@ -1697,14 +1788,17 @@ private fun DialpadComponent(
 
 @Composable
 private fun DialerKey(digit: Char, size: Dp, onClick: () -> Unit) {
+    val isDark = AppTheme.colors.isDark
+    val keyBg = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.08f)
+    val keyText = if (isDark) Color.White else Color(0xFF0F172A)
     Box(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.1f))
+            .background(keyBg)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = true, color = Color.White),
+                indication = ripple(bounded = true, color = if (isDark) Color.White else Color.Black),
                 onClick = { onClick() }
             ),
         contentAlignment = Alignment.Center
@@ -1713,7 +1807,7 @@ private fun DialerKey(digit: Char, size: Dp, onClick: () -> Unit) {
             text = digit.toString(),
             fontSize = 32.ssp(),
             fontWeight = FontWeight.Normal,
-            color = Color.White
+            color = keyText
         )
     }
 }

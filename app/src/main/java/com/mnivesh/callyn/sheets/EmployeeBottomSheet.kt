@@ -18,6 +18,7 @@ import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,7 +34,7 @@ import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,12 +54,13 @@ fun EmployeeBottomSheet(
     var isHistoryExpanded by remember { mutableStateOf(initialHistoryExpanded) }
 
     // Theme Colors
-    val backgroundColor = Color(0xFF0F172A)
-    val surfaceColor = Color(0xFF1E293B)
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val primaryColor = Color(0xFF10B981)
     val secondaryColor = Color(0xFF60A5FA)
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -314,7 +316,7 @@ fun EmployeeBottomSheet(
 
             // --- History Toggle Section ---
             item {
-                HorizontalDivider(color = textSecondary.copy(alpha = 0.1f))
+                HorizontalDivider(color = AppTheme.colors.border)
                 Spacer(modifier = Modifier.height(16.sdp()))
 
                 OutlinedButton(
@@ -325,7 +327,7 @@ fun EmployeeBottomSheet(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(40.sdp()),
-                    border = BorderStroke(1.sdp(), textSecondary.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.sdp(), AppTheme.colors.border),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = textSecondary)
                 ) {
                     Text(

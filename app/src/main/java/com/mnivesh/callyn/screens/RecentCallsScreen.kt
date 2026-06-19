@@ -1,21 +1,10 @@
 package com.mnivesh.callyn.screens
 
 import android.Manifest
-import android.R
-import android.annotation.SuppressLint
-import android.app.Application
-import android.content.ContentValues
 import android.content.Context
-import android.content.pm.PackageManager
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
-import android.provider.BlockedNumberContract
-import android.provider.CallLog
-import android.provider.ContactsContract
-import android.telephony.SubscriptionManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,427 +28,29 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.telephony.SubscriptionManager
 import com.mnivesh.callyn.CallynApplication
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.DeviceNumber
-import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.CrmContact
-import com.mnivesh.callyn.db.WorkCallLog
-import com.mnivesh.callyn.managers.AuthManager
-import com.mnivesh.callyn.screens.sheets.RecentCrmBottomSheet
-import com.mnivesh.callyn.screens.sheets.RecentDeviceBottomSheet
-import com.mnivesh.callyn.screens.sheets.RecentEmployeeBottomSheet
-import com.mnivesh.callyn.screens.sheets.RecentWorkBottomSheet
 import com.mnivesh.callyn.sheets.CrmBottomSheet
 import com.mnivesh.callyn.sheets.EmployeeBottomSheet
 import com.mnivesh.callyn.sheets.ModernBottomSheet
 import com.mnivesh.callyn.sheets.ModernDeviceBottomSheet
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
-import com.mnivesh.callyn.viewmodels.CrmUiState
+import com.mnivesh.callyn.ui.theme.AppTheme
+import com.mnivesh.callyn.viewmodels.CallFilter
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallsViewModel
+import com.mnivesh.callyn.viewmodels.RecentCallsViewModelFactory
+import com.mnivesh.callyn.viewmodels.formatTime
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.*
-import kotlin.math.abs
-
-// --- Filter Enum ---
-enum class CallFilter {
-    ALL, PERSONAL, WORK, MISSED
-}
-
-data class RecentCallUiItem(
-    val id: String,
-    val providerId: Long = 0,
-    val name: String,
-    val number: String,
-    val type: String, // "Work" or "Personal"
-    val date: Long,
-    val rawDuration: Long = 0,
-    val duration: String,
-    val isIncoming: Boolean,
-    val isMissed: Boolean = false,
-    val simSlot: String? = null
-)
-
-// --- ViewModel ---
-class RecentCallsViewModel(
-    application: Application,
-    private val repository: ContactRepository
-) : AndroidViewModel(application) {
-
-    // [!code ++] Auth details for filtering logic
-    val authManager = AuthManager(application)
-    val department = authManager.getDepartment()
-    val userName = authManager.getUserName() ?: ""
-
-    // Main List State
-    private val _systemLogs = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
-    val systemLogs = _systemLogs.asStateFlow()
-
-    private val _workLogs = MutableStateFlow<List<WorkCallLog>>(emptyList())
-    val workLogs = _workLogs.asStateFlow()
-
-    // [!code ++] Merged State: Combines System + Work logs automatically
-    val mergedCalls = combine(_systemLogs, _workLogs) { system, work ->
-        mergeLogs(system, work)
-    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading = _isLoading.asStateFlow()
-
-    // History Sheet State
-    private val _selectedContactHistory = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
-    val selectedContactHistory = _selectedContactHistory.asStateFlow()
-
-    private val _isHistoryLoading = MutableStateFlow(false)
-    val isHistoryLoading = _isHistoryLoading.asStateFlow()
-
-    // [!code ++] Contacts & CRM Data (Held here for SearchOverlay)
-    private val _deviceContacts = MutableStateFlow<List<DeviceContact>>(emptyList())
-    val deviceContacts = _deviceContacts.asStateFlow()
-
-    val workContacts = repository.allContacts.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
-
-    private val _crmUiState = MutableStateFlow(CrmUiState())
-    val crmUiState = _crmUiState.asStateFlow()
-
-    // Pagination Flags
-    private var endReached = false
-    private var loadJob: Job? = null
-
-    // Content Observer for auto-updates
-    private val callLogObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-        override fun onChange(selfChange: Boolean) {
-            super.onChange(selfChange)
-            silentRefresh()
-        }
-    }
-
-    init {
-        // Observe Work Logs from DB
-        viewModelScope.launch {
-            repository.allWorkLogs.collect { _workLogs.value = it }
-        }
-
-        // [!code ++] Observe CRM Contacts
-        viewModelScope.launch {
-            repository.crmContacts.collect { allContacts ->
-                _crmUiState.value = _crmUiState.value.copy(
-                    tickets = allContacts.filter { it.module == "Tickets" },
-                    investmentLeads = allContacts.filter { it.module == "Investment_leads" },
-                    insuranceLeads = allContacts.filter { it.module == "Insurance_Leads" }
-                )
-            }
-        }
-
-        // [!code ++] Fetch Device Contacts
-        viewModelScope.launch { fetchDeviceContactsInternal() }
-
-        // Register Observer for System Call Log
-        try {
-            getApplication<Application>().contentResolver.registerContentObserver(
-                CallLog.Calls.CONTENT_URI, true, callLogObserver
-            )
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        // Initial Load
-        loadNextPage()
-    }
-
-    // [!code ++] Add 'token' property near other auth properties
-    private val token = authManager.getToken()
-
-    // [!code ++] Add this function (needed for ModernBottomSheet)
-    fun submitPersonalRequest(contactName: String, reason: String) {
-        if (token.isNullOrBlank()) return
-        viewModelScope.launch {
-            repository.submitPersonalRequest(token, contactName, userName, reason)
-        }
-    }
-
-    // [!code ++] Add this function to clear history when sheet closes
-    fun clearCallHistory() {
-        _selectedContactHistory.value = emptyList()
-        _isHistoryLoading.value = false
-    }
-
-    // [!code replace]
-    private fun mergeLogs(
-        sysLogs: List<RecentCallUiItem>,
-        dbLogs: List<WorkCallLog>
-    ): List<RecentCallUiItem> {
-
-        val TIME_BUFFER_MS = 5 * 1000L
-        val DUR_BUFFER_SEC = 5
-
-        fun normalize(num: String) =
-            num.filter { it.isDigit() }.takeLast(10)
-
-        fun isSameCall(primary: RecentCallUiItem, candidate: RecentCallUiItem): Boolean {
-
-            if (normalize(primary.number) != normalize(candidate.number)) return false
-            if (primary.isIncoming != candidate.isIncoming) return false
-
-            val timeDiff = abs(primary.date - candidate.date)
-            if (timeDiff > TIME_BUFFER_MS) return false
-
-            if (!primary.isMissed && !candidate.isMissed) {
-                val durDiff = abs(primary.rawDuration - candidate.rawDuration)
-                if (durDiff > DUR_BUFFER_SEC) return false
-            }
-
-            return true
-        }
-
-        val workUiLogs = dbLogs.map {
-            val isIncomingCall =
-                it.direction.equals("incoming", true) ||
-                        it.direction.equals("missed", true)
-
-            RecentCallUiItem(
-                id = "w_${it.id}",
-                name = it.name,
-                number = it.number,
-                type = "Work",
-                date = it.timestamp,
-                rawDuration = it.duration,
-                duration = formatDuration(it.duration),
-                isIncoming = isIncomingCall,
-                isMissed = it.direction.equals("missed", true),
-                simSlot = it.simSlot
-            )
-        }.sortedByDescending { it.date }
-
-        val sortedSysLogs = sysLogs.sortedByDescending { it.date }
-
-        // 🔹 HashMap index by normalized number
-        val workMap = workUiLogs.groupBy { normalize(it.number) }
-
-        val usedWork = HashSet<RecentCallUiItem>()
-        val usedSysIndices = HashSet<Int>()
-
-        val result = ArrayList<RecentCallUiItem>()
-
-        if (department == "Management") {
-
-            val enriched = sortedSysLogs.map { sysItem ->
-
-                val candidates = workMap[normalize(sysItem.number)] ?: emptyList()
-
-                val match = candidates.firstOrNull {
-                    !usedWork.contains(it) && isSameCall(sysItem, it)
-                }
-
-                if (match != null) {
-                    usedWork.add(match)
-
-                    val isUnknown =
-                        sysItem.name == sysItem.number || sysItem.name.isBlank()
-
-                    if (isUnknown) {
-                        sysItem.copy(name = match.name, type = "Work")
-                    } else {
-                        sysItem
-                    }
-
-                } else sysItem
-            }
-
-            result.addAll(enriched)
-
-        } else {
-
-            result.addAll(workUiLogs)
-
-            workUiLogs.forEach { workItem ->
-
-                val candidates = sortedSysLogs.withIndex()
-                    .filter { normalize(it.value.number) == normalize(workItem.number) }
-
-                for ((index, sysItem) in candidates) {
-                    if (!usedSysIndices.contains(index) && isSameCall(workItem, sysItem)) {
-                        usedSysIndices.add(index)
-                        break
-                    }
-                }
-            }
-
-            sortedSysLogs.forEachIndexed { index, item ->
-                if (!usedSysIndices.contains(index)) result.add(item)
-            }
-        }
-
-        return result.sortedByDescending { it.date }
-    }
-
-    // [!code ++] Fetch Device Contacts Internal
-    private suspend fun fetchDeviceContactsInternal() {
-        withContext(Dispatchers.IO) {
-            try {
-                val context = getApplication<Application>()
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return@withContext
-
-                val contactsMap = mutableMapOf<String, DeviceContact>()
-                val cursor = context.contentResolver.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
-                    null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-                )
-
-                cursor?.use {
-                    val idIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
-                    val nameIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                    val numIdx = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-
-                    while (it.moveToNext()) {
-                        val id = it.getString(idIdx)
-                        val name = it.getString(nameIdx) ?: "Unknown"
-                        val rawNum = it.getString(numIdx)?.replace("\\s".toRegex(), "") ?: ""
-                        if (rawNum.isNotEmpty()) {
-                            val numObj = DeviceNumber(rawNum, isDefault = true)
-                            if (contactsMap.containsKey(id)) {
-                                val existing = contactsMap[id]!!
-                                if (existing.numbers.none { n -> n.number == rawNum }) {
-                                    contactsMap[id] = existing.copy(numbers = existing.numbers + numObj)
-                                }
-                            } else {
-                                contactsMap[id] = DeviceContact(id, name, listOf(numObj))
-                            }
-                        }
-                    }
-                }
-                _deviceContacts.value = contactsMap.values.sortedBy { it.name }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    // --- Existing Functions (SilentRefresh, RefreshAll, LoadNext, etc.) ---
-    fun silentRefresh() {
-        if (_isLoading.value) return
-        viewModelScope.launch(Dispatchers.IO) {
-            val currentSize = _systemLogs.value.size
-            val limitToFetch = if (currentSize < 50) 50 else currentSize
-            val updatedLogs = fetchSystemCallLogs(getApplication(), limit = limitToFetch)
-            withContext(Dispatchers.Main) {
-                if (_systemLogs.value != updatedLogs) {
-                    _systemLogs.value = updatedLogs
-                }
-            }
-        }
-    }
-
-    fun refreshAllSuspend() {
-        endReached = false
-        viewModelScope.launch(Dispatchers.IO) {
-            val newLogs = fetchSystemCallLogs(getApplication(), limit = 50)
-            withContext(Dispatchers.Main) {
-                _systemLogs.value = newLogs
-            }
-        }
-    }
-
-    fun loadNextPage() {
-        if (_isLoading.value || endReached) return
-        _isLoading.value = true
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch(Dispatchers.IO) {
-            val lastLogDate = _systemLogs.value.lastOrNull()?.date
-            val newLogs = fetchSystemCallLogs(getApplication(), limit = 50, olderThan = lastLogDate)
-            withContext(Dispatchers.Main) {
-                if (newLogs.isEmpty()) {
-                    endReached = true
-                } else {
-                    val combined = (_systemLogs.value + newLogs).distinctBy { it.id }
-                    _systemLogs.value = combined
-                }
-                _isLoading.value = false
-            }
-        }
-    }
-
-    fun fetchHistoryForNumber(number: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isHistoryLoading.value = true
-            _selectedContactHistory.value = emptyList()
-            val sysLogs = fetchSystemCallLogs(getApplication(), numberFilter = number)
-            val normalizedQuery = number.filter { it.isDigit() }.takeLast(10)
-            val localWorkLogs = _workLogs.value.filter {
-                it.number.filter { c -> c.isDigit() }.takeLast(10) == normalizedQuery
-            }.map { workLog ->
-                val isIncoming = workLog.direction.equals("incoming", true) || workLog.direction.equals("missed", true)
-                RecentCallUiItem(
-                    id = "w_hist_${workLog.id}",
-                    name = workLog.name,
-                    number = workLog.number,
-                    type = "Work",
-                    date = workLog.timestamp,
-                    duration = formatDuration(workLog.duration),
-                    isIncoming = isIncoming,
-                    isMissed = workLog.direction.equals("missed", true),
-                    simSlot = workLog.simSlot
-                )
-            }
-            val combined = (sysLogs + localWorkLogs).sortedByDescending { it.date }
-            withContext(Dispatchers.Main) {
-                _selectedContactHistory.value = combined
-                _isHistoryLoading.value = false
-            }
-        }
-    }
-
-    fun deleteLog(providerId: Long) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val selection = "${CallLog.Calls._ID} = ?"
-                val selectionArgs = arrayOf(providerId.toString())
-                getApplication<Application>().contentResolver.delete(CallLog.Calls.CONTENT_URI, selection, selectionArgs)
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    fun blockNumber(number: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val values = ContentValues().apply { put(BlockedNumberContract.BlockedNumbers.COLUMN_ORIGINAL_NUMBER, number) }
-                getApplication<Application>().contentResolver.insert(BlockedNumberContract.BlockedNumbers.CONTENT_URI, values)
-                withContext(Dispatchers.Main) { Toast.makeText(getApplication(), "Number blocked", Toast.LENGTH_SHORT).show() }
-            } catch (e: Exception) { e.printStackTrace() }
-        }
-    }
-
-    override fun onCleared() {
-        getApplication<Application>().contentResolver.unregisterContentObserver(callLogObserver)
-        super.onCleared()
-    }
-}
-
-class RecentCallsViewModelFactory(val app: Application, val repo: ContactRepository) : ViewModelProvider.Factory {
-    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return RecentCallsViewModel(app, repo) as T
-    }
-}
 
 // --- Main Composable ---
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -480,17 +71,15 @@ fun RecentCallsScreen(
     LaunchedEffect(Unit) { onScreenEntry() }
 
     // --- State ---
-    // [!code ++] Use mergedCalls directly
     val allCalls by viewModel.mergedCalls.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // [!code ++] Overlay State
+    // Overlay State
     var showSearchOverlay by remember { mutableStateOf(false) }
 
     var activeFilter by remember { mutableStateOf(CallFilter.ALL) }
     var isRefreshing by remember { mutableStateOf(false) }
 
-    // [!code ++] Fixed: Collecting missing states here
     val deviceContacts by viewModel.deviceContacts.collectAsState()
     val workContacts by viewModel.workContacts.collectAsState()
     val crmUiState by viewModel.crmUiState.collectAsState()
@@ -505,10 +94,10 @@ fun RecentCallsScreen(
     val selectedContactHistory by viewModel.selectedContactHistory.collectAsState()
     val isHistoryLoading by viewModel.isHistoryLoading.collectAsState()
 
-    // [!code ++] Sim Count State
+    // Sim Count State
     var isDualSim by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             try {
                 val subManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
                 isDualSim = subManager.activeSubscriptionInfoCount > 1
@@ -527,7 +116,7 @@ fun RecentCallsScreen(
         }
     }
 
-    // [!code ++] Click Handler reused for List and Search
+    // Click Handler reused for List and Search
     fun handleItemClick(item: RecentCallUiItem) {
         scope.launch {
             viewModel.fetchHistoryForNumber(item.number)
@@ -568,7 +157,7 @@ fun RecentCallsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0F172A))
+                .background(AppTheme.colors.background)
         )
 
         PullToRefreshBox(
@@ -593,12 +182,12 @@ fun RecentCallsScreen(
                         text = "Recent Calls",
                         fontSize = 25.ssp(),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = AppTheme.colors.textPrimary,
                         modifier = Modifier.padding(top = 24.sdp(), bottom = 16.sdp(), start = 16.sdp(), end = 16.sdp())
                     )
                 }
 
-                // [!code ++] Fake Search Bar (Triggers Overlay)
+                // Fake Search Bar (Triggers Overlay)
                 item {
                     Surface(
                         modifier = Modifier
@@ -608,19 +197,19 @@ fun RecentCallsScreen(
                             .height(56.sdp())
                             .clip(RoundedCornerShape(12.sdp()))
                             .clickable { showSearchOverlay = true },
-                        color = Color.White.copy(alpha = 0.05f),
+                        color = AppTheme.colors.surfaceVariant,
                         shape = RoundedCornerShape(12.sdp())
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 16.sdp())) {
-                            Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray)
+                            Icon(Icons.Default.Search, contentDescription = null, tint = AppTheme.colors.textSecondary)
                             Spacer(modifier = Modifier.width(12.sdp()))
-                            Text("Search name or number...", color = Color.Gray, fontSize = 16.ssp())
+                            Text("Search name or number...", color = AppTheme.colors.textSecondary, fontSize = 16.ssp())
                         }
                     }
                 }
 
                 stickyHeader {
-                    Box(modifier = Modifier.fillMaxWidth().background(Color(0xFF0F172A))) {
+                    Box(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.background)) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 16.sdp(), horizontal = 16.sdp()),
                             horizontalArrangement = Arrangement.spacedBy(8.sdp())
@@ -633,14 +222,13 @@ fun RecentCallsScreen(
                     }
                 }
 
-
                 if (displayLogs.isEmpty() && !isLoading) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().height(400.sdp()), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(Icons.Default.History, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.sdp()))
+                                Icon(Icons.Default.History, contentDescription = null, tint = AppTheme.colors.textSecondary, modifier = Modifier.size(48.sdp()))
                                 Spacer(modifier = Modifier.height(16.sdp()))
-                                Text("No calls found", color = Color.Gray, fontSize = 16.ssp())
+                                Text("No calls found", color = AppTheme.colors.textSecondary, fontSize = 16.ssp())
                             }
                         }
                     }
@@ -653,7 +241,8 @@ fun RecentCallsScreen(
                             onBodyClick = { handleItemClick(log) },
                             onCallClick = {
                                 val slotIndex = log.simSlot?.filter { it.isDigit() }?.toIntOrNull()?.let { it - 1 }
-                                onCallClick(log.number, log.type.equals("Work", ignoreCase = true), slotIndex) },
+                                onCallClick(log.number, log.type.equals("Work", ignoreCase = true), slotIndex)
+                            },
                             onDelete = { viewModel.deleteLog(log.providerId) },
                             onBlock = { viewModel.blockNumber(log.number) }
                         )
@@ -663,27 +252,24 @@ fun RecentCallsScreen(
                 if (isLoading) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(16.sdp()), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = Color.White.copy(alpha = 0.5f))
+                            CircularProgressIndicator(modifier = Modifier.size(24.sdp()), color = AppTheme.colors.textSecondary)
                         }
                     }
                 }
             }
         }
 
-        // [!code ++] Search Overlay
+        // Search Overlay
         SearchOverlay(
             visible = showSearchOverlay,
             onDismiss = { showSearchOverlay = false },
-            // [!code ++] Pass lists explicitly
             deviceContacts = deviceContacts,
             workContacts = workContacts,
             myContacts = workContacts,
             crmUiState = crmUiState,
-            callLogs = allCalls, // [!code ++] Pass merged calls here
-
+            callLogs = allCalls,
             department = viewModel.department,
             userName = viewModel.userName,
-
             onSelectDeviceContact = { contact ->
                 selectedDeviceContact = contact
                 scope.launch { sheetState.show() }
@@ -700,9 +286,7 @@ fun RecentCallsScreen(
                 selectedCrmContact = contact
                 scope.launch { sheetState.show() }
             },
-            onCallLogClick = { log ->
-                handleItemClick(log)
-            },
+            onCallLogClick = { log -> handleItemClick(log) },
             onMakeCall = { number, isWork, simSlot ->
                 onCallClick(number, isWork, simSlot)
                 showSearchOverlay = false
@@ -741,7 +325,7 @@ fun RecentCallsScreen(
                 isWorkContact = true,
                 initialHistoryExpanded = true,
                 department = viewModel.department,
-                onRequestSubmit = { reason ->     // [!code ++] Handle Request
+                onRequestSubmit = { reason ->
                     viewModel.submitPersonalRequest(selectedWorkContact!!.name, reason)
                     Toast.makeText(context, "Request Submitted", Toast.LENGTH_SHORT).show()
                 },
@@ -760,7 +344,6 @@ fun RecentCallsScreen(
             )
         }
 
-        //CRM Bottom Sheet
         if (selectedCrmContact != null) {
             CrmBottomSheet(
                 contact = selectedCrmContact!!,
@@ -786,11 +369,11 @@ fun RecentCallsScreen(
         if (selectedDeviceContact != null) {
             ModernDeviceBottomSheet(
                 contact = selectedDeviceContact!!,
-                history = selectedContactHistory, // [!code ++]
-                isLoading = isHistoryLoading,     // [!code ++]
+                history = selectedContactHistory,
+                isLoading = isHistoryLoading,
                 sheetState = sheetState,
                 isDualSim = isDualSim,
-                initialHistoryExpanded = true,    // [!code ++] Auto-expand
+                initialHistoryExpanded = true,
                 onShowHistory = {
                     val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
                     viewModel.fetchHistoryForNumber(number)
@@ -798,7 +381,7 @@ fun RecentCallsScreen(
                 onDismiss = {
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                         selectedDeviceContact = null
-                        viewModel.clearCallHistory() // [!code ++] Clear on close
+                        viewModel.clearCallHistory()
                     }
                 },
                 onCall = { number, slotIndex ->
@@ -812,155 +395,6 @@ fun RecentCallsScreen(
     }
 }
 
-// ... (Rest of Helper functions: formatTime, formatDuration, fetchSystemCallLogs, UI Components)
-fun formatTime(millis: Long): String {
-    val sdf = SimpleDateFormat("MMM dd, hh:mm a", Locale.getDefault())
-    return sdf.format(Date(millis))
-}
-
-fun formatDuration(seconds: Long): String {
-    val m = seconds / 60
-    val s = seconds % 60
-    return if (m > 0) "${m}m ${s}s" else "${s}s"
-}
-
-/**
- * Live lookup against device contacts. Resolves names for numbers
- * that were saved AFTER the call was made (stale CACHED_NAME fix).
- */
-fun resolveContactName(context: Context, number: String): String? {
-    try {
-        val uri = android.net.Uri.withAppendedPath(
-            ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
-            android.net.Uri.encode(number)
-        )
-        context.contentResolver.query(
-            uri,
-            arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
-            null, null, null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return cursor.getString(0)
-            }
-        }
-    } catch (e: Exception) {
-        // Ignore lookup failures
-    }
-    return null
-}
-
-@SuppressLint("MissingPermission")
-suspend fun fetchSystemCallLogs(
-    context: Context,
-    limit: Int? = null,
-    olderThan: Long? = null,
-    numberFilter: String? = null
-): List<RecentCallUiItem> {
-    return withContext(Dispatchers.IO) {
-        val logs = mutableListOf<RecentCallUiItem>()
-        val simMap = mutableMapOf<String, String>()
-        try {
-            if (ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.READ_PHONE_STATE
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                val subManager = context.getSystemService(SubscriptionManager::class.java)
-                val activeSims = subManager.activeSubscriptionInfoList
-                activeSims?.forEach { info ->
-                    simMap[info.subscriptionId.toString()] = "SIM ${info.simSlotIndex + 1}"
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
-        val projection = arrayOf(
-            CallLog.Calls._ID,
-            CallLog.Calls.NUMBER,
-            CallLog.Calls.CACHED_NAME,
-            CallLog.Calls.TYPE,
-            CallLog.Calls.DATE,
-            CallLog.Calls.DURATION,
-            CallLog.Calls.PHONE_ACCOUNT_ID
-        )
-
-        val selectionParts = mutableListOf<String>()
-        val selectionArgs = mutableListOf<String>()
-
-        if (olderThan != null) {
-            selectionParts.add("${CallLog.Calls.DATE} < ?")
-            selectionArgs.add(olderThan.toString())
-        }
-        if (numberFilter != null) {
-            selectionParts.add("${CallLog.Calls.NUMBER} LIKE ?")
-            selectionArgs.add("%${numberFilter.takeLast(10)}%")
-        }
-
-        val selection =
-            if (selectionParts.isNotEmpty()) selectionParts.joinToString(" AND ") else null
-        val sortOrder =
-            if (limit != null) "${CallLog.Calls.DATE} DESC LIMIT $limit" else "${CallLog.Calls.DATE} DESC"
-
-        try {
-            val cursor = context.contentResolver.query(
-                CallLog.Calls.CONTENT_URI,
-                projection,
-                selection,
-                selectionArgs.toTypedArray(),
-                sortOrder
-            )
-            cursor?.use {
-                // Update indices
-                val idIdx = 0
-                val numberIdx = 1
-                val nameIdx = 2
-                val typeIdx = 3
-                val dateIdx = 4
-                val durationIdx = 5
-                val accountIdIdx = 6
-
-                while (it.moveToNext()) {
-                    val realId = it.getLong(idIdx)
-                    val number = (it.getString(numberIdx) ?: "Unknown").removePrefix("+")
-                    val cachedName = it.getString(nameIdx)
-                    val type = it.getInt(typeIdx)
-                    val date = it.getLong(dateIdx)
-                    val durationSec = it.getLong(durationIdx)
-                    val accountId = it.getString(accountIdIdx)
-                    val simLabel = if (accountId != null) simMap[accountId] else null
-
-                    // Resolve name: use cached name if available, else do live lookup
-                    val name = if (!cachedName.isNullOrBlank() && cachedName != "Unknown") {
-                        cachedName
-                    } else {
-                        resolveContactName(context, number) ?: number
-                    }
-
-                    logs.add(
-                        RecentCallUiItem(
-                            id = "s_${date}_${number.takeLast(4)}",
-                            providerId = realId,
-                            name = name,
-                            number = number,
-                            type = "Personal",
-                            date = date,
-                            rawDuration = durationSec,
-                            duration = formatDuration(durationSec),
-                            isIncoming = type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.MISSED_TYPE,
-                            isMissed = type == CallLog.Calls.MISSED_TYPE,
-                            simSlot = simLabel
-                        )
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        logs
-    }
-}
-
 // --- UI Components ---
 
 @Composable
@@ -970,8 +404,8 @@ fun FilterChipItem(
     icon: ImageVector? = null,
     onClick: () -> Unit
 ) {
-    val backgroundColor = if (isSelected) Color(0xFF3B82F6) else Color.White.copy(alpha = 0.1f)
-    val textColor = if (isSelected) Color.White else Color.Gray
+    val backgroundColor = if (isSelected) Color(0xFF3B82F6) else AppTheme.colors.surfaceVariant
+    val textColor = if (isSelected) Color.White else AppTheme.colors.textSecondary
 
     Surface(
         color = backgroundColor,
@@ -1013,7 +447,6 @@ fun RecentCallItem(
     val isWork = log.type.equals("Work", ignoreCase = true)
     val tagColor = if (isWork) Color(0xFF60A5FA) else Color(0xFF10B981)
 
-    // Menu State
     var showMenu by remember { mutableStateOf(false) }
 
     val icon = when {
@@ -1029,14 +462,11 @@ fun RecentCallItem(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onBodyClick,
-                onLongClick = {
-                    if (!isWork) {
-                        showMenu = true
-                    }
-                }
+                onLongClick = { if (!isWork) showMenu = true }
             ),
         shape = RoundedCornerShape(16.sdp()),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f))
+        colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBackground),
+        border = if (AppTheme.colors.isDark) null else BorderStroke(1.sdp(), AppTheme.colors.border)
     ) {
         Box {
             Row(
@@ -1066,7 +496,7 @@ fun RecentCallItem(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = log.name.ifBlank { log.number },
-                            color = if (log.isMissed) Color(0xFFEF4444) else Color.White,
+                            color = if (log.isMissed) Color(0xFFEF4444) else AppTheme.colors.textPrimary,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 17.ssp(),
                             maxLines = 1,
@@ -1079,7 +509,7 @@ fun RecentCallItem(
                             val simColor = when {
                                 log.simSlot.contains("1") -> Color(0xFF10B981)
                                 log.simSlot.contains("2") -> Color(0xFF60A5FA)
-                                else -> Color.White.copy(alpha = 0.7f)
+                                else -> AppTheme.colors.textSecondary
                             }
                             Text(
                                 text = log.simSlot,
@@ -1095,29 +525,25 @@ fun RecentCallItem(
                         modifier = Modifier.padding(top = 4.sdp())
                     ) {
                         Icon(
-                            imageVector = if (log.type.equals(
-                                    "Work",
-                                    ignoreCase = true
-                                )
-                            ) Icons.Default.BusinessCenter else Icons.Default.Person,
+                            imageVector = if (log.type.equals("Work", ignoreCase = true)) Icons.Default.BusinessCenter else Icons.Default.Person,
                             contentDescription = null,
                             tint = tagColor,
                             modifier = Modifier.size(14.sdp())
                         )
-                        Text(" • ", color = Color.White.copy(alpha = 0.3f), fontSize = 11.ssp())
+                        Text(" • ", color = AppTheme.colors.textSecondary.copy(alpha = 0.5f), fontSize = 11.ssp())
                         Spacer(modifier = Modifier.width(6.sdp()))
                         Text(
                             text = formatTime(log.date),
-                            color = Color.White.copy(alpha = 0.5f),
+                            color = AppTheme.colors.textSecondary,
                             fontSize = 12.ssp()
                         )
                         if (log.duration.isNotEmpty() && log.duration != "0s") {
                             Spacer(modifier = Modifier.width(6.sdp()))
-                            Text("•", color = Color.White.copy(alpha = 0.2f), fontSize = 10.ssp())
+                            Text("•", color = AppTheme.colors.textSecondary.copy(alpha = 0.5f), fontSize = 10.ssp())
                             Spacer(modifier = Modifier.width(6.sdp()))
                             Text(
                                 text = log.duration,
-                                color = Color.White.copy(alpha = 0.5f),
+                                color = AppTheme.colors.textSecondary,
                                 fontSize = 12.ssp()
                             )
                         }
@@ -1128,7 +554,7 @@ fun RecentCallItem(
                     Icon(
                         Icons.Default.Call,
                         contentDescription = "Call",
-                        tint = Color.White,
+                        tint = AppTheme.colors.textPrimary,
                         modifier = Modifier.size(24.sdp())
                     )
                 }
@@ -1138,23 +564,17 @@ fun RecentCallItem(
             DropdownMenu(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false },
-                modifier = Modifier.background(Color(0xFF1E293B))
+                modifier = Modifier.background(AppTheme.colors.surface)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Delete Log", color = Color.White) },
-                    onClick = {
-                        showMenu = false
-                        onDelete()
-                    },
+                    text = { Text("Delete Log", color = AppTheme.colors.textPrimary) },
+                    onClick = { showMenu = false; onDelete() },
                     leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color(0xFFEF4444)) }
                 )
                 DropdownMenuItem(
-                    text = { Text("Block Number", color = Color.White) },
-                    onClick = {
-                        showMenu = false
-                        onBlock()
-                    },
-                    leadingIcon = { Icon(Icons.Default.Block, null, tint = Color.White) }
+                    text = { Text("Block Number", color = AppTheme.colors.textPrimary) },
+                    onClick = { showMenu = false; onBlock() },
+                    leadingIcon = { Icon(Icons.Default.Block, null, tint = AppTheme.colors.textPrimary) }
                 )
             }
         }

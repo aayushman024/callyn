@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import com.mnivesh.callyn.MainActivity
 import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.ui.theme.AppTheme
 
 // --- Access Lists (Unchanged) ---
 private val ADMIN_EMAILS = hashSetOf(
@@ -68,7 +69,9 @@ fun AppDrawer(
     onShowRequests: () -> Unit,
     onShowUserDetails: () -> Unit,
     onShowDirectory: () -> Unit,
-    onShowCallLogs: () -> Unit
+    onShowCallLogs: () -> Unit,
+    isDarkTheme: Boolean,
+    onThemeToggle: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val authManager = remember { AuthManager(context) }
@@ -99,17 +102,15 @@ fun AppDrawer(
             )
         }
 
-        val callLogLabel = if (department == "Management" || ADMIN_EMAILS.contains(email)) "View Call Logs" else "View Call Notes"
-        val callLogIcon = if (department == "Management" || ADMIN_EMAILS.contains(email)) Icons.Default.List else Icons.Default.EditNote
-        val callLogColor = if (department == "Management" || ADMIN_EMAILS.contains(email)) Color(0xFF34D399) else Color(0xFF673AB7)
+        if (department != "GUEST") {
+            val callLogLabel = if (department == "Management" || ADMIN_EMAILS.contains(email)) "View Call Logs" else "View Call Notes"
+            val callLogIcon = if (department == "Management" || ADMIN_EMAILS.contains(email)) Icons.Default.List else Icons.Default.EditNote
+            val callLogColor = if (department == "Management" || ADMIN_EMAILS.contains(email)) Color(0xFF34D399) else Color(0xFF673AB7)
 
-        list.add(
-            DrawerItemType.Action(callLogLabel, callLogIcon, callLogColor, onClick = onShowCallLogs)
-        )
-
-//        list.add(
-//            DrawerItemType.Action("Personal Contact Requests", Icons.Default.AssignmentInd, Color(0xFFFACC15), onClick = onShowRequests)
-//        )
+            list.add(
+                DrawerItemType.Action(callLogLabel, callLogIcon, callLogColor, onClick = onShowCallLogs)
+            )
+        }
 
         list.add(DrawerItemType.Divider)
         list.add(
@@ -127,10 +128,9 @@ fun AppDrawer(
     }
 
     ModalDrawerSheet(
-        drawerContainerColor = Color(0xFF0B1220),
-        drawerContentColor = Color.White,
+        drawerContainerColor = AppTheme.colors.surface,
+        drawerContentColor = AppTheme.colors.textPrimary,
         modifier = Modifier.width(drawerWidth),
-        // Modern rounded edge for the drawer sheet itself
         drawerShape = RoundedCornerShape(topEnd = 24.sdp(), bottomEnd = 24.sdp())
     ) {
         LazyColumn(
@@ -155,11 +155,52 @@ fun AppDrawer(
                         // Soft divider
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 16.sdp(), horizontal = 32.sdp()),
-                            color = Color.White.copy(alpha = 0.04f),
+                            color = AppTheme.colors.border,
                             thickness = 1.sdp()
                         )
                     }
                     is DrawerItemType.VersionInfo -> {
+                        // Add theme toggle before version info at the end
+                        Spacer(modifier = Modifier.height(8.sdp()))
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.sdp(), horizontal = 32.sdp()),
+                            color = AppTheme.colors.border,
+                            thickness = 1.sdp()
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.sdp(), vertical = 8.sdp()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                    contentDescription = "Theme Icon",
+                                    tint = if (isDarkTheme) Color(0xFFFACC15) else Color(0xFFFBBF24),
+                                    modifier = Modifier.size(20.sdp())
+                                )
+                                Spacer(modifier = Modifier.width(16.sdp()))
+                                Text(
+                                    text = "Dark Mode",
+                                    fontSize = 14.ssp(),
+                                    fontWeight = FontWeight.Medium,
+                                    color = AppTheme.colors.textPrimary
+                                )
+                            }
+                            Switch(
+                                checked = isDarkTheme,
+                                onCheckedChange = onThemeToggle,
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color(0xFF3B82F6),
+                                    checkedTrackColor = Color(0xFF3B82F6).copy(alpha = 0.5f),
+                                    uncheckedThumbColor = AppTheme.colors.textSecondary,
+                                    uncheckedTrackColor = AppTheme.colors.border
+                                )
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(16.sdp()))
                         DrawerVersionItem()
                     }
@@ -173,22 +214,20 @@ fun AppDrawer(
 
 @Composable
 private fun DrawerHeader(userName: String, email: String, department: String, workPhone: String) {
-    // 1. Dynamic Gradients for visual pop
-    val headerBg = remember {
-        Brush.verticalGradient(
-            colors = listOf(Color(0xFF1E293B), Color(0xFF0F172A)) // Richer Slate Gradient
-        )
-    }
-
-    val avatarBorder = remember {
-        Brush.sweepGradient(
-            colors = listOf(
-                Color(0xFFF472B6), // Pink
-                Color(0xFF818CF8), // Indigo
-                Color(0xFF34D399), // Emerald
-                Color(0xFFF472B6)  // Wrap back to Pink
+    val isDark = AppTheme.colors.isDark
+    // Dynamic gradient based on theme
+    val headerBg = remember(isDark) {
+        if (isDark) {
+            Brush.verticalGradient(
+                colors = listOf(Color(0xFF1E293B), Color(0xFF0F172A))
             )
-        )
+        } else {
+            Brush.linearGradient(
+                colors = listOf(Color(0xFFE2E8F0), Color(0xFFF1F5F9)),
+                start = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f),
+                end = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
+            )
+        }
     }
 
     Column(
@@ -207,14 +246,14 @@ private fun DrawerHeader(userName: String, email: String, department: String, wo
                     .size(60.sdp())
                     .padding(4.sdp()) // Spacing between border and image
                     .clip(CircleShape)
-                    .background(Color(0xFF212A38)),
+                    .background(AppTheme.colors.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = if (userName.isNotEmpty()) userName.take(1).uppercase() else "U",
                     fontSize = 26.ssp(),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = AppTheme.colors.textPrimary
                 )
             }
 
@@ -228,7 +267,7 @@ private fun DrawerHeader(userName: String, email: String, department: String, wo
                     text = userName,
                     fontSize = 19.ssp(),
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = AppTheme.colors.textPrimary,
                     letterSpacing = 0.5.sp
                 )
 
@@ -238,14 +277,14 @@ private fun DrawerHeader(userName: String, email: String, department: String, wo
                         Icon(
                             imageVector = Icons.Default.Mail,
                             contentDescription = null,
-                            tint = Color(0xFF94A3B8),
+                            tint = AppTheme.colors.textSecondary,
                             modifier = Modifier.size(11.sdp())
                         )
                         Spacer(modifier = Modifier.width(4.sdp()))
                         Text(
                             text = email,
                             fontSize = 12.ssp(),
-                            color = Color(0xFF94A3B8),
+                            color = AppTheme.colors.textSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -257,7 +296,6 @@ private fun DrawerHeader(userName: String, email: String, department: String, wo
         Spacer(modifier = Modifier.height(20.sdp()))
 
         // --- Bottom Row: Info Pills (Department & Phone) ---
-        // We use a Row to place them side-by-side or wrap if needed
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.sdp())
@@ -284,7 +322,7 @@ private fun DrawerHeader(userName: String, email: String, department: String, wo
                         Text(
                             text = department,
                             fontSize = 11.ssp(),
-                            color = Color(0xFFE0E7FF),
+                            color = if (isDark) Color(0xFFE0E7FF) else Color(0xFF3730A3),
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -315,7 +353,7 @@ private fun DrawerHeader(userName: String, email: String, department: String, wo
                         Text(
                             text = workPhone,
                             fontSize = 11.ssp(),
-                            color = Color(0xFFD1FAE5),
+                            color = if (isDark) Color(0xFFD1FAE5) else Color(0xFF065F46),
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -332,11 +370,6 @@ private fun DrawerActionItem(
     item: DrawerItemType.Action,
     onClose: () -> Unit
 ) {
-    // The "Pill" Logic
-    // 1. Container Shape = CircleShape (Stadium/Pill)
-    // 2. Subtle Border for definition
-    // 3. Floating effect via padding
-
     val backgroundColor = if (item.isDestructive)
         item.tint.copy(alpha = 0.1f)
     else
@@ -345,7 +378,7 @@ private fun DrawerActionItem(
     val borderColor = if (item.isDestructive)
         item.tint.copy(alpha = 0.2f)
     else
-        Color.White.copy(alpha = 0.08f)
+        AppTheme.colors.border
 
     Surface(
         onClick = {
@@ -354,8 +387,8 @@ private fun DrawerActionItem(
         },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.sdp(), vertical = 4.sdp()), // Floating margins
-        shape = CircleShape, // Makes it a Pill
+            .padding(horizontal = 16.sdp(), vertical = 4.sdp()),
+        shape = CircleShape,
         color = backgroundColor,
         border = BorderStroke(1.sdp(), borderColor)
     ) {
@@ -365,7 +398,6 @@ private fun DrawerActionItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icon
             Icon(
                 imageVector = item.icon,
                 contentDescription = null,
@@ -375,20 +407,18 @@ private fun DrawerActionItem(
 
             Spacer(modifier = Modifier.width(16.sdp()))
 
-            // Label
             Text(
                 text = item.label,
                 fontSize = 14.ssp(),
                 fontWeight = FontWeight.Medium,
-                color = if (item.isDestructive) item.tint else Color(0xFFE2E8F0),
+                color = if (item.isDestructive) item.tint else AppTheme.colors.textPrimary,
                 modifier = Modifier.weight(1f)
             )
 
-            // Chevron (Visual affordance for navigation)
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.2f),
+                tint = AppTheme.colors.textSecondary.copy(alpha = 0.4f),
                 modifier = Modifier.size(18.sdp())
             )
         }
@@ -400,12 +430,11 @@ private fun DrawerVersionItem() {
     val context = LocalContext.current
 
     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        // Version Pill
         Surface(
             onClick = { (context as? MainActivity)?.manualUpdateCheck() },
             shape = CircleShape,
-            color = Color.Black.copy(alpha = 0.2f),
-            border = BorderStroke(1.sdp(), Color.White.copy(alpha = 0.05f))
+            color = AppTheme.colors.surfaceVariant.copy(alpha = 0.4f),
+            border = BorderStroke(1.sdp(), AppTheme.colors.border)
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.sdp(), vertical = 6.sdp()),
@@ -414,11 +443,10 @@ private fun DrawerVersionItem() {
                 Text(
                     text = "v$version",
                     fontSize = 11.ssp(),
-                    color = Color.White.copy(alpha = 0.4f),
+                    color = AppTheme.colors.textSecondary,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.width(6.sdp()))
-                // Small dot
                 Box(modifier = Modifier.size(4.sdp()).clip(CircleShape).background(Color(0xFF38BDF8)))
             }
         }

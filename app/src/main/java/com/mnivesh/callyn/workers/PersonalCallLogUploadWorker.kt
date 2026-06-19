@@ -17,9 +17,12 @@ class PersonalCallLogUploadWorker(
     override suspend fun doWork(): Result {
         val appContext = applicationContext as CallynApplication
         val repository = appContext.repository
-        val token = AuthManager(appContext).getToken()
+        val authManager = AuthManager(appContext)
+        val token = authManager.getToken()
+        val department = authManager.getDepartment()
 
         if (token.isNullOrBlank()) return Result.failure()
+        if (department == "GUEST") return Result.success()
 
         val pendingLogs = repository.getPendingPersonalLogs()
         if (pendingLogs.isEmpty()) return Result.success()
@@ -45,6 +48,9 @@ class PersonalCallLogUploadWorker(
                 if (response.isSuccessful) {
                     successfulIds.add(log.id)
                 } else {
+                    val errorMsg = "PersonalCallLogUploadWorker upload failed for log ID ${log.id}: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                    FirebaseCrashlytics.getInstance().log(errorMsg)
+                    FirebaseCrashlytics.getInstance().recordException(Exception("PersonalCallLogUploadWorker failed: status code ${response.code()}"))
                     allSuccess = false
                 }
             } catch (e: Exception) {

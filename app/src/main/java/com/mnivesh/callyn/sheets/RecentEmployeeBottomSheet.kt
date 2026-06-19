@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +27,7 @@ import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.launch
@@ -45,9 +46,10 @@ fun RecentEmployeeBottomSheet(
     val context = LocalContext.current
 
     // UI Colors
-    val backgroundColor = Color(0xFF0F172A)
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
     val secondaryColor = Color(0xFF60A5FA) // Blue for Employee
 
     ModalBottomSheet(
@@ -208,7 +210,7 @@ fun RecentEmployeeBottomSheet(
                     }
 
                     Spacer(modifier = Modifier.height(24.sdp()))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    HorizontalDivider(color = AppTheme.colors.border)
                     Spacer(modifier = Modifier.height(16.sdp()))
 
                     // History Title
@@ -232,7 +234,7 @@ fun RecentEmployeeBottomSheet(
                         modifier = Modifier.fillMaxWidth().height(100.sdp()),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                        CircularProgressIndicator(color = textSecondary)
                     }
                 }
             } else if (history.isNotEmpty()) {
@@ -243,7 +245,7 @@ fun RecentEmployeeBottomSheet(
                 item {
                     Text(
                         "No recent history",
-                        color = Color.White.copy(alpha = 0.3f),
+                        color = textSecondary.copy(alpha = 0.5f),
                         fontSize = 12.ssp(),
                         modifier = Modifier.padding(20.sdp())
                     )

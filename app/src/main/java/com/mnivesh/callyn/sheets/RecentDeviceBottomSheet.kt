@@ -11,6 +11,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -32,7 +33,7 @@ import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.Dispatchers
@@ -87,11 +88,16 @@ fun RecentDeviceBottomSheet(
         }
     }
 
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0F172A),
-        contentColor = Color.White
+        containerColor = backgroundColor,
+        contentColor = textPrimary
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
@@ -144,7 +150,7 @@ fun RecentDeviceBottomSheet(
                                 Icon(
                                     Icons.Default.Edit,
                                     "Edit",
-                                    tint = Color.White.copy(alpha = 0.7f)
+                                    tint = textSecondary
                                 )
                             }
 
@@ -166,7 +172,7 @@ fun RecentDeviceBottomSheet(
                                 Icon(
                                     Icons.Default.OpenInNew,
                                     "View",
-                                    tint = Color.White.copy(alpha = 0.7f)
+                                    tint = textSecondary
                                 )
                             }
                         }
@@ -180,14 +186,14 @@ fun RecentDeviceBottomSheet(
                         text = contact.name,
                         fontSize = 24.ssp(),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = textPrimary
                     )
                 } else {
                     Text(
                         text = number,
                         fontSize = 24.ssp(),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = textPrimary
                     )
                 }
 
@@ -218,7 +224,7 @@ fun RecentDeviceBottomSheet(
                         Text(
                             number,
                             fontSize = 16.ssp(),
-                            color = Color.White.copy(alpha = 0.7f)
+                            color = textSecondary
                         )
                         Spacer(modifier = Modifier.width(10.sdp()))
                     }
@@ -227,7 +233,7 @@ fun RecentDeviceBottomSheet(
                         Text(
                             "Copy Number",
                             fontSize = 14.ssp(),
-                            color = Color.White.copy(alpha = 0.5f)
+                            color = textSecondary.copy(alpha = 0.8f)
                         )
                         Spacer(modifier = Modifier.width(8.sdp()))
                     }
@@ -235,7 +241,7 @@ fun RecentDeviceBottomSheet(
                     Icon(
                         Icons.Default.ContentCopy,
                         "Copy",
-                        tint = Color.White.copy(alpha = 0.6f),
+                        tint = textSecondary,
                         modifier = Modifier
                             .size(18.sdp())
                             .clickable {
@@ -351,11 +357,11 @@ fun RecentDeviceBottomSheet(
                 }
 
                 Spacer(modifier = Modifier.height(24.sdp()))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                HorizontalDivider(color = AppTheme.colors.border)
                 Spacer(modifier = Modifier.height(16.sdp()))
                 Text(
                     text = "Previous Calls",
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = textSecondary,
                     fontSize = 14.ssp(),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.Start)
@@ -371,7 +377,7 @@ fun RecentDeviceBottomSheet(
                             .height(100.sdp()),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                        CircularProgressIndicator(color = textSecondary)
                     }
                 } else if (history.isNotEmpty()) {
                     LazyColumn(modifier = Modifier.heightIn(max = 250.sdp())) {
@@ -382,7 +388,7 @@ fun RecentDeviceBottomSheet(
                 } else {
                     Text(
                         "No recent history",
-                        color = Color.White.copy(alpha = 0.3f),
+                        color = textSecondary.copy(alpha = 0.5f),
                         fontSize = 12.ssp(),
                         modifier = Modifier
                             .align(Alignment.CenterHorizontally)

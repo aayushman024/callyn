@@ -49,10 +49,12 @@ import com.mnivesh.callyn.viewmodels.CallLogsUiState
 import com.mnivesh.callyn.viewmodels.CallLogsViewModel
 import com.mnivesh.callyn.api.CallLogResponse
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.ui.theme.AppTheme
 import java.text.SimpleDateFormat
 import java.util.*
 import android.content.Intent
 import android.net.Uri
+import com.mnivesh.callyn.viewmodels.formatDuration
 
 // --- Color Palette ---
 val BackgroundColor = Color(0xFF0F172A)
@@ -228,6 +230,12 @@ fun CallLogsContent(
     onToggleShowNotes: (Boolean) -> Unit,
     onSearch: () -> Unit
 ) {
+    val colors = AppTheme.colors
+    val BackgroundColor = colors.background
+    val CardColor = colors.cardBackground
+    val SubtextColor = colors.textSecondary
+    val NotesPopupBg = colors.surface
+
     val isUserListReady = userList.isNotEmpty()
     var selectedTypeFilter by remember { mutableStateOf("All") }
 
@@ -267,8 +275,8 @@ fun CallLogsContent(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = BackgroundColor,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    titleContentColor = colors.textPrimary,
+                    navigationIconContentColor = colors.textPrimary
                 ),
                 actions = {
                     val context = LocalContext.current
@@ -285,8 +293,9 @@ fun CallLogsContent(
                                 .background(PrimaryColor.copy(alpha = 0.15f))
                                 .border(1.sdp(), PrimaryColor, RoundedCornerShape(50))
                                 .clickable {
+                                    val timestamp = System.currentTimeMillis()
                                     val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        data = Uri.parse("mniveshcentral://module?name=Callyn%20Analytics")
+                                        data = Uri.parse("mniveshcentral://module?name=Callyn%20Analytics&t=$timestamp")
                                     }
                                     context.startActivity(intent)
                                 }
@@ -478,6 +487,11 @@ fun FilterSection(
     onToggleShowNotes: (Boolean) -> Unit,
     onSearch: () -> Unit
 ) {
+    val colors = AppTheme.colors
+    val CardColor = colors.cardBackground
+    val SubtextColor = colors.textSecondary
+    val BackgroundColor = colors.background
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -487,7 +501,7 @@ fun FilterSection(
             .padding(16.sdp())
     ) {
         if (isPowerUser) {
-            Text("Filter Logs", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.ssp())
+            Text("Filter Logs", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 18.ssp())
             Spacer(modifier = Modifier.height(16.sdp()))
 
             // Username Dropdown
@@ -517,7 +531,7 @@ fun FilterSection(
                     )
                     userList.forEach { name ->
                         DropdownMenuItem(
-                            text = { Text(name, color = Color.White) },
+                            text = { Text(name, color = colors.textPrimary) },
                             onClick = { onUserSelected(name); onToggleDropdown(false) }
                         )
                     }
@@ -525,7 +539,7 @@ fun FilterSection(
             }
             Spacer(modifier = Modifier.height(12.sdp()))
         } else {
-            Text("My Log Book", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 18.ssp())
+            Text("My Log Book", color = colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 18.ssp())
             Spacer(modifier = Modifier.height(16.sdp()))
         }
 
@@ -606,7 +620,7 @@ fun FilterSection(
             ) {
                 Text(
                     text = "Show calls with notes",
-                    color = Color.White,
+                    color = colors.textPrimary,
                     fontSize = 15.ssp(),
                     fontWeight = FontWeight.Medium
                 )
@@ -641,12 +655,17 @@ fun FilterSection(
 
 @Composable
 fun ManagementCallLogCard(log: CallLogResponse) {
+    val colors = AppTheme.colors
+    val CardColor = colors.cardBackground
+    val SubtextColor = colors.textSecondary
+    val PersonalSubtleBg = if (colors.isDark) Color(0xFF132522) else Color(0xFFE2F0EC)
+
     val isPersonal = (log.isWork == false)
     val hasNotes = !log.notes.isNullOrBlank()
     var showNotesPopup by remember { mutableStateOf(false) }
 
     val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
-    val cardBorder = if (isPersonal) BorderStroke(1.sdp(), PersonalBorder.copy(alpha = 0.3f)) else null
+    val cardBorder = if (isPersonal) BorderStroke(1.sdp(), PersonalBorder.copy(alpha = 0.3f)) else (if (colors.isDark) null else BorderStroke(1.sdp(), colors.border))
 
     val (typeIcon, typeColor, typeBg) = getCallTypeStyles(log.type)
     val dateDisplay = remember(log.timestamp) { formatPrettyDate(log.timestamp) }
@@ -670,11 +689,11 @@ fun ManagementCallLogCard(log: CallLogResponse) {
 
                 Column(modifier = Modifier.weight(1f)) {
                     if (isPersonal) {
-                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.ssp())
+                        Text("Personal Call", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.ssp())
                     } else {
                         Text(
                             text = log.callerName.ifBlank { "Unknown Caller" },
-                            color = Color.White,
+                            color = colors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.ssp(),
                             maxLines = 1,
@@ -716,7 +735,7 @@ fun ManagementCallLogCard(log: CallLogResponse) {
             }
 
             Spacer(modifier = Modifier.height(16.sdp()))
-            HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+            HorizontalDivider(color = colors.border)
             Spacer(modifier = Modifier.height(12.sdp()))
 
             // Bottom Row (Includes Uploaded By)
@@ -745,11 +764,16 @@ fun ManagementCallLogCard(log: CallLogResponse) {
 
 @Composable
 fun StandardCallLogCard(log: CallLogResponse) {
+    val colors = AppTheme.colors
+    val CardColor = colors.cardBackground
+    val SubtextColor = colors.textSecondary
+    val PersonalSubtleBg = if (colors.isDark) Color(0xFF132522) else Color(0xFFE2F0EC)
+
     val isPersonal = (log.isWork == false)
     val hasNotes = !log.notes.isNullOrBlank()
 
     val cardBackground = if (isPersonal) PersonalSubtleBg else CardColor
-    val cardBorder = if (isPersonal) BorderStroke(1.sdp(), PersonalBorder.copy(alpha = 0.3f)) else null
+    val cardBorder = if (isPersonal) BorderStroke(1.sdp(), PersonalBorder.copy(alpha = 0.3f)) else (if (colors.isDark) null else BorderStroke(1.sdp(), colors.border))
     val (typeIcon, typeColor, typeBg) = getCallTypeStyles(log.type)
     val dateDisplay = remember(log.timestamp) { formatPrettyDate(log.timestamp) }
 
@@ -773,11 +797,11 @@ fun StandardCallLogCard(log: CallLogResponse) {
 
                 Column(modifier = Modifier.weight(1f)) {
                     if (isPersonal) {
-                        Text("Personal Call", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.ssp())
+                        Text("Personal Call", color = colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.ssp())
                     } else {
                         Text(
                             text = log.callerName.ifBlank { "Unknown Caller" },
-                            color = Color.White,
+                            color = colors.textPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.ssp(),
                             maxLines = 1,
@@ -798,20 +822,20 @@ fun StandardCallLogCard(log: CallLogResponse) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF334155).copy(alpha = 0.5f), RoundedCornerShape(8.sdp()))
+                        .background(colors.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.sdp()))
                         .border(1.sdp(), NotesHighVisColor.copy(alpha = 0.3f), RoundedCornerShape(8.sdp()))
                         .padding(12.sdp())
                 ) {
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.ChatBubbleOutline, null, tint = NotesHighVisColor, modifier = Modifier.size(12.sdp()))
+                            Icon(Icons.Default.ChatBubbleOutline, null, tint = NotesHighVisColor, modifier = Modifier.size(14.sdp()))
                             Spacer(modifier = Modifier.width(6.sdp()))
                             Text("CALL NOTES", color = NotesHighVisColor, fontSize = 11.ssp(), fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(4.sdp()))
                         Text(
                             text = log.notes ?: "",
-                            color = Color.White.copy(alpha = 0.9f),
+                            color = colors.textPrimary,
                             fontSize = 14.ssp(),
                             lineHeight = 20.ssp()
                         )
@@ -820,7 +844,7 @@ fun StandardCallLogCard(log: CallLogResponse) {
             }
 
             Spacer(modifier = Modifier.height(16.sdp()))
-            HorizontalDivider(color = Color.White.copy(alpha = 0.05f))
+            HorizontalDivider(color = colors.border)
             Spacer(modifier = Modifier.height(12.sdp()))
 
             // Bottom Row (No Uploaded By)
@@ -839,22 +863,37 @@ fun StandardCallLogCard(log: CallLogResponse) {
 
 @Composable
 fun renderTags(log: CallLogResponse) {
+    val colors = AppTheme.colors
+    val isDark = colors.isDark
+    
+    val rolePillText = if (isDark) Color(0xFFC7D2FE) else Color(0xFF4F46E5)
+    val rolePillBg = if (isDark) Color(0xFF6366F1).copy(alpha = 0.2f) else Color(0xFF6366F1).copy(alpha = 0.12f)
+    
+    val deptPillText = if (isDark) Color(0xFF60A5FA) else Color(0xFF1D4ED8)
+    val deptPillBg = if (isDark) Color(0xFF60A5FA).copy(alpha = 0.15f) else Color(0xFF1D4ED8).copy(alpha = 0.1f)
+    
+    val fhPillText = if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
+    val fhPillBg = if (isDark) Color(0xFFFCD34D).copy(alpha = 0.15f) else Color(0xFFB45309).copy(alpha = 0.1f)
+
     val isEmployee = log.rshipManagerName?.equals("Employee", ignoreCase = true) == true
     if (isEmployee) {
-        ContainerPill("Employee", RolePillText, RolePillBg)
+        ContainerPill("Employee", rolePillText, rolePillBg)
         if (!log.familyHead.isNullOrBlank()) {
-            ContainerPill("Dept: ${log.familyHead}", Color(0xFF60A5FA), Color(0xFF60A5FA).copy(alpha = 0.15f))
+            ContainerPill("Dept: ${log.familyHead}", deptPillText, deptPillBg)
         }
     } else {
-        ContainerPill("RM: ${log.rshipManagerName ?: "-"}", RolePillText, RolePillBg)
+        ContainerPill("RM: ${log.rshipManagerName ?: "-"}", rolePillText, rolePillBg)
         if (!log.familyHead.isNullOrBlank()) {
-            ContainerPill("FH: ${log.familyHead}", Color(0xFFFCD34D), Color(0xFFFCD34D).copy(alpha = 0.15f))
+            ContainerPill("FH: ${log.familyHead}", fhPillText, fhPillBg)
         }
     }
 }
 
 @Composable
 fun SimAndDurationRow(log: CallLogResponse) {
+    val colors = AppTheme.colors
+    val SubtextColor = colors.textSecondary
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Default.SimCard, null, tint = SubtextColor, modifier = Modifier.size(14.sdp()))
         Spacer(modifier = Modifier.width(4.sdp()))
@@ -870,6 +909,9 @@ fun SimAndDurationRow(log: CallLogResponse) {
 
 @Composable
 fun NotesPopup(notes: String, onDismiss: () -> Unit) {
+    val colors = AppTheme.colors
+    val NotesPopupBg = colors.surface
+
     Popup(
         popupPositionProvider = remember {
             object : PopupPositionProvider {
@@ -899,10 +941,10 @@ fun NotesPopup(notes: String, onDismiss: () -> Unit) {
             ) {
                 Text("Call Notes:", color = NotesHighVisColor, fontSize = 14.ssp(), fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.sdp()))
-                HorizontalDivider(color = Color.White.copy(alpha = 0.2f), thickness = 1.sdp())
+                HorizontalDivider(color = colors.border, thickness = 1.sdp())
                 Spacer(modifier = Modifier.height(10.sdp()))
                 Box(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    Text(notes, color = Color.White.copy(alpha = 0.95f), fontSize = 13.ssp(), lineHeight = 20.ssp())
+                    Text(notes, color = colors.textPrimary, fontSize = 13.ssp(), lineHeight = 20.ssp())
                 }
             }
             Canvas(modifier = Modifier.size(width = 20.sdp(), height = 10.sdp())) {
@@ -941,6 +983,9 @@ fun ContainerPill(text: String, color: Color, bgColor: Color) {
 
 @Composable
 fun EmptyStateMessage(msg: String, isError: Boolean = false) {
+    val colors = AppTheme.colors
+    val SubtextColor = colors.textSecondary
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 60.sdp()),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -958,12 +1003,12 @@ fun EmptyStateMessage(msg: String, isError: Boolean = false) {
 
 @Composable
 fun filterTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
+    focusedTextColor = AppTheme.colors.textPrimary,
+    unfocusedTextColor = AppTheme.colors.textPrimary,
     focusedBorderColor = PrimaryColor,
-    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+    unfocusedBorderColor = AppTheme.colors.border,
     focusedLabelColor = PrimaryColor,
-    unfocusedLabelColor = SubtextColor
+    unfocusedLabelColor = AppTheme.colors.textSecondary
 )
 
 private fun formatDuration(seconds: Int): String {
@@ -1014,6 +1059,10 @@ fun QuickFilterRow(
 
 @Composable
 fun FilterChip(icon: ImageVector, isSelected: Boolean, selectedColor: Color, onClick: () -> Unit) {
+    val colors = AppTheme.colors
+    val CardColor = colors.cardBackground
+    val SubtextColor = colors.textSecondary
+
     val backgroundColor = if (isSelected) selectedColor.copy(alpha = 0.2f) else CardColor
     val borderColor = if (isSelected) selectedColor else Color.Transparent
     val contentColor = if (isSelected) selectedColor else SubtextColor

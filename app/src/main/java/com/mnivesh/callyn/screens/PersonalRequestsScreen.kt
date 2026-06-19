@@ -1,5 +1,6 @@
 package com.mnivesh.callyn.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,10 +67,10 @@ fun PersonalRequestsScreen(
         containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text("Personal Contact Requests", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.ssp()) },
+                title = { Text("Personal Contact Requests", color = AppTheme.colors.textPrimary, fontWeight = FontWeight.Bold, fontSize = 20.ssp()) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = AppTheme.colors.textPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -79,7 +81,13 @@ fun PersonalRequestsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF1E293B)))
+                    Brush.verticalGradient(
+                        if (AppTheme.colors.isDark) {
+                            listOf(Color(0xFF0F172A), Color(0xFF1E293B))
+                        } else {
+                            listOf(Color(0xFFF8FAFC), Color(0xFFE2E8F0))
+                        }
+                    )
                 )
                 .padding(innerPadding)
         ) {
@@ -89,7 +97,7 @@ fun PersonalRequestsScreen(
                 }
             } else if (uiState.requests.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No pending requests", color = Color.White.copy(alpha = 0.5f), fontSize = 16.ssp())
+                    Text("No pending requests", color = AppTheme.colors.textSecondary, fontSize = 16.ssp())
                 }
             } else {
                 LazyColumn(
@@ -131,9 +139,9 @@ fun PersonalRequestsScreen(
                     actionType = null
                 }
             },
-            containerColor = Color(0xFF1E293B),
-            title = { Text(title, color = Color.White, fontWeight = FontWeight.Bold) },
-            text = { Text(message, color = Color.White.copy(alpha = 0.8f)) },
+            containerColor = AppTheme.colors.surface,
+            title = { Text(title, color = AppTheme.colors.textPrimary, fontWeight = FontWeight.Bold) },
+            text = { Text(message, color = AppTheme.colors.textSecondary) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -156,7 +164,7 @@ fun PersonalRequestsScreen(
                         containerColor = if (isApprove) Color(0xFF10B981) else Color(0xFFEF4444)
                     )
                 ) {
-                    Text(if (isApprove) "Approve" else "Reject")
+                    Text(if (isApprove) "Approve" else "Reject", color = Color.White)
                 }
             },
             dismissButton = {
@@ -164,7 +172,7 @@ fun PersonalRequestsScreen(
                     actionRequest = null
                     actionType = null
                 }) {
-                    Text("Cancel", color = Color.White.copy(alpha = 0.6f))
+                    Text("Cancel", color = AppTheme.colors.textSecondary)
                 }
             }
         )
@@ -178,10 +186,12 @@ fun RequestCard(
     onApprove: () -> Unit,
     onDeny: () -> Unit
 ) {
+    val isDark = AppTheme.colors.isDark
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.sdp()),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f))
+        colors = CardDefaults.cardColors(containerColor = AppTheme.colors.cardBackground),
+        border = if (isDark) null else BorderStroke(1.sdp(), AppTheme.colors.border)
     ) {
         Column(modifier = Modifier.padding(20.sdp())) {
             // Header: RM Info
@@ -202,7 +212,7 @@ fun RequestCard(
                 }
                 Spacer(modifier = Modifier.width(16.sdp()))
                 Column {
-                    Text(text = request.requestedBy, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.ssp())
+                    Text(text = request.requestedBy, color = AppTheme.colors.textPrimary, fontWeight = FontWeight.SemiBold, fontSize = 16.ssp())
                 }
             }
 
@@ -211,13 +221,13 @@ fun RequestCard(
             // Client Info
             Text(
                 text = "Requesting access for:",
-                color = Color.White.copy(alpha = 0.5f),
+                color = AppTheme.colors.textSecondary,
                 fontSize = 12.ssp(),
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = request.requestedContact,
-                color = Color.White,
+                color = AppTheme.colors.textPrimary,
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.ssp(),
                 modifier = Modifier.padding(top = 4.sdp())
@@ -229,15 +239,15 @@ fun RequestCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.sdp()))
+                    .background(AppTheme.colors.surfaceVariant, RoundedCornerShape(12.sdp()))
                     .padding(16.sdp())
             ) {
                 Column {
-                    Text(text = "Reason:", color = Color.White.copy(alpha = 0.4f), fontSize = 11.ssp(), fontWeight = FontWeight.Bold)
+                    Text(text = "Reason:", color = AppTheme.colors.textSecondary.copy(alpha = 0.8f), fontSize = 11.ssp(), fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(4.sdp()))
                     Text(
                         text = "\"${request.reason}\"",
-                        color = Color.White.copy(alpha = 0.9f),
+                        color = AppTheme.colors.textPrimary,
                         fontSize = 14.ssp(),
                         fontStyle = FontStyle.Italic,
                         lineHeight = 20.ssp()
@@ -274,7 +284,7 @@ fun RequestCard(
                     ) {
                         Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(18.sdp()))
                         Spacer(modifier = Modifier.width(8.sdp()))
-                        Text("Approve", fontWeight = FontWeight.SemiBold)
+                        Text("Approve", fontWeight = FontWeight.SemiBold, color = Color.White)
                     }
                 }
             }

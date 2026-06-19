@@ -54,19 +54,72 @@ import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.delay
+import androidx.compose.material.icons.filled.MoreVert
+import com.mnivesh.callyn.managers.AuthManager
 
 @Composable
-fun ZohoLoginScreen() {
+fun ZohoLoginScreen(onGuestLoginSuccess: () -> Unit = {}) {
     val context = LocalContext.current
     var isLoading by remember { mutableStateOf(false) }
     var showPermissionsDialog by remember { mutableStateOf(false) }
+    var pendingLogin by remember { mutableStateOf(false) }
+    var pendingGuestLogin by remember { mutableStateOf(false) }
+    var showGuestDialog by remember { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     // Start entrance anims immediately
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
 
+    val executeLogin = {
+        val timestampMillis = System.currentTimeMillis()
+        val ssoUrl = "mniveshcentral://sso/request?callback=callyn://auth/callback&t=$timestampMillis"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ssoUrl)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Please install mNivesh Central first", Toast.LENGTH_LONG).show()
+        }
+    }
+
     if (showPermissionsDialog) {
-        PermissionsDialog(onDismiss = { showPermissionsDialog = false })
+        PermissionsDialog(
+            onAgree = {
+                showPermissionsDialog = false
+                if (pendingLogin) {
+                    executeLogin()
+                    pendingLogin = false
+                } else if (pendingGuestLogin) {
+                    val authManager = AuthManager(context)
+                    authManager.saveToken("GUEST_TOKEN")
+                    authManager.saveUserName("PlayStore Reviewer")
+                    authManager.saveUserEmail("guest@niveshonline.com")
+                    authManager.saveDepartment("GUEST")
+                    authManager.setSetupCompleted(true)
+                    onGuestLoginSuccess()
+                    pendingGuestLogin = false
+                }
+            },
+            onDisagree = {
+                showPermissionsDialog = false
+                pendingLogin = false
+                pendingGuestLogin = false
+            }
+        )
+    }
+
+    if (showGuestDialog) {
+        GuestLoginDialog(
+            onDismiss = { showGuestDialog = false },
+            onLoginSuccess = {
+                showGuestDialog = false
+                pendingGuestLogin = true
+                showPermissionsDialog = true
+            }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -88,6 +141,27 @@ fun ZohoLoginScreen() {
                 enter = fadeIn(tween(1000)) + slideInVertically(initialOffsetY = { 50 })
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Top Bar for 3-dot menu
+                    Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.sdp()), contentAlignment = Alignment.TopStart) {
+                        Box {
+                            IconButton(onClick = { menuExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Menu", tint = Color.White)
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                                modifier = Modifier.background(Color(0xFF1E293B))
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Guest Login", color = Color.White) },
+                                    onClick = {
+                                        menuExpanded = false
+                                        showGuestDialog = true
+                                    }
+                                )
+                            }
+                        }
+                    }
 
                     // 1. mNivesh Logo (Top)
                     Image(
@@ -160,16 +234,8 @@ fun ZohoLoginScreen() {
                     LoginButton(
                         isLoading = isLoading,
                         onClick = {
-                            val ssoUrl = "mniveshcentral://sso/request?callback=callyn://auth/callback"
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ssoUrl)).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-
-                            try {
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Please install mNivesh Central first", Toast.LENGTH_LONG).show()
-                            }
+                            pendingLogin = true
+                            showPermissionsDialog = true
                         }
                     )
 
@@ -186,7 +252,10 @@ fun ZohoLoginScreen() {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.sdp()))
-                                .clickable { showPermissionsDialog = true }
+                                .clickable {
+                                    pendingLogin = false
+                                    showPermissionsDialog = true
+                                }
                                 .padding(vertical = 8.sdp(), horizontal = 12.sdp())
                                 .background(Color.White.copy(alpha = 0.05f)) // Subtle background
                         ) {
@@ -229,11 +298,108 @@ fun ZohoLoginScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GuestLoginDialog(onDismiss: () -> Unit, onLoginSuccess: () -> Unit) {
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.sdp()),
+            color = Color(0xFF1E293B),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(24.sdp()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Guest Login",
+                    fontSize = 20.ssp(),
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(bottom = 16.sdp())
+                )
+                
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it; isError = false },
+                    label = { Text("Username") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF818CF8),
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = Color(0xFF818CF8),
+                        unfocusedLabelColor = Color.Gray
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.sdp()))
+                
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it; isError = false },
+                    label = { Text("Password") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF818CF8),
+                        unfocusedBorderColor = Color.Gray,
+                        focusedLabelColor = Color(0xFF818CF8),
+                        unfocusedLabelColor = Color.Gray
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                if (isError) {
+                    Text(
+                        text = "Invalid username or password",
+                        color = Color.Red,
+                        fontSize = 12.ssp(),
+                        modifier = Modifier.padding(top = 8.sdp())
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(24.sdp()))
+                
+                Row(
+                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel", color = Color.Gray)
+                    }
+                    Spacer(modifier = Modifier.width(8.sdp()))
+                    Button(
+                        onClick = {
+                            if (username.trim() == "guest@niveshonline.com" && password == "mnivesh@callynGuest24") {
+                                onLoginSuccess()
+                            } else {
+                                isError = true
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                    ) {
+                        Text("Login")
+                    }
+                }
+            }
+        }
+    }
+}
+
 // --- Permissions Dialog ---
 @Composable
-fun PermissionsDialog(onDismiss: () -> Unit) {
+fun PermissionsDialog(onAgree: () -> Unit, onDisagree: () -> Unit) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = onDisagree,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -252,7 +418,7 @@ fun PermissionsDialog(onDismiss: () -> Unit) {
                 // Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 24.sdp())
+                    modifier = Modifier.padding(bottom = 16.sdp())
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.Shield,
@@ -262,18 +428,20 @@ fun PermissionsDialog(onDismiss: () -> Unit) {
                     )
                     Spacer(modifier = Modifier.width(12.sdp()))
                     Text(
-                        text = "App Permissions",
+                        text = "App Permissions & Data",
                         fontSize = 22.ssp(),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                 }
 
+                // Prominent Disclosure Text
                 Text(
-                    text = "Callyn requires specific permissions to function as your default dialer and business tool. Only required data is securely synced with internal company servers.",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.ssp(),
-                    lineHeight = 20.ssp(),
+                    text = "Callyn collects call logs and work contacts to sync with the internal servers to provide seamless CRM synchronization and business communication features.",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 15.ssp(),
+                    fontWeight = FontWeight.Medium,
+                    lineHeight = 22.ssp(),
                     modifier = Modifier.padding(bottom = 24.sdp())
                 )
 
@@ -328,23 +496,53 @@ fun PermissionsDialog(onDismiss: () -> Unit) {
                     )
                 }
 
+                Spacer(modifier = Modifier.height(16.sdp()))
 
-                Spacer(modifier = Modifier.height(24.sdp()))
-
-                // Close Button
-                Button(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.sdp()),
-                    shape = RoundedCornerShape(12.sdp()),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF334155),
-                        contentColor = Color.White
-                    )
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.sdp())
                 ) {
-                    Text("Understood", fontWeight = FontWeight.SemiBold)
+                    Button(
+                        onClick = onDisagree,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.sdp()),
+                        shape = RoundedCornerShape(12.sdp()),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF334155),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Disagree", fontWeight = FontWeight.SemiBold)
+                    }
+                    
+                    Button(
+                        onClick = onAgree,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.sdp()),
+                        shape = RoundedCornerShape(12.sdp()),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF4F46E5),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Agree", fontWeight = FontWeight.SemiBold)
+                    }
                 }
+
+                // Privacy Policy Link
+                Text(
+                    text = "Privacy Policy",
+                    color = Color(0xFF818CF8),
+                    fontSize = 13.ssp(),
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(top = 16.sdp(), bottom = 8.sdp())
+                        .clickable { uriHandler.openUri("https://www.niveshonline.com/privacy-policy") }
+                )
             }
         }
     }

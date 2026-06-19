@@ -1,6 +1,7 @@
 package com.mnivesh.callyn.screens.sheets
 
 import androidx.compose.foundation.background
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,7 +23,7 @@ import com.mnivesh.callyn.components.getColorForName
 import com.mnivesh.callyn.components.getInitials
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.SimManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 
@@ -38,11 +39,16 @@ fun RecentWorkBottomSheet(
     onCall: (Int?) -> Unit
 ) {
 
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = Color(0xFF0F172A),
-        contentColor = Color.White
+        containerColor = backgroundColor,
+        contentColor = textPrimary
     ) {
         // Changed Column to LazyColumn to enable full-screen scrolling
         LazyColumn(
@@ -82,7 +88,7 @@ fun RecentWorkBottomSheet(
                         contact.name,
                         fontSize = 21.ssp(),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = textPrimary
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -222,14 +228,14 @@ fun RecentWorkBottomSheet(
                     }
 
                     Spacer(modifier = Modifier.height(24.sdp()))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                    HorizontalDivider(color = AppTheme.colors.border)
                     Spacer(modifier = Modifier.height(16.sdp()))
 
                     // Header text aligned to start
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = "Previous Calls",
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = textSecondary,
                             fontSize = 14.ssp(),
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.align(Alignment.CenterStart)
@@ -248,7 +254,7 @@ fun RecentWorkBottomSheet(
                             .height(100.sdp()),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Color.White.copy(alpha = 0.5f))
+                        CircularProgressIndicator(color = textSecondary)
                     }
                 }
             } else if (history.isNotEmpty()) {
@@ -264,7 +270,7 @@ fun RecentWorkBottomSheet(
                     ) {
                         Text(
                             "No recent history",
-                            color = Color.White.copy(alpha = 0.3f),
+                            color = textSecondary.copy(alpha = 0.5f),
                             fontSize = 12.ssp(),
                             modifier = Modifier.padding(20.sdp())
                         )

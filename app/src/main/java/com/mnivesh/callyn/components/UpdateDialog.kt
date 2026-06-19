@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
+import com.mnivesh.callyn.ui.theme.AppTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
@@ -62,6 +63,8 @@ fun UpdateDialog(
     onUpdate: (String) -> Unit
 ) {
 
+    val isDark = AppTheme.colors.isDark
+
     val properties =
         if (isHardUpdate)
             DialogProperties(false, false, usePlatformDefaultWidth = false)
@@ -90,10 +93,10 @@ fun UpdateDialog(
                 .fillMaxWidth()
                 .padding(16.sdp()),
             shape = RoundedCornerShape(24.sdp()),
-            color = Color(0xFF0F172A).copy(alpha = 0.98f),
+            color = AppTheme.colors.surface,
             border = BorderStroke(
                 1.sdp(),
-                Color.White.copy(alpha = 0.1f)
+                AppTheme.colors.border
             )
         ) {
 
@@ -136,7 +139,7 @@ fun UpdateDialog(
                         text = "Update Available",
                         fontSize = 22.ssp(),
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = AppTheme.colors.textPrimary
                     )
                 }
 
@@ -147,7 +150,7 @@ fun UpdateDialog(
                 Text(
                     text = "Version $latestVersion is available.",
                     fontSize = 15.ssp(),
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = AppTheme.colors.textSecondary
                 )
 
                 Spacer(modifier = Modifier.height(20.sdp()))
@@ -160,7 +163,7 @@ fun UpdateDialog(
                     text = "What's New",
                     fontSize = 15.ssp(),
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFA5B4FC)
+                    color = if (AppTheme.colors.isDark) Color(0xFFA5B4FC) else Color(0xFF4F46E5)
                 )
 
                 Spacer(modifier = Modifier.height(10.sdp()))
@@ -174,12 +177,12 @@ fun UpdateDialog(
                         .fillMaxWidth()
                         .heightIn(min = 80.sdp(), max = 300.sdp())
                         .background(
-                            Color(0xFF1E293B).copy(alpha = 0.4f),
+                            AppTheme.colors.surfaceVariant,
                             RoundedCornerShape(16.sdp())
                         )
                         .border(
                             1.sdp(),
-                            Color.White.copy(alpha = 0.1f),
+                            AppTheme.colors.border,
                             RoundedCornerShape(16.sdp())
                         )
                         .padding(16.sdp())
@@ -194,7 +197,7 @@ fun UpdateDialog(
                             TextView(context).apply {
 
                                 setTextColor(
-                                    android.graphics.Color.WHITE
+                                    if (isDark) android.graphics.Color.WHITE else android.graphics.Color.BLACK
                                 )
 
                                 textSize = 14f
@@ -235,7 +238,7 @@ fun UpdateDialog(
 
                             Text(
                                 text = "Later",
-                                color = Color.White.copy(alpha = 0.6f),
+                                color = AppTheme.colors.textSecondary,
                                 fontSize = 15.ssp()
                             )
                         }
@@ -252,8 +255,8 @@ fun UpdateDialog(
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4F46E5),
                             contentColor = Color.White,
-                            disabledContainerColor = Color(0xFF334155),
-                            disabledContentColor = Color.White.copy(alpha = 0.5f)
+                            disabledContainerColor = AppTheme.colors.surfaceVariant,
+                            disabledContentColor = AppTheme.colors.textSecondary.copy(alpha = 0.5f)
                         ),
                         contentPadding = PaddingValues(
                             horizontal = 24.sdp(),
@@ -264,7 +267,8 @@ fun UpdateDialog(
                         Text(
                             text = if (enabled) "Update App" else "Unavailable",
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.ssp()
+                            fontSize = 15.ssp(),
+                            color = Color.White
                         )
                     }
                 }

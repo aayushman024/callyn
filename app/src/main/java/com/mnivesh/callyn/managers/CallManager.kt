@@ -444,7 +444,12 @@ object CallManager {
             } else {
                 0
             }
-            val startTimestamp = if (call.details.connectTimeMillis > 0) call.details.connectTimeMillis else call.details.creationTimeMillis
+            // Android's CallLog.Calls.DATE = creationTimeMillis (call start / ringing onset).
+            // Using creationTimeMillis here ensures our work DB timestamp is identical to what
+            // the system call log stores, so deduplication in mergeLogs stays tight (5 s buffer).
+            // Duration is still measured from connectTimeMillis (actual answer time) → now.
+            val startTimestamp = call.details.creationTimeMillis
+
 
             var direction = "outgoing"
             val wasIncoming = (call.details.callDirection == Call.Details.DIRECTION_INCOMING)

@@ -1,12 +1,14 @@
 package com.mnivesh.callyn.sheets
 
 import WhatsAppHelper
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 import android.widget.Toast
+import android.widget.Toast.makeText
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,14 +44,17 @@ import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.managers.ViewLimitManager
-import com.mnivesh.callyn.screens.RecentCallUiItem
+import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.launch
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.ReportRequest
+import com.google.firebase.crashlytics.FirebaseCrashlytics
+import com.mnivesh.callyn.ui.theme.AppTheme
 
+@SuppressLint("ShowToast")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ModernBottomSheet(
@@ -94,9 +99,15 @@ fun ModernBottomSheet(
             val response = ViewLimitManager.getStatus(authManager)
             if (response.isSuccessful) {
                 remainingViews = response.body()?.remaining ?: 0
+            } else {
+                val errorMsg = "getStatus failed in ModernBottomSheet: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e("ModernBottomSheet", errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("getStatus failed: status code ${response.code()}"))
             }
         } catch (e: Exception) {
             Log.e("ModernBottomSheet", "Failed to fetch initial status", e)
+            FirebaseCrashlytics.getInstance().recordException(e)
         }
     }
 
@@ -108,13 +119,14 @@ fun ModernBottomSheet(
     }
 
     // --- Modern Theme Palette ---
-    val backgroundColor = Color(0xFF0F172A) // Deep Slate Background
-    val surfaceColor = Color(0xFF1E293B)    // Lighter Surface
+    val isDark = AppTheme.colors.isDark
+    val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val primaryColor = Color(0xFF10B981)    // Emerald Green
     val workColor = Color(0xFF60A5FA)       // Blue
     val warningColor = Color(0xFFFFB74D)    // Orange/Gold
-    val textPrimary = Color.White
-    val textSecondary = Color.White.copy(alpha = 0.6f)
+    val textPrimary = AppTheme.colors.textPrimary
+    val textSecondary = AppTheme.colors.textSecondary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -213,6 +225,33 @@ fun ModernBottomSheet(
                                     modifier = Modifier.background(surfaceColor),
                                     offset = DpOffset((-12).dp, 0.sdp())
                                 ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Create FE Visit",
+                                                color = textPrimary,
+                                                fontSize = 14.ssp()
+                                            )
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            try {
+                                                val timestamp = System.currentTimeMillis()
+                                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("mniveshcentral://module?name=Route%20Management?clientName=${android.net.Uri.encode(contact.name)}&t=$timestamp"))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Failed to open link: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.LocationOn,
+                                                null,
+                                                tint = workColor,
+                                                modifier = Modifier.size(18.sdp())
+                                            )
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -425,7 +464,7 @@ fun ModernBottomSheet(
                                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                                     val clip = ClipData.newPlainText("Phone Number", contact.number.takeLast(10))
                                                     clipboard.setPrimaryClip(clip)
-                                                    Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
+                                                    makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
                                                 }
                                             )
                                         ) {
@@ -491,13 +530,26 @@ fun ModernBottomSheet(
                                                                 if (incRes.isSuccessful) {
                                                                     isNumberVisible = true
                                                                     remainingViews = incRes.body()?.remaining ?: 0
-                                                                    Toast.makeText(context, "Remaining views: $remainingViews", Toast.LENGTH_SHORT).show()
+                                                                    makeText(context, "Remaining views: $remainingViews", Toast.LENGTH_SHORT).show()
+                                                                } else {
+                                                                    val errorMsg = "increment failed in ModernBottomSheet: code=${incRes.code()}, message=${incRes.message()}, error=${incRes.errorBody()?.string()}"
+                                                                    Log.e("ModernBottomSheet", errorMsg)
+                                                                    FirebaseCrashlytics.getInstance().log(errorMsg)
+                                                                    FirebaseCrashlytics.getInstance().recordException(Exception("increment failed: status code ${incRes.code()}"))
                                                                 }
                                                             } else {
-                                                                Toast.makeText(context, "Daily limit exhausted.", Toast.LENGTH_LONG).show()
+                                                                if (!statusRes.isSuccessful) {
+                                                                    val errorMsg = "getStatus check failed in ModernBottomSheet: code=${statusRes.code()}, message=${statusRes.message()}, error=${statusRes.errorBody()?.string()}"
+                                                                    Log.e("ModernBottomSheet", errorMsg)
+                                                                    FirebaseCrashlytics.getInstance().log(errorMsg)
+                                                                    FirebaseCrashlytics.getInstance().recordException(Exception("getStatus check in increment failed: status code ${statusRes.code()}"))
+                                                                }
+                                                                makeText(context, "Daily limit exhausted.", Toast.LENGTH_LONG).show()
                                                             }
                                                         } catch (e: Exception) {
-                                                            Toast.makeText(context, "Network error", Toast.LENGTH_SHORT).show()
+                                                            Log.e("ModernBottomSheet", "Network error in increment", e)
+                                                            FirebaseCrashlytics.getInstance().recordException(e)
+                                                            makeText(context, "Network error", Toast.LENGTH_SHORT).show()
                                                         } finally {
                                                             isViewLimitLoading = false
                                                         }
@@ -593,7 +645,7 @@ fun ModernBottomSheet(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         val clip = ClipData.newPlainText("Phone Number", contact.number)
                                         clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
+                                        makeText(context, "Number copied", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.size(32.sdp())
                                 ) {
@@ -608,7 +660,7 @@ fun ModernBottomSheet(
 
             // --- History Toggle Section ---
             item {
-                HorizontalDivider(color = textSecondary.copy(alpha = 0.1f))
+                HorizontalDivider(color = AppTheme.colors.border)
                 Spacer(modifier = Modifier.height(16.sdp()))
 
                 OutlinedButton(
@@ -619,7 +671,7 @@ fun ModernBottomSheet(
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(40.sdp()),
-                    border = BorderStroke(1.sdp(), textSecondary.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.sdp(), AppTheme.colors.border),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = textSecondary)
                 ) {
                     Text(
@@ -828,12 +880,19 @@ fun ModernBottomSheet(
                                 )
 
                                 val response = RetrofitInstance.api.generateReport(request)
-
+                                Log.d("ModernBottomSheet", "Report API request: $request")
                                 // grab the raw string from either body or errorBody
                                 val responseString = if (response.isSuccessful) {
                                     response.body()?.string()
                                 } else {
                                     response.errorBody()?.string()
+                                }
+
+                                if (!response.isSuccessful) {
+                                    val errorMsg = "generateReport failed in ModernBottomSheet: code=${response.code()}, message=${response.message()}, error=$responseString"
+                                    Log.e("ModernBottomSheet", errorMsg)
+                                    FirebaseCrashlytics.getInstance().log(errorMsg)
+                                    FirebaseCrashlytics.getInstance().recordException(Exception("generateReport failed: status code ${response.code()}"))
                                 }
 
                                 // default fallback messages
@@ -849,11 +908,12 @@ fun ModernBottomSheet(
                                     }
                                 }
 
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG)
+                                makeText(context, msg, Toast.LENGTH_LONG)
 
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                makeText(context, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                                 Log.e("ModernBottomSheet", "Report API error", e)
+                                FirebaseCrashlytics.getInstance().recordException(e)
                             } finally {
                                 // reset state
                                 isReportSubmitting = false
@@ -1004,7 +1064,7 @@ fun ModernBottomSheet(
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText("Contact Code", contact.uniqueCode)
                             clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, "Code copied!", Toast.LENGTH_SHORT).show()
+                            makeText(context, "Code copied!", Toast.LENGTH_SHORT).show()
                         },
                         color = backgroundColor,
                         shape = RoundedCornerShape(12.sdp()),

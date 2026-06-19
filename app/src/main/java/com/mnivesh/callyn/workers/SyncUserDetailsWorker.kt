@@ -15,9 +15,11 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.ThemeManager
 import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.UserDetailsRequest
 import com.mnivesh.callyn.api.version
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -35,18 +37,21 @@ class SyncUserDetailsWorker(
         val department = authManager.getDepartment() ?: "N/A"
         val email = authManager.getUserEmail() ?: "N/A"
 
+        if (department == "GUEST") return Result.success()
+
         // 2. Collect device metrics off the main thread
         val metrics = withContext(Dispatchers.IO) {
             collectDeviceMetrics(applicationContext)
         }
 
         // 3. Prepare Request
+        val themeLabel = if (ThemeManager(applicationContext).isDarkTheme()) "Dark" else "Light"
         val request = UserDetailsRequest(
             username = username,
             email = email,
             phoneModel = "${Build.MANUFACTURER} ${Build.MODEL}",
             osLevel = "Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
-            appVersion = version,
+            appVersion = "$version ($themeLabel)",
             department = department,
             lastSeen = System.currentTimeMillis(),
 
@@ -66,7 +71,10 @@ class SyncUserDetailsWorker(
                 Log.d("SyncWorker", "User details synced successfully.")
                 Result.success()
             } else {
-                Log.e("SyncWorker", "Sync failed: ${response.code()}")
+                val errorMsg = "SyncUserDetailsWorker failed: code=${response.code()}, message=${response.message()}, error=${response.errorBody()?.string()}"
+                Log.e("SyncWorker", errorMsg)
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("SyncUserDetailsWorker failed: status code ${response.code()}"))
                 if (response.code() in 500..599) Result.retry() else Result.failure()
             }
         } catch (e: Exception) {

@@ -8,9 +8,12 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.lifecycleScope
+import androidx.compose.runtime.remember
 import com.mnivesh.callyn.managers.CallManager
+import com.mnivesh.callyn.managers.ThemeManager
 import com.mnivesh.callyn.screens.InCallScreen
+import com.mnivesh.callyn.ui.theme.CallynTheme
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -31,11 +34,8 @@ class InCallActivity : ComponentActivity() {
         setTurnScreenOn(true)
 
         // 2. Request Keyguard Dismissal (Optional but smoother for incoming calls)
-        // This allows the user to interact without swiping the lock screen away first
         val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         keyguardManager.requestDismissKeyguard(this, null)
-
-        //window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // 4. Edge-to-Edge UI
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -49,7 +49,11 @@ class InCallActivity : ComponentActivity() {
         }
 
         setContent {
-            InCallScreen()
+            val themeManager = remember { ThemeManager(this) }
+            val isDarkTheme = themeManager.isDarkTheme()
+            CallynTheme(darkTheme = isDarkTheme) {
+                InCallScreen()
+            }
         }
     }
 }
