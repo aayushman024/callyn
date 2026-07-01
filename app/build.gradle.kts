@@ -23,8 +23,8 @@ android {
         applicationId = "com.mnivesh.callyn"
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.6.2"
+        versionCode = 4
+        versionName = "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -51,7 +51,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -83,6 +84,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.work:work-runtime-ktx:2.11.0")
     implementation(libs.sqlcipher)
+    implementation(libs.androidx.security.crypto)
     // Jetpack Compose
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -92,9 +94,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.material)
     implementation(libs.androidx.navigation.compose)
-
-    // --- THIS IS THE FIX ---
-    implementation(libs.androidx.browser) // Use alias, not hardcoded version
+    implementation(libs.androidx.browser)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.room.runtime)
@@ -118,7 +118,7 @@ dependencies {
     // Icons
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.lottie.compose)
-    // --- THIS IS THE FIX (Incorrect aliases) ---
+
     // Networking
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)  // Was libs.converter.gson
@@ -142,6 +142,3 @@ dependencies {
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-perf")
 }
-
-// NOTE: Your `gradle/libs.versions.toml` file will define what 'libs.androidx.core.ktx'
-// maps to (e.g., androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.13.1" })

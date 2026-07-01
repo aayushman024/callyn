@@ -8,12 +8,14 @@ import com.mnivesh.callyn.managers.CallManager
 
 class CallynApplication : Application() {
 
-    private val passphrase = "8KqF*Z9!b@E#H&MbQeThWmadag4eadc!zC&F)J@NcRfUjXn2r5u8x/A?D*G-KaPdSs".toByteArray()
-
     private val database by lazy {
         // Load native libraries required by SQLCipher
         System.loadLibrary("sqlcipher")
-        ContactDatabase.getDatabase(this, passphrase)
+        
+        val secureKeyManager = com.mnivesh.callyn.db.SecureKeyManager(this)
+        val securePassphrase = secureKeyManager.getOrGenerateSecureKey()
+        
+        ContactDatabase.getDatabase(this, securePassphrase)
     }
 
     val repository by lazy {

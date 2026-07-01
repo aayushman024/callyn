@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class, PersonalCallLog::class], version = 16, exportSchema = false)
 abstract class ContactDatabase : RoomDatabase() {
@@ -23,8 +23,11 @@ abstract class ContactDatabase : RoomDatabase() {
         // Update method to accept the passphrase
         fun getDatabase(context: Context, passphrase: ByteArray): ContactDatabase {
             return INSTANCE ?: synchronized(this) {
+                // Ensure SQLCipher native library is loaded
+                System.loadLibrary("sqlcipher")
+
                 // 1. Initialize the support factory with the passphrase
-                val factory = SupportFactory(passphrase)
+                val factory = SupportOpenHelperFactory(passphrase)
 
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
