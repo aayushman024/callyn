@@ -12,6 +12,7 @@ plugins {
     // google services & crashlytics plugins
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
+    id("com.google.firebase.firebase-perf")
 }
 
 android {
@@ -22,8 +23,8 @@ android {
         applicationId = "com.mnivesh.callyn"
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.6.1"
+        versionCode = 3
+        versionName = "1.6.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -139,6 +140,7 @@ dependencies {
     // analytics & crashlytics (no version needed due to bom)
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-perf")
 }
 
 // NOTE: Your `gradle/libs.versions.toml` file will define what 'libs.androidx.core.ktx'

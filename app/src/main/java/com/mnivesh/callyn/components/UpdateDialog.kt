@@ -246,11 +246,11 @@ fun UpdateDialog(
                         Spacer(modifier = Modifier.width(12.sdp()))
                     }
 
-                    val enabled = downloadUrl.isNotBlank()
+                    val enabled = true
 
                     Button(
                         enabled = enabled,
-                        onClick = { onUpdate(downloadUrl) },
+                        onClick = { onUpdate("https://play.google.com/store/apps/details?id=com.mnivesh.callyn") },
                         shape = RoundedCornerShape(8.sdp()),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4F46E5),
@@ -263,9 +263,8 @@ fun UpdateDialog(
                             vertical = 12.sdp()
                         )
                     ) {
-
                         Text(
-                            text = if (enabled) "Update App" else "Unavailable",
+                            text = "Update on Play Store",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 15.ssp(),
                             color = Color.White

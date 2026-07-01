@@ -53,7 +53,7 @@ import com.google.firebase.crashlytics.FirebaseCrashlytics
 @Composable
 fun CrmBottomSheet(
     contact: CrmContact,
-    history: List<RecentCallUiItem>,
+    history: List<RecentCallUiItem>?,
     isLoading: Boolean,
     sheetState: SheetState,
     isDualSim: Boolean,
@@ -478,8 +478,8 @@ fun CrmBottomSheet(
                         }
                     }
                 } else {
-                    if (history.isNotEmpty()) {
-                        items(history) { log ->
+                    if (!history.isNullOrEmpty()) {
+                        items(history!!) { log ->
                             CallHistoryRow(log)
                         }
                     } else {

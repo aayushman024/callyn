@@ -78,6 +78,14 @@ jobs:
           name: Callyn_v${{ steps.get_version.outputs.version }}_aab
           path: outputs/Callyn_v${{ steps.get_version.outputs.version }}.aab
 
+      - name: Upload to Play Console Internal Track
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_CONSOLE_JSON }}
+          packageName: com.mnivesh.callyn
+          releaseFiles: outputs/Callyn_v${{ steps.get_version.outputs.version }}.aab
+          track: internal
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

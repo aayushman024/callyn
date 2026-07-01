@@ -59,7 +59,7 @@ import com.mnivesh.callyn.ui.theme.AppTheme
 @Composable
 fun ModernBottomSheet(
     contact: AppContact,
-    history: List<RecentCallUiItem>,
+    history: List<RecentCallUiItem>?,
     isLoading: Boolean,
     sheetState: SheetState,
     isWorkContact: Boolean,
@@ -694,8 +694,8 @@ fun ModernBottomSheet(
                         }
                     }
                 } else {
-                    if (history.isNotEmpty()) {
-                        items(history) { log ->
+                    if (!history.isNullOrEmpty()) {
+                        items(history!!) { log ->
                             CallHistoryRow(log)
                         }
                     } else {
