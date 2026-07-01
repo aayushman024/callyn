@@ -17,3 +17,9 @@
 
 # Hide the original source file name.
 -renamesourcefileattribute SourceFile
+
+# OkHttp/Retrofit optional dependencies
+-dontwarn org.bouncycastle.**
+-dontwarn org.conscrypt.**
+-dontwarn org.openjsse.**
+-dontwarn okhttp3.internal.platform.**
