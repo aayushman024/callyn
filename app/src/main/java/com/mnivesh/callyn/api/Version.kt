@@ -1,3 +1,3 @@
 package com.mnivesh.callyn.api
 
-const val version = "1.6.2";
+const val version = "1.7.0";
