@@ -684,7 +684,7 @@ fun ContactsScreen(
                                     value = searchQuery,
                                     onValueChange = { },
                                     modifier = Modifier.fillMaxWidth()
-                                        .shadow(if (AppTheme.colors.isDark) 0.sdp() else 5.sdp(), RoundedCornerShape(16.sdp()))
+                                        .shadow(if (AppTheme.colors.isDark) 0.sdp() else 4.sdp(), RoundedCornerShape(16.sdp()))
                                         .clip(RoundedCornerShape(16.sdp()))
                                         .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(16.sdp())),
                                     placeholder = {
@@ -909,7 +909,7 @@ fun ContactsScreen(
                     viewModel.clearCallHistory()
                 },
                 onShowHistory = {
-                    val number = selectedDeviceContact!!.numbers.firstOrNull()?.number ?: ""
+                    val number = selectedCrmContact!!.number ?: ""
                     viewModel.fetchCallHistory(number, isWork = false)
                 },
                 history = history,

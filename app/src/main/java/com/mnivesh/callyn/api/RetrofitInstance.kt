@@ -2,6 +2,8 @@ package com.mnivesh.callyn.api
 
 import android.content.Context
 import android.util.Log
+import com.mnivesh.callyn.managers.AuthInterceptor
+import com.mnivesh.callyn.managers.RetryInterceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -22,14 +24,15 @@ object RetrofitInstance {
 
     private val client: OkHttpClient by lazy {
         val builder = OkHttpClient.Builder()
-            .connectTimeout(4, TimeUnit.MINUTES)
-            .readTimeout(4, TimeUnit.MINUTES)
-            .writeTimeout(4, TimeUnit.MINUTES)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
 
         appContext?.let {
             builder.addInterceptor(AuthInterceptor(it))
         } ?: Log.e("RetrofitInstance", "Forgot to call RetrofitInstance.init() in Application class!")
 
+        builder.addInterceptor(RetryInterceptor())
         builder.build()
     }
 

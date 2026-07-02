@@ -9,9 +9,8 @@ class ThemeManager(context: Context) {
 
     private val KEY_DARK_MODE = "dark_mode"
 
-    // Default to true (Dark Theme) to match original hardcoded behavior
     fun isDarkTheme(): Boolean {
-        return prefs.getBoolean(KEY_DARK_MODE, true)
+        return prefs.getBoolean(KEY_DARK_MODE, false)
     }
 
     fun setDarkTheme(isDark: Boolean) {

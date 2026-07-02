@@ -203,7 +203,8 @@ fun EmployeeDirectoryScreen(
                                 colors = TextFieldDefaults.colors(
                                     focusedTextColor = colors.textPrimary, unfocusedTextColor = colors.textPrimary,
                                     focusedContainerColor = colors.surfaceVariant,
-                                    unfocusedContainerColor = colors.surfaceVariant.copy(alpha = 0.8f),
+                                    unfocusedContainerColor = AppTheme.colors.surfaceVariant,
+                                    disabledContainerColor = AppTheme.colors.surfaceVariant,
                                     focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                                     cursorColor = colors.textPrimary
                                 )

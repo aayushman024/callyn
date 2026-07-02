@@ -1,9 +1,9 @@
-package com.mnivesh.callyn.api
+package com.mnivesh.callyn.managers
 
 import android.content.Context
 import android.content.Intent
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.mnivesh.callyn.MainActivity
-import com.mnivesh.callyn.managers.AuthManager
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -122,8 +122,8 @@ class AuthInterceptor(private val context: Context) : Interceptor {
                 }
             } else {
                 val errorMsg = "Token refresh failed with HTTP code ${response.code}: ${response.message}"
-                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().log(errorMsg)
-                com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(Exception("Token refresh failed: HTTP ${response.code}"))
+                FirebaseCrashlytics.getInstance().log(errorMsg)
+                FirebaseCrashlytics.getInstance().recordException(Exception("Token refresh failed: HTTP ${response.code}"))
 
                 // 4xx errors except transient rate limits mean invalid token/session expired.
                 // 5xx or other status codes represent backend/network-level errors.
@@ -135,7 +135,7 @@ class AuthInterceptor(private val context: Context) : Interceptor {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            com.google.firebase.crashlytics.FirebaseCrashlytics.getInstance().recordException(e)
+            FirebaseCrashlytics.getInstance().recordException(e)
             RefreshResult.NetworkError
         }
     }
