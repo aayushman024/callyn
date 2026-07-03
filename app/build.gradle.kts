@@ -23,7 +23,7 @@ android {
         applicationId = "com.mnivesh.callyn"
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
-        versionCode = 5
+        versionCode = 6
         versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
