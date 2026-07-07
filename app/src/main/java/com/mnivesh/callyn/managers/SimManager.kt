@@ -183,6 +183,30 @@ object SimManager {
         }
     }
 
+    fun getDeviceFirstNumber(context: Context): String? {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED) {
+                    return null
+                }
+            }
+            val subscriptionManager = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
+            @SuppressLint("MissingPermission")
+            val activeSubs = subscriptionManager.activeSubscriptionInfoList
+            if (activeSubs.isNullOrEmpty()) return null
+
+            for (sub in activeSubs) {
+                val number = getSimNumber(context, subscriptionManager, sub)
+                if (!number.isNullOrBlank()) {
+                    return number
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SimManager", "Error in getDeviceFirstNumber", e)
+        }
+        return null
+    }
+
     private fun getSimNumber(context: Context, subscriptionManager: SubscriptionManager, sub: android.telephony.SubscriptionInfo): String? {
         var number: String? = null
         try {

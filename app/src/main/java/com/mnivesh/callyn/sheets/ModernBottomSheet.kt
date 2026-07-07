@@ -82,6 +82,7 @@ fun ModernBottomSheet(
     var selectedFormat by remember { mutableStateOf<String?>(null) }
     var selectedDestination by remember { mutableStateOf<String?>(null) }
     var isReportSubmitting by remember { mutableStateOf(false) }
+    var selfWhatsAppPhone by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
 
@@ -109,6 +110,12 @@ fun ModernBottomSheet(
             Log.e("ModernBottomSheet", "Failed to fetch initial status", e)
             FirebaseCrashlytics.getInstance().recordException(e)
         }
+
+        var phone = authManager.getWorkPhone()
+        if (phone.isNullOrEmpty()) {
+            phone = SimManager.getDeviceFirstNumber(context)
+        }
+        selfWhatsAppPhone = phone
     }
 
     // Automatically show number for Management
@@ -824,16 +831,18 @@ fun ModernBottomSheet(
                         textSecondary = textSecondary
                     ) { selectedDestination = "client_email" }
 
-                    ReportOptionItem(
-                        text = "Myself (on WhatsApp)",
-                        icon = Icons.Default.Chat,
-                        customIconRes = R.drawable.whatsapp,
-                        isSelected = selectedDestination == "self_wa",
-                        primaryColor = primaryColor,
-                        surfaceColor = backgroundColor,
-                        textPrimary = textPrimary,
-                        textSecondary = textSecondary
-                    ) { selectedDestination = "self_wa" }
+                    if (!selfWhatsAppPhone.isNullOrBlank()) {
+                        ReportOptionItem(
+                            text = "Myself (on WhatsApp)",
+                            icon = Icons.Default.Chat,
+                            customIconRes = R.drawable.whatsapp,
+                            isSelected = selectedDestination == "self_wa",
+                            primaryColor = primaryColor,
+                            surfaceColor = backgroundColor,
+                            textPrimary = textPrimary,
+                            textSecondary = textSecondary
+                        ) { selectedDestination = "self_wa" }
+                    }
                     ReportOptionItem(
                         text = "Myself (via Email)",
                         icon = Icons.Default.Email,
@@ -854,14 +863,14 @@ fun ModernBottomSheet(
                         coroutineScope.launch {
                             isReportSubmitting = true // START LOADER
                             try {
-                                // parse wa or email
                                 val mode = if (selectedDestination?.endsWith("_wa") == true) "wa" else "email"
+                                val recipient = if (selectedDestination?.startsWith("client") == true) "client" else "self"
 
                                 // swap phone based on selection
                                 val rawPhone = if (selectedDestination?.startsWith("client") == true) {
                                     contact.number
                                 } else {
-                                    authManager.getWorkPhone() ?: ""
+                                    selfWhatsAppPhone ?: ""
                                 }
 
                                 // sanitize and force 91 prefix
@@ -876,7 +885,8 @@ fun ModernBottomSheet(
                                     phone = cleanPhone,
                                     rmemail = authManager.getUserEmail() ?: "",
                                     pan = contact.pan,
-                                    name = contact.name
+                                    name = contact.name,
+                                    recipient = recipient
                                 )
 
                                 val response = RetrofitInstance.api.generateReport(request)

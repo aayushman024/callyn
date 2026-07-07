@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -453,6 +454,7 @@ fun BottomNavItem(
     
     Box(
         modifier = Modifier
+            .zIndex(if (screen == Screen.Recents && missedCallCount > 0) 1f else 0f)
             .background(
                 color = itemBgColor,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
@@ -482,43 +484,19 @@ fun BottomNavItem(
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
         ) {
-            Box {
-                val icon = when (screen) {
-                    Screen.Recents -> Icons.Filled.History
-                    Screen.Contacts -> Icons.Filled.Contacts
-                    Screen.Dialer -> Icons.Filled.Dialpad
-                    else -> Icons.Filled.History
-                }
-                
-                Icon(
-                    imageVector = icon,
-                    contentDescription = screen.route,
-                    tint = iconColor,
-                    modifier = Modifier.size(26.dp)
-                )
-                
-                if (screen == Screen.Recents && missedCallCount > 0) {
-                    Box(
-                        modifier = Modifier
-                            .align(androidx.compose.ui.Alignment.TopEnd)
-                            .offset(x = 6.dp, y = (-6).dp)
-                            .background(
-                                color = ComposeColor(0xFFEF4444),
-                                shape = androidx.compose.foundation.shape.CircleShape
-                            )
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = missedCallCount.toString(),
-                            color = ComposeColor.White,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                            )
-                        )
-                    }
-                }
+            val icon = when (screen) {
+                Screen.Recents -> Icons.Filled.History
+                Screen.Contacts -> Icons.Filled.Contacts
+                Screen.Dialer -> Icons.Filled.Dialpad
+                else -> Icons.Filled.History
             }
+            
+            Icon(
+                imageVector = icon,
+                contentDescription = screen.route,
+                tint = iconColor,
+                modifier = Modifier.size(24.dp)
+            )
             
             if (selected) {
                 Spacer(modifier = Modifier.width(10.dp))
@@ -531,12 +509,36 @@ fun BottomNavItem(
                     },
                     color = activeColor,
                     style = MaterialTheme.typography.labelLarge.copy(
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                         letterSpacing = (-0.4).sp
                     ),
                     maxLines = 1
                 )
+            }
+
+            if (screen == Screen.Recents && missedCallCount > 0) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+                        .background(
+                            color = ComposeColor(0xFFEF4444),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                        .padding(horizontal = 2.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    Text(
+                        text = missedCallCount.toString(),
+                        color = ComposeColor.White,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        ),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
             }
         }
     }

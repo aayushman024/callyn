@@ -480,34 +480,57 @@ fun SearchOverlay(
                         IconButton(onClick = onDismiss) {
                             Icon(Icons.Default.ArrowBack, "Back", tint = AppTheme.colors.textPrimary)
                         }
-                        TextField(
-                            value = internalQuery,
-                            onValueChange = { internalQuery = it },
+                        Row(
                             modifier = Modifier
                                 .weight(1f)
-                                .focusRequester(searchFocusRequester)
-                                .shadow(if (AppTheme.colors.isDark) 0.sdp() else 4.sdp(), RoundedCornerShape(16.sdp()))
-                                .clip(RoundedCornerShape(16.sdp()))
-                                .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(16.sdp())),
-                            placeholder = { Text("Search...", color = AppTheme.colors.textSecondary) },
-                            singleLine = true,
-                            colors = TextFieldDefaults.colors(
-                                focusedTextColor = AppTheme.colors.textPrimary,
-                                unfocusedTextColor = AppTheme.colors.textPrimary,
-                                focusedContainerColor = AppTheme.colors.surfaceVariant,
-                                unfocusedContainerColor = AppTheme.colors.surfaceVariant,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                cursorColor = Color(0xFF3B82F6)
-                            ),
-                            trailingIcon = {
-                                if (internalQuery.isNotEmpty()) {
-                                    IconButton(onClick = { internalQuery = "" }) {
-                                        Icon(Icons.Default.Close, "Clear", tint = AppTheme.colors.textSecondary)
-                                    }
+                                .then(
+                                    if (AppTheme.colors.isDark) Modifier else Modifier.customShadow(
+                                        color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.05f),
+                                        borderRadius = 24.sdp(),
+                                        blurRadius = 16.sdp(),
+                                        offsetY = 4.sdp()
+                                    )
+                                )
+                                .clip(RoundedCornerShape(24.sdp()))
+                                .background(AppTheme.colors.surfaceVariant)
+                                .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(24.sdp()))
+                                .padding(horizontal = 16.sdp(), vertical = 10.sdp()),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (internalQuery.isEmpty()) {
+                                    Text(
+                                        "Search...",
+                                        color = AppTheme.colors.textSecondary,
+                                        fontSize = 14.ssp()
+                                    )
                                 }
+                                androidx.compose.foundation.text.BasicTextField(
+                                    value = internalQuery,
+                                    onValueChange = { internalQuery = it },
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        color = AppTheme.colors.textPrimary,
+                                        fontSize = 14.ssp()
+                                    ),
+                                    singleLine = true,
+                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF3B82F6)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(searchFocusRequester)
+                                )
                             }
-                        )
+                            if (internalQuery.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(8.sdp()))
+                                Icon(
+                                    Icons.Default.Close,
+                                    "Clear",
+                                    tint = AppTheme.colors.textSecondary,
+                                    modifier = Modifier
+                                        .size(20.sdp())
+                                        .clickable { internalQuery = "" }
+                                )
+                            }
+                        }
                     }
                 }
             }

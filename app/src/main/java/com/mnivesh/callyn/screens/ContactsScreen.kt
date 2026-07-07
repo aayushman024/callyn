@@ -677,64 +677,65 @@ fun ContactsScreen(
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(16.sdp(), 15.sdp(), 16.sdp(), 10.sdp())
+                            modifier = Modifier.fillMaxWidth().padding(16.sdp(), 10.sdp(), 16.sdp(), 10.sdp())
                         ) {
-                            Box {
-                                TextField(
-                                    value = searchQuery,
-                                    onValueChange = { },
-                                    modifier = Modifier.fillMaxWidth()
-                                        .shadow(if (AppTheme.colors.isDark) 0.sdp() else 4.sdp(), RoundedCornerShape(16.sdp()))
-                                        .clip(RoundedCornerShape(16.sdp()))
-                                        .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(16.sdp())),
-                                    placeholder = {
-                                        Text(
-                                            "Search contacts...",
-                                            color = AppTheme.colors.textSecondary
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(
+                                            if (AppTheme.colors.isDark) Modifier else Modifier.customShadow(
+                                                color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.05f),
+                                                borderRadius = 24.sdp(),
+                                                blurRadius = 16.sdp(),
+                                                offsetY = 4.sdp()
+                                            )
                                         )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.Search,
-                                            "Search",
-                                            tint = AppTheme.colors.textSecondary
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(onClick = {
-                                                searchQuery = ""
-                                            }) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    "Clear",
-                                                    tint = AppTheme.colors.textSecondary
-                                                )
-                                            }
-                                        }
-                                    },
-                                    singleLine = true,
-                                    enabled = false,
-                                    colors = TextFieldDefaults.colors(
-                                        focusedTextColor = AppTheme.colors.textPrimary,
-                                        unfocusedTextColor = AppTheme.colors.textPrimary,
-                                        focusedContainerColor = AppTheme.colors.surfaceVariant,
-                                        unfocusedContainerColor = AppTheme.colors.surfaceVariant,
-                                        disabledContainerColor = AppTheme.colors.surfaceVariant,
-                                        disabledTextColor = AppTheme.colors.textPrimary,
-                                        disabledPlaceholderColor = AppTheme.colors.textSecondary,
-                                        disabledLeadingIconColor = AppTheme.colors.textSecondary,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent,
-                                        cursorColor = AppTheme.colors.textPrimary
+                                        .clip(RoundedCornerShape(24.sdp()))
+                                        .background(AppTheme.colors.surfaceVariant)
+                                        .border(1.sdp(), AppTheme.colors.border, RoundedCornerShape(24.sdp()))
+                                        .clickable { showFullSearch = true }
+                                        .padding(horizontal = 16.sdp(), vertical = 10.sdp()),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        "Search",
+                                        tint = AppTheme.colors.textSecondary,
+                                        modifier = Modifier.size(20.sdp())
                                     )
-                                )
-                                Box(
-                                    modifier = Modifier.matchParentSize()
-                                        .clip(RoundedCornerShape(16.sdp()))
-                                        .clickable { showFullSearch = true })
-                            }
+                                    Spacer(modifier = Modifier.width(8.sdp()))
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        if (searchQuery.isEmpty()) {
+                                            Text(
+                                                "Search contacts...",
+                                                color = AppTheme.colors.textSecondary,
+                                                fontSize = 13.ssp()
+                                            )
+                                        }
+                                        androidx.compose.foundation.text.BasicTextField(
+                                            value = searchQuery,
+                                            onValueChange = { },
+                                            enabled = false,
+                                            textStyle = androidx.compose.ui.text.TextStyle(
+                                                color = AppTheme.colors.textPrimary,
+                                                fontSize = 14.ssp()
+                                            ),
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    if (searchQuery.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.width(8.sdp()))
+                                        Icon(
+                                            Icons.Default.Close,
+                                            "Clear",
+                                            tint = AppTheme.colors.textSecondary,
+                                            modifier = Modifier
+                                                .size(20.sdp())
+                                                .clickable { searchQuery = "" }
+                                        )
+                                    }
+                                }
                         }
 
                         HorizontalPager(

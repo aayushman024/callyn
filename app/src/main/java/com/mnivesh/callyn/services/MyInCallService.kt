@@ -42,7 +42,8 @@ class MyInCallService : InCallService() {
         var instance: MyInCallService? = null
         private const val NOTIFICATION_ID = 12345
         private const val MISSED_CALL_NOTIF_ID = 12346 // NEW
-        private const val CHANNEL_ID = "callyn_ongoing_calls"
+        private const val CHANNEL_ID_INCOMING = "callyn_incoming_calls"
+        private const val CHANNEL_ID_ONGOING = "callyn_ongoing_calls_v2"
         private const val MISSED_CHANNEL_ID = "callyn_missed_calls" // NEW
     }
 
@@ -73,12 +74,20 @@ class MyInCallService : InCallService() {
 
         showNotification()
 
-        // Android 10+ restricts starting activities from the background.
-        // If the screen is ON, Android will intentionally show a Heads-Up Notification instead of launching the fullScreenIntent.
-        // Forcing startActivity() from the background throws a SecurityException/AndroidRuntimeException on many OEM devices
-        // (like Xiaomi, Samsung) when the app is in deep background. This crashes the InCallService, causing the
-        // Telecom framework to automatically reject the call. 
-        // REMOVED: startActivity(intent)
+        // For outgoing calls, we must launch the InCallActivity explicitly.
+        // The user just initiated the call, so the app should have foreground privileges.
+        val currentState = CallManager.callState.value
+        if (currentState != null && !currentState.isIncoming) {
+            val intent = Intent(this, InCallActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                // If blocked by Android 10+ background start restrictions, 
+                // the notification will still be available.
+            }
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -237,16 +246,29 @@ class MyInCallService : InCallService() {
     }
 
     private fun createNotificationChannel() {
-        val name = "Ongoing Calls"
-        val descriptionText = "Active call status"
-        val importance = NotificationManager.IMPORTANCE_HIGH // FIX 3: was IMPORTANCE_DEFAULT, too low for full-screen intents
-        val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-            description = descriptionText
+        val notificationManager = getSystemService(NotificationManager::class.java)
+
+        val incomingChannel = NotificationChannel(
+            CHANNEL_ID_INCOMING, 
+            "Incoming Calls", 
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "Notifications for incoming ringing calls"
             setSound(null, null)
             setShowBadge(false)
         }
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        notificationManager.createNotificationChannel(channel)
+        notificationManager.createNotificationChannel(incomingChannel)
+
+        val ongoingChannel = NotificationChannel(
+            CHANNEL_ID_ONGOING, 
+            "Ongoing Calls", 
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "Notifications for active or outgoing calls"
+            setSound(null, null)
+            setShowBadge(false)
+        }
+        notificationManager.createNotificationChannel(ongoingChannel)
     }
 
     private fun showNotification() {
@@ -281,6 +303,8 @@ class MyInCallService : InCallService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val targetChannelId = if (currentState.isIncoming) CHANNEL_ID_INCOMING else CHANNEL_ID_ONGOING
+
         val notificationBuilder: Notification.Builder?
         val notificationCompatBuilder: NotificationCompat.Builder?
 
@@ -309,7 +333,7 @@ class MyInCallService : InCallService() {
                 )
             }
 
-            notificationBuilder = Notification.Builder(this, CHANNEL_ID)
+            notificationBuilder = Notification.Builder(this, targetChannelId)
                 .setStyle(callStyle)
                 .setSmallIcon(R.drawable.ic_menu_call)
                 .setContentTitle(callerName)
@@ -318,28 +342,37 @@ class MyInCallService : InCallService() {
                 .setCategory(Notification.CATEGORY_CALL)
                 .setOnlyAlertOnce(true)
                 .setColor(getColor(R.color.holo_green_dark))
-                .setFullScreenIntent(fullScreenIntent, currentState.isIncoming)
                 .setContentIntent(pendingIntent)
                 .setUsesChronometer(isActive)
                 .setWhen(if (isActive && currentState.connectTimeMillis > 0) currentState.connectTimeMillis else 0L)
+
+            // Only set fullScreenIntent for incoming/ringing calls.
+            // Setting it on ongoing calls keeps the heads-up banner visible even after answering.
+            if (currentState.isIncoming) {
+                notificationBuilder.setFullScreenIntent(fullScreenIntent, true)
+            }
             startForeground(NOTIFICATION_ID, notificationBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)
 
         } else {
-            notificationCompatBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+            notificationCompatBuilder = NotificationCompat.Builder(this, targetChannelId)
                 .setSmallIcon(R.drawable.ic_menu_call)
                 .setContentTitle(callerName)
                 .setContentText(callStatus)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(if (currentState.isIncoming) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
                 .setColor(Color.parseColor("#4CAF50"))
-                .setFullScreenIntent(fullScreenIntent, currentState.isIncoming)
                 .setColorized(true)
                 .setContentIntent(pendingIntent)
                 .addAction(R.drawable.ic_menu_close_clear_cancel, "End", endCallIntent)
                 .setUsesChronometer(true)
                 .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: 0L)
+
+            // Only set fullScreenIntent for incoming/ringing calls
+            if (currentState.isIncoming) {
+                notificationCompatBuilder.setFullScreenIntent(fullScreenIntent, true)
+            }
 
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(NOTIFICATION_ID, notificationCompatBuilder.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL)

@@ -211,7 +211,8 @@ data class ReportRequest(
     val phone: String,
     val rmemail: String,
     val pan: String,
-    val name: String
+    val name: String,
+    val recipient: String
 )
 
 

@@ -76,6 +76,7 @@ import com.mnivesh.callyn.api.RetrofitInstance
 import com.mnivesh.callyn.api.ReportRequest
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.sheets.ReportOptionItem
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.rememberScrollState
@@ -189,6 +190,15 @@ fun InCallContent(
     var selectedFormat by remember { mutableStateOf<String?>(null) }
     var selectedDestination by remember { mutableStateOf<String?>(null) }
     var isReportSubmitting by remember { mutableStateOf(false) }
+    var selfWhatsAppPhone by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        var phone = authManager.getWorkPhone()
+        if (phone.isNullOrEmpty()) {
+            phone = SimManager.getDeviceFirstNumber(context)
+        }
+        selfWhatsAppPhone = phone
+    }
 
     // State for Details Popup
     var showDetailsPopup by remember { mutableStateOf(false) }
@@ -767,16 +777,18 @@ fun InCallContent(
                             textSecondary = textSecondary
                         ) { selectedDestination = "client_email" }
 
-                        ReportOptionItem(
-                            text = "Myself (on WhatsApp)",
-                            icon = Icons.Default.Chat,
-                            //customIconRes = R.drawable.whatsapp,
-                            isSelected = selectedDestination == "self_wa",
-                            primaryColor = primaryColor,
-                            surfaceColor = backgroundColor,
-                            textPrimary = textPrimary,
-                            textSecondary = textSecondary
-                        ) { selectedDestination = "self_wa" }
+                        if (!selfWhatsAppPhone.isNullOrBlank()) {
+                            ReportOptionItem(
+                                text = "Myself (on WhatsApp)",
+                                icon = Icons.Default.Chat,
+                                //customIconRes = R.drawable.whatsapp,
+                                isSelected = selectedDestination == "self_wa",
+                                primaryColor = primaryColor,
+                                surfaceColor = backgroundColor,
+                                textPrimary = textPrimary,
+                                textSecondary = textSecondary
+                            ) { selectedDestination = "self_wa" }
+                        }
 
                         ReportOptionItem(
                             text = "Myself (via Email)",
@@ -797,11 +809,12 @@ fun InCallContent(
                                 isReportSubmitting = true
                                 try {
                                     val mode = if (selectedDestination?.endsWith("_wa") == true) "wa" else "email"
+                                    val recipient = if (selectedDestination?.startsWith("client") == true) "client" else "self"
 
                                     val rawPhone = if (selectedDestination?.startsWith("client") == true) {
                                         currentState.number
                                     } else {
-                                        authManager.getWorkPhone() ?: ""
+                                        selfWhatsAppPhone ?: ""
                                     }
 
                                     var cleanPhone = rawPhone.replace(Regex("[^0-9]"), "")
@@ -814,8 +827,9 @@ fun InCallContent(
                                         mode = mode,
                                         phone = cleanPhone,
                                         rmemail = authManager.getUserEmail() ?: "",
-                                        pan = currentState.pan,   // add `pan` to CallState if not present
-                                        name = currentState.name
+                                        pan = currentState.pan,
+                                        name = currentState.name,
+                                        recipient = recipient
                                     )
 
                                     val response = RetrofitInstance.api.generateReport(request)

@@ -99,7 +99,11 @@ fun CallynTheme(
         }
     }
 
-    CompositionLocalProvider(LocalAppColors provides colors) {
+    val currentDensity = androidx.compose.ui.platform.LocalDensity.current
+    CompositionLocalProvider(
+        LocalAppColors provides colors,
+        androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(currentDensity.density, fontScale = 1f)
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
