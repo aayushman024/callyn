@@ -711,6 +711,7 @@ fun InCallContent(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(max = (screenHeight * 0.45f).dp) // Responsive max height to prevent clipping
                             .verticalScroll(rememberScrollState())
                     ) {
                         // 1. Report Type
@@ -1645,22 +1646,29 @@ private fun ActiveCallControls(
         }
 
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+            // 1. Hold
             CallToggleButton(Icons.Default.Pause, if (state.isHolding) "Unhold" else "Hold", state.isHolding, buttonSize, onHold)
 
+            // 2. Swap (if applicable)
+            if (state.canSwap) {
+                CallToggleButton(Icons.Default.SwapCalls, "Swap", false, buttonSize, onSwap)
+            }
+
+            // 3. Merge or Manage or Add Call
             if (state.canMerge) {
                 CallToggleButton(Icons.Default.CallMerge, "Merge", false, buttonSize, onMerge)
-            } else if (state.canSwap) {
-                CallToggleButton(Icons.Default.SwapCalls, "Swap", false, buttonSize, onSwap)
             } else if (state.isConference) {
                 CallToggleButton(Icons.Default.Groups, "Manage", false, buttonSize, onManageConference)
             } else {
                 CallToggleButton(Icons.Default.PersonAdd, "Add Call", false, buttonSize, onAddCall)
             }
 
+            // 4. Bluetooth (if available) or Spacer
             if (CallManager.isBluetoothAvailable()) {
                 CallToggleButton(Icons.Default.Bluetooth, "Audio", state.isBluetoothOn, buttonSize, onBluetooth)
             } else {
-                Spacer(modifier = Modifier.size(buttonSize))
+                // To keep spacing consistent when we don't have 4 items
+                if (!state.canSwap) Spacer(modifier = Modifier.size(buttonSize))
             }
         }
 

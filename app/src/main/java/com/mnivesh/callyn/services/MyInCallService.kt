@@ -42,7 +42,7 @@ class MyInCallService : InCallService() {
         var instance: MyInCallService? = null
         private const val NOTIFICATION_ID = 12345
         private const val MISSED_CALL_NOTIF_ID = 12346 // NEW
-        private const val CHANNEL_ID_INCOMING = "callyn_incoming_calls"
+        private const val CHANNEL_ID_INCOMING = "callyn_incoming_calls_v2"
         private const val CHANNEL_ID_ONGOING = "callyn_ongoing_calls_v2"
         private const val MISSED_CHANNEL_ID = "callyn_missed_calls" // NEW
     }
@@ -68,16 +68,12 @@ class MyInCallService : InCallService() {
         super.onCallAdded(call)
         CallManager.onCallAdded(call)
 
-        if (wakeLock?.isHeld == false) {
-            wakeLock?.acquire()
-        }
-
         showNotification()
 
         // For outgoing calls, we must launch the InCallActivity explicitly.
-        // The user just initiated the call, so the app should have foreground privileges.
+        // For incoming calls, this acts as a fallback to FullScreenIntent on strict OEM devices.
         val currentState = CallManager.callState.value
-        if (currentState != null && !currentState.isIncoming) {
+        if (currentState != null) {
             val intent = Intent(this, InCallActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
@@ -85,7 +81,7 @@ class MyInCallService : InCallService() {
                 startActivity(intent)
             } catch (e: Exception) {
                 // If blocked by Android 10+ background start restrictions, 
-                // the notification will still be available.
+                // the FullScreenIntent in the notification will still handle incoming calls.
             }
         }
     }
@@ -240,6 +236,18 @@ class MyInCallService : InCallService() {
             CallManager.callState.collectLatest { state ->
                 if (state != null && !calls.isEmpty()) {
                     showNotification()
+
+                    // Acquire proximity lock only if call is Active and not on speaker/bluetooth
+                    val isActive = state.status.equals("Active", ignoreCase = true)
+                    if (isActive && !state.isSpeakerOn && !state.isBluetoothOn) {
+                        if (wakeLock?.isHeld == false) {
+                            wakeLock?.acquire()
+                        }
+                    } else if (state.isIncoming || state.status.equals("Disconnected", ignoreCase = true) || state.isSpeakerOn || state.isBluetoothOn) {
+                        if (wakeLock?.isHeld == true) {
+                            wakeLock?.release()
+                        }
+                    }
                 }
             }
         }
@@ -255,6 +263,8 @@ class MyInCallService : InCallService() {
         ).apply {
             description = "Notifications for incoming ringing calls"
             setSound(null, null)
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0L) // Silent vibration to force Heads-Up on OEMs
             setShowBadge(false)
         }
         notificationManager.createNotificationChannel(incomingChannel)

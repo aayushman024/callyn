@@ -128,19 +128,28 @@ object CallManager {
     private fun recalculateGlobalState() {
         if (registeredCalls.isEmpty()) return
 
-        val conferenceCall = registeredCalls.find { it.details.hasProperty(Call.Details.PROPERTY_CONFERENCE) }
+        val activeCalls = registeredCalls.filter { it.state != Call.STATE_DISCONNECTED && it.state != Call.STATE_DISCONNECTING }
 
-        var primaryCall: Call = conferenceCall
-            ?: registeredCalls.find { it.state == Call.STATE_ACTIVE }
-            ?: registeredCalls.find { it.state == Call.STATE_DIALING }
-            ?: registeredCalls.find { it.state == Call.STATE_RINGING }
-            ?: registeredCalls.first()
+        if (activeCalls.isEmpty() && registeredCalls.isNotEmpty()) {
+            updateStateForPrimary(registeredCalls.first(), null)
+            return
+        }
 
-        val secondaryCall = registeredCalls.find { it != primaryCall }
+        val conferenceCall = activeCalls.find { it.details.hasProperty(Call.Details.PROPERTY_CONFERENCE) }
+
+        val primaryCall: Call = activeCalls.find { it.state == Call.STATE_RINGING }
+            ?: conferenceCall
+            ?: activeCalls.find { it.state == Call.STATE_ACTIVE }
+            ?: activeCalls.find { it.state == Call.STATE_DIALING }
+            ?: activeCalls.find { it.state == Call.STATE_HOLDING }
+            ?: activeCalls.firstOrNull()
+            ?: return
+
+        val secondaryCall = activeCalls.find { it != primaryCall }
 
         var waitingCall: Call? = null
         if (primaryCall.state == Call.STATE_ACTIVE || primaryCall.state == Call.STATE_HOLDING) {
-            waitingCall = registeredCalls.find { it.state == Call.STATE_RINGING }
+            waitingCall = activeCalls.find { it.state == Call.STATE_RINGING }
         }
 
         updateStateForPrimary(primaryCall, waitingCall ?: secondaryCall)
@@ -172,12 +181,13 @@ object CallManager {
         }
 
         // --- BACKGROUND CALL LOGIC (Waiting & Hold) ---
-        val waitingCall = registeredCalls.find { it != primary && it.state == Call.STATE_RINGING }
-        val heldCall = registeredCalls.find { it != primary && it.state == Call.STATE_HOLDING }
+        val activeCalls = registeredCalls.filter { it.state != Call.STATE_DISCONNECTED && it.state != Call.STATE_DISCONNECTING }
+        val waitingCall = activeCalls.find { it != primary && it.state == Call.STATE_RINGING }
+        val heldCall = activeCalls.find { it != primary && (it.state == Call.STATE_HOLDING || it.state == Call.STATE_ACTIVE) }
 
         val targetSecondary = waitingCall ?: heldCall
         val isSecondRinging = targetSecondary?.state == Call.STATE_RINGING
-        val isSecondHolding = targetSecondary?.state == Call.STATE_HOLDING
+        val isSecondHolding = targetSecondary != null && !isSecondRinging
 
         // Separate raw number from resolved name to keep the number dialable
         val secNumber = targetSecondary?.details?.handle?.schemeSpecificPart ?: ""
@@ -190,26 +200,29 @@ object CallManager {
         }
 
         // --- EMIT STATE atomically to prevent lost updates ---
-        _callState.update { current ->
-            (current ?: CallState(name = finalName, number = displayNumber, pan = "",status = "Connecting")).copy(
-                name = finalName,
-                number = displayNumber,
-                status = primary.getStateString(),
-                isIncoming = (primary.state == Call.STATE_RINGING),
-                isConference = isConference,
-                canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
-                        (registeredCalls.size > 1 && !isSecondRinging),
-                canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
-                        (registeredCalls.size > 1 && isSecondHolding),
-                participants = children.map { it.details.handle?.schemeSpecificPart ?: "Unknown" },
-                call = primary,
-                isHolding = (primary.state == Call.STATE_HOLDING),
-                connectTimeMillis = details.connectTimeMillis,
-                secondIncomingCall = if (isSecondRinging) targetSecondary else null,
-                secondCallerName = if (targetSecondary != null) secName else null,
-                secondCallerNumber = if (targetSecondary != null) secNumber else null,
-                isSecondCallHolding = isSecondHolding
-            )
+        val newState = (currentState ?: CallState(name = finalName, number = displayNumber, pan = "",status = "Connecting")).copy(
+            name = finalName,
+            number = displayNumber,
+            status = primary.getStateString(),
+            isIncoming = (primary.state == Call.STATE_RINGING),
+            isConference = isConference,
+            canMerge = (details.callCapabilities and Call.Details.CAPABILITY_MERGE_CONFERENCE) != 0 ||
+                    (registeredCalls.size > 1 && !isSecondRinging),
+            canSwap = (details.callCapabilities and Call.Details.CAPABILITY_SWAP_CONFERENCE) != 0 ||
+                    (registeredCalls.size > 1 && isSecondHolding),
+            participants = children.map { it.details.handle?.schemeSpecificPart ?: "Unknown" },
+            call = primary,
+            isHolding = (primary.state == Call.STATE_HOLDING),
+            connectTimeMillis = details.connectTimeMillis,
+            secondIncomingCall = if (isSecondRinging) targetSecondary else null,
+            secondCallerName = if (targetSecondary != null) secName else null,
+            secondCallerNumber = if (targetSecondary != null) secNumber else null,
+            isSecondCallHolding = isSecondHolding
+        )
+
+        // Prevent redundant emissions that throttle NotificationManager Heads-Up
+        if (currentState != newState) {
+            _callState.value = newState
         }
     }
 
