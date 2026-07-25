@@ -2,6 +2,7 @@ package com.mnivesh.callyn.db
 
 import androidx.compose.runtime.Immutable
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Immutable

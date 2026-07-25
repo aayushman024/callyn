@@ -222,7 +222,7 @@ class RecentCallsViewModel(
     val authManager = AuthManager(application)
     val department = authManager.getDepartment()
     val userName = authManager.getUserName() ?: ""
-    private val token = authManager.getToken()
+    private val token get() = authManager.getToken()
 
     // Main List State
     private val _systemLogs = MutableStateFlow<List<RecentCallUiItem>>(emptyList())
@@ -305,9 +305,9 @@ class RecentCallsViewModel(
     }
 
     fun submitPersonalRequest(contactName: String, reason: String) {
-        if (token.isNullOrBlank()) return
+        val currentToken = authManager.getToken() ?: return
         viewModelScope.launch {
-            repository.submitPersonalRequest(token, contactName, userName, reason)
+            repository.submitPersonalRequest(currentToken, contactName, userName, reason)
         }
     }
 

@@ -39,6 +39,10 @@ import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+import WhatsAppHelper
+import androidx.compose.ui.res.painterResource
+import com.mnivesh.callyn.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentDeviceBottomSheet(
@@ -90,6 +94,7 @@ fun RecentDeviceBottomSheet(
 
     val isDark = AppTheme.colors.isDark
     val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val textPrimary = AppTheme.colors.textPrimary
     val textSecondary = AppTheme.colors.textSecondary
 
@@ -106,6 +111,29 @@ fun RecentDeviceBottomSheet(
         ) {
             item {
                 Box(modifier = Modifier.fillMaxWidth()) {
+                    Box(modifier = Modifier.align(Alignment.TopStart)) {
+                        IconButton(
+                            onClick = {
+                                WhatsAppHelper.openChat(
+                                    context = context,
+                                    phoneNumber = number
+                                )
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
+                            ),
+                            modifier = Modifier
+                                .size(40.sdp())
+                                .clip(CircleShape)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.whatsapp),
+                                contentDescription = "WhatsApp",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(35.sdp())
+                            )
+                        }
+                    }
                     Box(
                         modifier = Modifier
                             .size(100.sdp())

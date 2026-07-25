@@ -16,12 +16,34 @@ class AuthManager(context: Context) {
     private val KEY_DEPARTMENT = "user_department"
     private val WORK_PHONE = "work_phone"
 
-    fun isLoggedIn(): Boolean = prefs.contains(AUTH_TOKEN)
+    private val KEY_LAST_REFRESH_TIME = "last_token_refresh_time"
 
-    fun saveToken(token: String) = prefs.edit().putString(AUTH_TOKEN, token).apply()
+    fun isLoggedIn(): Boolean = prefs.contains(AUTH_TOKEN) && !getToken().isNullOrEmpty()
+
+    fun saveToken(token: String) {
+        prefs.edit().putString(AUTH_TOKEN, token).apply()
+        updateLastRefreshTime()
+    }
     fun getToken(): String? = prefs.getString(AUTH_TOKEN, null)
     fun saveRefreshToken(token: String?) = prefs.edit().putString(REFRESH_TOKEN, token).apply()
     fun getRefreshToken(): String? = prefs.getString(REFRESH_TOKEN, null)
+
+    fun updateLastRefreshTime(timestampMs: Long = System.currentTimeMillis()) {
+        prefs.edit().putLong(KEY_LAST_REFRESH_TIME, timestampMs).apply()
+    }
+
+    fun getLastRefreshTime(): Long = prefs.getLong(KEY_LAST_REFRESH_TIME, 0L)
+
+    /**
+     * Checks whether the token should be proactively refreshed.
+     * Default threshold is 12 hours.
+     */
+    fun shouldRefreshToken(thresholdMillis: Long = 12 * 60 * 60 * 1000L): Boolean {
+        if (!isLoggedIn()) return false
+        val lastRefresh = getLastRefreshTime()
+        if (lastRefresh == 0L) return true
+        return (System.currentTimeMillis() - lastRefresh) >= thresholdMillis
+    }
 
     fun saveUserName(name: String?) = prefs.edit().putString(USER_NAME, name).apply()
     fun getUserName(): String? = prefs.getString(USER_NAME, null)

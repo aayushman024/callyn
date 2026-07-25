@@ -1031,7 +1031,7 @@ fun InCallContent(
         ModalBottomSheet(
             onDismissRequest = { showMessageSheet = false },
             containerColor = if (isDark) Color(0xFF1C1C1E) else AppTheme.colors.surface,
-            dragHandle = { BottomSheetDefaults.DragHandle(color = TextSecondary.copy(alpha = 0.2f)) }
+            dragHandle = { BottomSheetDefaults.DragHandle(color = if (isDark) TextSecondary.copy(alpha = 0.2f) else Color(0xFF8E8E93).copy(alpha = 0.3f)) }
         ) {
             val context = LocalContext.current
             QuickResponseSheet(
@@ -1207,8 +1207,16 @@ private fun CallerInfo(
         Spacer(modifier = Modifier.height(spacerHeight))
 
         // 2. Name
+        val displayName = if (currentState.name.isNotBlank() && currentState.name != "Unknown") {
+            currentState.name
+        } else if (currentState.number.isNotBlank()) {
+            currentState.number
+        } else {
+            "Unknown Caller"
+        }
+
         Text(
-            text = currentState.name,
+            text = displayName,
             fontSize = nameSize,
             fontWeight = FontWeight.Bold,
             color = TextPrimary,
@@ -1847,6 +1855,10 @@ fun QuickResponseSheet(
         "Please text me."
     )
 
+    val isDark = AppTheme.colors.isDark
+    val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
+    val iconColor = if (isDark) Color.White.copy(alpha = 0.6f) else Color(0xFF8E8E93)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1856,7 +1868,7 @@ fun QuickResponseSheet(
             text = "Quick Response",
             fontSize = 20.ssp(),
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = textColor,
             modifier = Modifier.padding(24.sdp())
         )
 
@@ -1869,9 +1881,9 @@ fun QuickResponseSheet(
                         .padding(horizontal = 24.sdp(), vertical = 16.sdp()),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Message, null, tint = TextSecondary, modifier = Modifier.size(20.sdp()))
+                    Icon(Icons.Default.Message, null, tint = iconColor, modifier = Modifier.size(20.sdp()))
                     Spacer(modifier = Modifier.width(16.sdp()))
-                    Text(messages[index], fontSize = 16.ssp(), color = Color.White)
+                    Text(messages[index], fontSize = 16.ssp(), color = textColor)
                 }
             }
         }

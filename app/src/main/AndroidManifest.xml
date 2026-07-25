@@ -137,7 +137,9 @@
             </intent-filter>
         </service>
 
-        <receiver android:name=".services.NotificationActionReceiver" />
+        <receiver
+            android:name=".services.NotificationActionReceiver"
+            android:exported="false" />
 
 <!--        <receiver-->
 <!--            android:name=".services.SmsReceiver"-->

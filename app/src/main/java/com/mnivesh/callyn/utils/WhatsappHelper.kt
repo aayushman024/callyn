@@ -25,25 +25,37 @@ object WhatsAppHelper {
 //    }
 
     fun openChat(context: Context, phoneNumber: String) {
-        val cleaned = phoneNumber
-            .replace(" ", "")
-            .replace("+", "")
-            .replace("-", "")
+        val trimmed = phoneNumber.trim()
+        if (trimmed.isEmpty()) return
 
-        val withCountryCode = if (cleaned.length == 10) "+91$cleaned" else cleaned
+        val cleaned = trimmed
+            .replace(" ", "")
+            .replace("-", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("+", "")
+
+        var digitsOnly = cleaned.filter { it.isDigit() }
+        if (digitsOnly.isEmpty()) return
+
+        if (digitsOnly.length == 11 && digitsOnly.startsWith("0")) {
+            digitsOnly = digitsOnly.substring(1)
+        }
+
+        val formattedNumber = if (digitsOnly.length == 10) "91$digitsOnly" else digitsOnly
 
         val intents = listOf(WHATSAPP_PACKAGE, WHATSAPP_BUSINESS_PACKAGE)
             .filter { isAppInstalled(context, it) }
             .map { pkg ->
                 Intent(Intent.ACTION_VIEW).apply {
-                    data = "https://wa.me/$withCountryCode".toUri()
+                    data = "https://wa.me/$formattedNumber".toUri()
                     setPackage(pkg)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
             }
 
         when {
-            intents.isEmpty() -> openInBrowser(context, cleaned)
+            intents.isEmpty() -> openInBrowser(context, formattedNumber)
             intents.size == 1 -> context.startActivity(intents.first())
             else -> {
                 val chooser = Intent.createChooser(intents.first(), "Open with").apply {

@@ -22,6 +22,9 @@ interface ContactDao {
     @Query("SELECT * FROM contacts ORDER BY name ASC")
     fun getAllContacts(): Flow<List<AppContact>>
 
+    @Query("SELECT * FROM contacts ORDER BY name ASC")
+    suspend fun getAllContactsList(): List<AppContact>
+
     /**
      */
     @Query("""
@@ -33,12 +36,11 @@ interface ContactDao {
     suspend fun getContactByNumber(normalizedNumber: String): AppContact?
 
     @Query("""
-    SELECT * FROM contacts 
-    WHERE number LIKE '%' || :normalizedNumber 
-    ORDER BY CASE WHEN rshipManager = 'Employee' THEN 0 ELSE 1 END ASC, name ASC
-""")
+        SELECT * FROM contacts 
+        WHERE number LIKE '%' || :normalizedNumber 
+        ORDER BY CASE WHEN rshipManager = 'Employee' THEN 0 ELSE 1 END ASC, name ASC
+    """)
     suspend fun getContactsByNumber(normalizedNumber: String): List<AppContact>
-
 
     @Query("SELECT * FROM contacts WHERE name = :name LIMIT 1")
     suspend fun getContactByName(name: String): AppContact?
@@ -69,6 +71,9 @@ interface ContactDao {
 
     @Query("SELECT * FROM crm_contacts")
     fun getAllCrmContacts(): Flow<List<CrmContact>>
+
+    @Query("SELECT * FROM crm_contacts")
+    suspend fun getAllCrmContactsList(): List<CrmContact>
 
     @Query("SELECT * FROM crm_contacts WHERE number LIKE '%' || :normalizedNumber LIMIT 1")
     suspend fun getCrmContactByNumber(normalizedNumber: String): CrmContact?

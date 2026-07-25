@@ -39,6 +39,10 @@ import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 
+import WhatsAppHelper
+import androidx.compose.ui.res.painterResource
+import com.mnivesh.callyn.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentCrmBottomSheet(
@@ -84,14 +88,38 @@ fun RecentCrmBottomSheet(
             contentPadding = PaddingValues(start = 24.sdp(), end = 24.sdp(), bottom = 24.sdp())
         ) {
             item {
-                // --- Header: Avatar + Share ---
+                // --- Header: WhatsApp + Avatar + Share ---
                 Box(modifier = Modifier.fillMaxWidth()) {
+                    // WhatsApp Button (Top Left)
+                    IconButton(
+                        onClick = {
+                            WhatsAppHelper.openChat(
+                                context = context,
+                                phoneNumber = contact.number
+                            )
+                        },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = surfaceColor,
+                        ),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .size(40.sdp())
+                            .clip(CircleShape)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.whatsapp),
+                            contentDescription = "WhatsApp",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(35.sdp())
+                        )
+                    }
+
                     // Share Button (Top Right)
                     IconButton(
                         onClick = { showShareCodeDialog = true },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .size(36.sdp())
+                            .size(40.sdp())
                             .clip(CircleShape)
                             .background(surfaceColor)
                     ) {

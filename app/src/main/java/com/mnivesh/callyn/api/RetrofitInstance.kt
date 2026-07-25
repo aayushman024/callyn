@@ -17,7 +17,6 @@ object RetrofitInstance {
 
     private var appContext: Context? = null
 
-    // Call this from CallynApplication.kt's onCreate()
     fun init(context: Context) {
         appContext = context.applicationContext
     }

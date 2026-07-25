@@ -37,6 +37,10 @@ import com.mnivesh.callyn.managers.SimManager
 import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.screens.sheets.CallHistoryRow
 
+import WhatsAppHelper
+import androidx.compose.ui.res.painterResource
+import com.mnivesh.callyn.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmployeeBottomSheet(
@@ -85,29 +89,55 @@ fun EmployeeBottomSheet(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             item {
-                // Header: Avatar
-                Box(
-                    modifier = Modifier
-                        .size(110.sdp())
-                        .border(4.sdp(), backgroundColor, CircleShape)
-                        .padding(4.sdp())
-                        .clip(CircleShape)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    getColorForName(contact.name),
-                                    getColorForName(contact.name).copy(alpha = 0.6f)
-                                )
+                // Header: WhatsApp + Avatar
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    IconButton(
+                        onClick = {
+                            WhatsAppHelper.openChat(
+                                context = context,
+                                phoneNumber = contact.number
                             )
+                        },
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = surfaceColor,
                         ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        getInitials(contact.name),
-                        color = Color.White,
-                        fontSize = 40.ssp(),
-                        fontWeight = FontWeight.SemiBold
-                    )
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .size(40.sdp())
+                            .clip(CircleShape)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.whatsapp),
+                            contentDescription = "WhatsApp",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(35.sdp())
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(110.sdp())
+                            .align(Alignment.Center)
+                            .border(4.sdp(), backgroundColor, CircleShape)
+                            .padding(4.sdp())
+                            .clip(CircleShape)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        getColorForName(contact.name),
+                                        getColorForName(contact.name).copy(alpha = 0.6f)
+                                    )
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            getInitials(contact.name),
+                            color = Color.White,
+                            fontSize = 40.ssp(),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.sdp()))

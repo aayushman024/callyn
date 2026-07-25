@@ -86,6 +86,10 @@ object CallManager {
     fun initialize(repository: ContactRepository, context: Context) {
         this.repository = repository
         this.appContext = context.applicationContext
+        coroutineScope.launch {
+            val userName = AuthManager(context.applicationContext).getUserName()
+            repository.preWarmCache(userName)
+        }
     }
 
     private fun normalizeNumber(number: String): String {
@@ -171,12 +175,37 @@ object CallManager {
             displayNumber
         }
 
+        // Variables for synchronous cache-resolved contact info
+        var cachedType: String? = null
+        var cachedPan: String? = null
+        var cachedFamilyHead: String? = null
+        var cachedRshipManager: String? = null
+        var cachedAum: String? = null
+        var cachedFamilyAum: String? = null
+        var cachedPersonalName: String? = null
+
         // prevent UI flickering: reuse the resolved name if the number hasn't changed while DB queries run
         if (!isConference && displayNumber.isNotEmpty()) {
-            if (currentState?.number == displayNumber && currentState.name != displayNumber) {
+            val currentNorm = currentState?.number?.let { normalizeNumber(it) } ?: ""
+            val displayNorm = normalizeNumber(displayNumber)
+            if (currentState != null && (currentState.number == displayNumber || currentNorm == displayNorm) && currentState.name != displayNumber) {
                 finalName = currentState.name
             } else {
-                resolveContactInfo(displayNumber)
+                // Check cache synchronously BEFORE emitting state so ringing shows resolved name instantly
+                val cached = com.mnivesh.callyn.utils.ContactCache.get(displayNorm)
+                if (cached != null) {
+                    finalName = cached.name
+                    cachedType = cached.type
+                    cachedPan = cached.pan
+                    cachedFamilyHead = cached.familyHead
+                    cachedRshipManager = cached.rshipManager
+                    cachedAum = cached.aum
+                    cachedFamilyAum = cached.familyAum
+                    cachedPersonalName = cached.personalName
+                } else {
+                    // Cache miss: launch async DB lookup
+                    resolveContactInfo(displayNumber)
+                }
             }
         }
 
@@ -200,7 +229,8 @@ object CallManager {
         }
 
         // --- EMIT STATE atomically to prevent lost updates ---
-        val newState = (currentState ?: CallState(name = finalName, number = displayNumber, pan = "",status = "Connecting")).copy(
+        val baseState = currentState ?: CallState(name = finalName, number = displayNumber, pan = "",status = "Connecting")
+        val newState = baseState.copy(
             name = finalName,
             number = displayNumber,
             status = primary.getStateString(),
@@ -217,7 +247,15 @@ object CallManager {
             secondIncomingCall = if (isSecondRinging) targetSecondary else null,
             secondCallerName = if (targetSecondary != null) secName else null,
             secondCallerNumber = if (targetSecondary != null) secNumber else null,
-            isSecondCallHolding = isSecondHolding
+            isSecondCallHolding = isSecondHolding,
+            // Apply synchronously resolved cache data if available
+            type = cachedType ?: baseState.type,
+            pan = cachedPan ?: baseState.pan,
+            familyHead = cachedFamilyHead ?: baseState.familyHead,
+            rshipManager = cachedRshipManager ?: baseState.rshipManager,
+            aum = cachedAum ?: baseState.aum,
+            familyAum = cachedFamilyAum ?: baseState.familyAum,
+            personalName = cachedPersonalName ?: baseState.personalName
         )
 
         // Prevent redundant emissions that throttle NotificationManager Heads-Up
@@ -298,6 +336,17 @@ object CallManager {
 
         if (normalized.length < 7) return
 
+        // 1. Fast path: Check LRU cache
+        val cached = com.mnivesh.callyn.utils.ContactCache.get(normalized)
+        if (cached != null) {
+            _callState.update { current ->
+                if (current != null && current.secondCallerNumber == number) {
+                    current.copy(secondCallerName = cached.name)
+                } else current
+            }
+            return
+        }
+
         coroutineScope.launch {
             var resolvedName: String? = null
 
@@ -332,6 +381,16 @@ object CallManager {
 
             val finalName = resolvedName ?: number
 
+            val userName = appContext?.let { AuthManager(it).getUserName() }
+            com.mnivesh.callyn.utils.ContactCache.put(
+                normalized,
+                com.mnivesh.callyn.utils.ResolvedContactInfo(
+                    name = finalName,
+                    rshipManager = workContact?.rshipManager
+                ),
+                userName
+            )
+
             _callState.update { current ->
                 if (current != null && current.secondCallerNumber == number) {
                     current.copy(secondCallerName = finalName)
@@ -343,6 +402,27 @@ object CallManager {
     private fun resolveContactInfo(number: String) {
         if (number.isBlank()) return
         val normalized = normalizeNumber(number)
+
+        // 1. Fast path: Check LRU Cache for instant 0ms lookup
+        val cached = com.mnivesh.callyn.utils.ContactCache.get(normalized)
+        if (cached != null) {
+            _callState.update { current ->
+                val currentNorm = current?.number?.let { normalizeNumber(it) } ?: ""
+                if (current != null && (current.number == number || currentNorm == normalized || current.number.isBlank())) {
+                    current.copy(
+                        name = cached.name,
+                        type = cached.type,
+                        pan = cached.pan,
+                        familyHead = cached.familyHead,
+                        rshipManager = cached.rshipManager,
+                        aum = cached.aum,
+                        familyAum = cached.familyAum,
+                        personalName = cached.personalName
+                    )
+                } else current
+            }
+            return
+        }
 
         coroutineScope.launch {
             var resolvedName: String? = null
@@ -391,9 +471,9 @@ object CallManager {
             }
 
             if (resolvedName == null) {
-                val personalName = findPersonalContactName(normalized)
-                if (personalName != null) {
-                    resolvedName = personalName
+                val foundPersonal = findPersonalContactName(normalized)
+                if (foundPersonal != null) {
+                    resolvedName = foundPersonal
                     type = "personal"
                 }
             }
@@ -407,8 +487,23 @@ object CallManager {
 
             val finalName = resolvedName ?: number
 
+            val resolvedInfo = com.mnivesh.callyn.utils.ResolvedContactInfo(
+                name = finalName,
+                personalName = personalName,
+                type = type,
+                pan = pan,
+                familyHead = familyHead,
+                rshipManager = rshipManager,
+                aum = aum,
+                familyAum = familyAum
+            )
+
+            val userName = appContext?.let { AuthManager(it).getUserName() }
+            com.mnivesh.callyn.utils.ContactCache.put(normalized, resolvedInfo, userName)
+
             _callState.update { current ->
-                if (current?.number == number) {
+                val currentNorm = current?.number?.let { normalizeNumber(it) } ?: ""
+                if (current != null && (current.number == number || currentNorm == normalized || current.number.isBlank())) {
                     current.copy(
                         name = finalName,
                         type = type,
@@ -586,7 +681,10 @@ object CallManager {
     fun updateAudioState(isMuted: Boolean, isSpeakerOn: Boolean, isBluetoothOn: Boolean, availableRoutes: Int) {
         _callState.update { current -> current?.copy(isMuted = isMuted, isSpeakerOn = isSpeakerOn, isBluetoothOn = isBluetoothOn, availableRoutes = availableRoutes) }
     }
-    fun answerCall() { _callState.value?.call?.answer(0) }
+    fun answerCall() {
+        _callState.update { current -> current?.copy(status = "Connecting") }
+        _callState.value?.call?.answer(0)
+    }
     fun rejectCall() {
         _callState.value?.call?.let { if (it.state == Call.STATE_RINGING) it.reject(false, "") else it.disconnect() }
     }

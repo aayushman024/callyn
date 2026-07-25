@@ -2,6 +2,7 @@ package com.mnivesh.callyn.services
 
 import android.R
 import android.annotation.SuppressLint
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -70,18 +71,26 @@ class MyInCallService : InCallService() {
 
         showNotification()
 
-        // For outgoing calls, we must launch the InCallActivity explicitly.
-        // For incoming calls, this acts as a fallback to FullScreenIntent on strict OEM devices.
+        val keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        val isLocked = keyguardManager.isKeyguardLocked
         val currentState = CallManager.callState.value
+
+        // Launch InCallActivity directly ONLY for outgoing calls.
+        // For incoming calls:
+        //   - When LOCKED: setFullScreenIntent in showNotification() launches InCallActivity over lockscreen.
+        //   - When UNLOCKED: Sticky HUN is displayed via setFullScreenIntent (no activity launch).
+        // This prevents the dual UI issue (full-screen activity + HUN appearing together when locked).
         if (currentState != null) {
-            val intent = Intent(this, InCallActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                // If blocked by Android 10+ background start restrictions, 
-                // the FullScreenIntent in the notification will still handle incoming calls.
+            val isIncoming = currentState.isIncoming
+            if (!isIncoming) {
+                val intent = Intent(this, InCallActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                }
+                try {
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    // Fallback to notification fullScreenIntent on strict OEM devices
+                }
             }
         }
     }
@@ -262,9 +271,6 @@ class MyInCallService : InCallService() {
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Notifications for incoming ringing calls"
-            setSound(null, null)
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0L) // Silent vibration to force Heads-Up on OEMs
             setShowBadge(false)
         }
         notificationManager.createNotificationChannel(incomingChannel)
@@ -293,7 +299,6 @@ class MyInCallService : InCallService() {
         val callStatus = currentState.status
 
         val isActive = callStatus.equals("Active", ignoreCase = true)
-        val displayTime = if (isActive && currentState.connectTimeMillis > 0) currentState.connectTimeMillis else System.currentTimeMillis()
 
         val activityIntent = Intent(this, InCallActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -302,8 +307,14 @@ class MyInCallService : InCallService() {
             this, 2, activityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val pendingIntent = PendingIntent.getActivity( // FIX 1: was missing, caused compile error
+        val pendingIntent = PendingIntent.getActivity(
             this, 0, activityIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val answerCallIntent = PendingIntent.getBroadcast(
+            this, 3,
+            Intent(this, NotificationActionReceiver::class.java).apply { action = "ANSWER_CALL" },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -312,6 +323,9 @@ class MyInCallService : InCallService() {
             Intent(this, NotificationActionReceiver::class.java).apply { action = "END_CALL" },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        val keyguardManager = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val isLocked = keyguardManager.isKeyguardLocked
 
         val targetChannelId = if (currentState.isIncoming) CHANNEL_ID_INCOMING else CHANNEL_ID_ONGOING
 
@@ -325,16 +339,11 @@ class MyInCallService : InCallService() {
                 .setImportant(true)
                 .build()
 
-            val answerIntent = PendingIntent.getActivity(
-                this, 3, activityIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
             val callStyle = if (currentState.isIncoming) {
                 Notification.CallStyle.forIncomingCall(
                     person,
                     endCallIntent,
-                    answerIntent
+                    answerCallIntent
                 )
             } else {
                 Notification.CallStyle.forOngoingCall(
@@ -356,8 +365,9 @@ class MyInCallService : InCallService() {
                 .setUsesChronometer(isActive)
                 .setWhen(if (isActive && currentState.connectTimeMillis > 0) currentState.connectTimeMillis else 0L)
 
-            // Only set fullScreenIntent for incoming/ringing calls.
-            // Setting it on ongoing calls keeps the heads-up banner visible even after answering.
+            // Set fullScreenIntent for all incoming calls.
+            // On Android 10+, this causes the Heads-Up Notification (HUN) to remain persistent/sticky
+            // and stay on screen without auto-dismissing after 5 seconds while ringing.
             if (currentState.isIncoming) {
                 notificationBuilder.setFullScreenIntent(fullScreenIntent, true)
             }
@@ -375,13 +385,15 @@ class MyInCallService : InCallService() {
                 .setColor(Color.parseColor("#4CAF50"))
                 .setColorized(true)
                 .setContentIntent(pendingIntent)
-                .addAction(R.drawable.ic_menu_close_clear_cancel, "End", endCallIntent)
-                .setUsesChronometer(true)
+                .setUsesChronometer(isActive)
                 .setWhen(currentState.connectTimeMillis.takeIf { it > 0 } ?: 0L)
 
-            // Only set fullScreenIntent for incoming/ringing calls
             if (currentState.isIncoming) {
+                notificationCompatBuilder.addAction(R.drawable.ic_menu_close_clear_cancel, "Decline", endCallIntent)
+                notificationCompatBuilder.addAction(R.drawable.ic_menu_call, "Accept", answerCallIntent)
                 notificationCompatBuilder.setFullScreenIntent(fullScreenIntent, true)
+            } else {
+                notificationCompatBuilder.addAction(R.drawable.ic_menu_close_clear_cancel, "End", endCallIntent)
             }
 
             if (Build.VERSION.SDK_INT >= 29) {
@@ -394,13 +406,5 @@ class MyInCallService : InCallService() {
 
     private fun stopForegroundService() {
         stopForeground(STOP_FOREGROUND_REMOVE)
-    }
-}
-
-class NotificationActionReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context?, intent: Intent?) {
-        if (intent?.action == "END_CALL") {
-            CallManager.rejectCall()
-        }
     }
 }

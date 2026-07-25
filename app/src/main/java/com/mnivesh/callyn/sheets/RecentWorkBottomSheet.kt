@@ -27,6 +27,11 @@ import com.mnivesh.callyn.viewmodels.RecentCallUiItem
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 
+import WhatsAppHelper
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.mnivesh.callyn.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentWorkBottomSheet(
@@ -38,9 +43,11 @@ fun RecentWorkBottomSheet(
     onDismiss: () -> Unit,
     onCall: (Int?) -> Unit
 ) {
+    val context = LocalContext.current
 
     val isDark = AppTheme.colors.isDark
     val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val textPrimary = AppTheme.colors.textPrimary
     val textSecondary = AppTheme.colors.textSecondary
 
@@ -62,26 +69,52 @@ fun RecentWorkBottomSheet(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(70.sdp())
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        getColorForName(contact.name),
-                                        getColorForName(contact.name).copy(alpha = 0.7f)
-                                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        IconButton(
+                            onClick = {
+                                WhatsAppHelper.openChat(
+                                    context = context,
+                                    phoneNumber = contact.number
                                 )
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
                             ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            getInitials(contact.name),
-                            color = Color.White,
-                            fontSize = 26.ssp(),
-                            fontWeight = FontWeight.Bold
-                        )
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .size(40.sdp())
+                                .clip(CircleShape)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.whatsapp),
+                                contentDescription = "WhatsApp",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(35.sdp())
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(70.sdp())
+                                .align(Alignment.Center)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            getColorForName(contact.name),
+                                            getColorForName(contact.name).copy(alpha = 0.7f)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                getInitials(contact.name),
+                                color = Color.White,
+                                fontSize = 26.ssp(),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(18.sdp()))
                     Text(

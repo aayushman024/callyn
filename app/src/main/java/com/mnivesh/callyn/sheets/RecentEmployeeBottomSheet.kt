@@ -32,6 +32,10 @@ import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
 import kotlinx.coroutines.launch
 
+import WhatsAppHelper
+import androidx.compose.ui.res.painterResource
+import com.mnivesh.callyn.R
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentEmployeeBottomSheet(
@@ -48,6 +52,7 @@ fun RecentEmployeeBottomSheet(
     // UI Colors
     val isDark = AppTheme.colors.isDark
     val backgroundColor = AppTheme.colors.background
+    val surfaceColor = AppTheme.colors.surface
     val textPrimary = AppTheme.colors.textPrimary
     val textSecondary = AppTheme.colors.textSecondary
     val secondaryColor = Color(0xFF60A5FA) // Blue for Employee
@@ -69,29 +74,53 @@ fun RecentEmployeeBottomSheet(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Spacer(modifier = Modifier.height(16.sdp()))
-
-                    // --- Avatar ---
-                    Box(
-                        modifier = Modifier
-                            .size(110.sdp())
-                            .clip(CircleShape)
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        getColorForName(contact.name),
-                                        getColorForName(contact.name).copy(alpha = 0.6f)
-                                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        IconButton(
+                            onClick = {
+                                WhatsAppHelper.openChat(
+                                    context = context,
+                                    phoneNumber = contact.number
                                 )
+                            },
+                            colors = IconButtonDefaults.iconButtonColors(
+                                containerColor = surfaceColor,
                             ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            getInitials(contact.name),
-                            color = Color.White,
-                            fontSize = 40.ssp(),
-                            fontWeight = FontWeight.SemiBold
-                        )
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .size(40.sdp())
+                                .clip(CircleShape)
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.whatsapp),
+                                contentDescription = "WhatsApp",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(35.sdp())
+                            )
+                        }
+
+                        // --- Avatar ---
+                        Box(
+                            modifier = Modifier
+                                .size(110.sdp())
+                                .align(Alignment.Center)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.verticalGradient(
+                                        listOf(
+                                            getColorForName(contact.name),
+                                            getColorForName(contact.name).copy(alpha = 0.6f)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                getInitials(contact.name),
+                                color = Color.White,
+                                fontSize = 40.ssp(),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.sdp()))

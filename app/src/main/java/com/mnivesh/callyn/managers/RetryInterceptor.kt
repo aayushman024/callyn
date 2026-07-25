@@ -64,6 +64,10 @@ class RetryInterceptor : Interceptor {
                 }
 
             } catch (e: Exception) {
+                // If request was canceled (e.g. coroutine scope left composition), do not retry
+                if (e is IOException && (e.message?.contains("Canceled", ignoreCase = true) == true || chain.call().isCanceled())) {
+                    throw e
+                }
                 exception = e
                 Log.e("RetryInterceptor", "Request failed on attempt ${tryCount + 1}", e)
                 response?.close()

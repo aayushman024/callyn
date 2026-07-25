@@ -94,6 +94,7 @@ class ContactRepository(
                 Result.failure(Exception("Failed to fetch employees: ${response.message()}"))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             FirebaseCrashlytics.getInstance().recordException(e)
             Result.failure(e)
         }
@@ -126,6 +127,9 @@ class ContactRepository(
                 //insert employees data
                 getEmployees(token, forceRefresh = true)
 
+                // Pre-warm cache for contacts belonging to user/employee
+                com.mnivesh.callyn.utils.ContactCache.preWarmAppContacts(dbContacts, managerName)
+
                 Log.d(TAG, "Successfully refreshed employee database.")
 
                 return true // [!code ++] Return Success
@@ -137,6 +141,7 @@ class ContactRepository(
                 return false
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Failed to refresh contacts", e)
             FirebaseCrashlytics.getInstance().recordException(e)
             return false // [!code ++] Return Failure
@@ -190,6 +195,7 @@ class ContactRepository(
                 FirebaseCrashlytics.getInstance().recordException(Exception("syncInitialData failed: status code ${response.code()}"))
             }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             Log.e(TAG, "Failed to sync initial data", e)
             FirebaseCrashlytics.getInstance().recordException(e)
         }
@@ -435,6 +441,17 @@ class ContactRepository(
             Result.failure(e)
         } finally {
             _isCrmLoading.value = false
+        }
+    }
+
+    suspend fun preWarmCache(userName: String?) {
+        try {
+            val contacts = contactDao.getAllContactsList()
+            com.mnivesh.callyn.utils.ContactCache.preWarmAppContacts(contacts, userName)
+            val crm = contactDao.getAllCrmContactsList()
+            com.mnivesh.callyn.utils.ContactCache.preWarmCrmContacts(crm, userName)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error pre-warming cache", e)
         }
     }
 }
