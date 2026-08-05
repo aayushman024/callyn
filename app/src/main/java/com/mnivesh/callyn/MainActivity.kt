@@ -496,8 +496,8 @@ class MainActivity : ComponentActivity() {
                 return false
             }
 
-            val token = data.getQueryParameter("accessToken")
-            val refreshToken = data.getQueryParameter("refreshToken")
+            val token = data.getQueryParameter("accessToken")?.trim()?.takeIf { it.isNotEmpty() && it != "null" && it != "undefined" }
+            val refreshToken = data.getQueryParameter("refreshToken")?.trim()?.takeIf { it.isNotEmpty() && it != "null" && it != "undefined" }
             val department = data.getQueryParameter("departmentName")
             val email = data.getQueryParameter("email")
             val name = data.getQueryParameter("name")
@@ -505,7 +505,9 @@ class MainActivity : ComponentActivity() {
 
             if (!token.isNullOrEmpty()) {
                 authManager.saveToken(token)
-                authManager.saveRefreshToken(refreshToken)
+                if (!refreshToken.isNullOrEmpty()) {
+                    authManager.saveRefreshToken(refreshToken)
+                }
                 authManager.setSetupCompleted(false)
                 authManager.saveUserName(name)
                 authManager.saveUserEmail(email)

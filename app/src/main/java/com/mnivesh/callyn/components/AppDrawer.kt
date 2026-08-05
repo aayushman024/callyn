@@ -70,6 +70,7 @@ fun AppDrawer(
     onShowUserDetails: () -> Unit,
     onShowDirectory: () -> Unit,
     onShowCallLogs: () -> Unit,
+    onShowEditQuickReplies: () -> Unit,
     isDarkTheme: Boolean,
     onThemeToggle: (Boolean) -> Unit
 ) {
@@ -111,6 +112,10 @@ fun AppDrawer(
                 DrawerItemType.Action(callLogLabel, callLogIcon, callLogColor, onClick = onShowCallLogs)
             )
         }
+
+        list.add(
+            DrawerItemType.Action("Edit Quick Replies", Icons.Default.Message, Color(0xFF3B82F6), onClick = onShowEditQuickReplies)
+        )
 
         list.add(DrawerItemType.Divider)
         list.add(

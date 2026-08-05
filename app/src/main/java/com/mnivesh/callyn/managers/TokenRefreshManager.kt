@@ -75,17 +75,34 @@ object TokenRefreshManager {
                         val responseBody = response.body?.string()
                         if (!responseBody.isNullOrEmpty()) {
                             val jsonObject = JSONObject(responseBody)
-                            val newAccessToken = jsonObject.optString("accessToken")
-                            val newRefreshToken = jsonObject.optString("refreshToken")
 
-                            if (newAccessToken.isNotEmpty()) {
+                            val rawAccessToken = if (jsonObject.has("accessToken") && !jsonObject.isNull("accessToken")) {
+                                jsonObject.optString("accessToken")
+                            } else null
+                            val newAccessToken = rawAccessToken?.trim()?.takeIf {
+                                it.isNotEmpty() && it != "null" && it != "undefined"
+                            }
+
+                            val rawRefreshToken = if (jsonObject.has("refreshToken") && !jsonObject.isNull("refreshToken")) {
+                                jsonObject.optString("refreshToken")
+                            } else null
+                            val newRefreshToken = rawRefreshToken?.trim()?.takeIf {
+                                it.isNotEmpty() && it != "null" && it != "undefined"
+                            }
+
+                            // Only overwrite original tokens if non-null, non-empty, and valid
+                            if (!newAccessToken.isNullOrEmpty()) {
                                 authManager.saveToken(newAccessToken)
-                                if (newRefreshToken.isNotEmpty()) {
-                                    authManager.saveRefreshToken(newRefreshToken)
-                                }
+                            }
+                            if (!newRefreshToken.isNullOrEmpty()) {
+                                authManager.saveRefreshToken(newRefreshToken)
+                            }
+
+                            val activeAccessToken = authManager.getToken()
+                            if (!activeAccessToken.isNullOrEmpty()) {
                                 authManager.updateLastRefreshTime()
                                 Log.d(TAG, "Token refreshed successfully on attempt $attempt.")
-                                return@withContext TokenRefreshResult.Success(newAccessToken)
+                                return@withContext TokenRefreshResult.Success(activeAccessToken)
                             }
                         }
                     } else {

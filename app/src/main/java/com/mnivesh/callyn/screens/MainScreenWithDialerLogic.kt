@@ -72,6 +72,7 @@ sealed class Screen(val route: String) {
     object UserDetails : Screen("user_details")
     object ShowCallLogs : Screen("show_call_logs")
     object EmployeeDirectory : Screen("employee_directory")
+    object EditQuickReplies : Screen("edit_quick_replies")
 }
 
 /**
@@ -260,6 +261,10 @@ fun MainScreenContent(
                     scope.launch { drawerState.close() }
                     navController.navigate(Screen.ShowCallLogs.route)
                 },
+                onShowEditQuickReplies = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Screen.EditQuickReplies.route)
+                },
                 isDarkTheme = isDarkTheme,
                 onThemeToggle = onThemeToggle
             )
@@ -318,6 +323,11 @@ fun MainScreenContent(
                 composable(Screen.ShowCallLogs.route) {
                     ShowCallLogsScreen(
                         onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.EditQuickReplies.route) {
+                    EditQuickRepliesScreen(
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }

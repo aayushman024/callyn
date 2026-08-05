@@ -23,8 +23,8 @@ android {
         applicationId = "com.mnivesh.callyn"
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
-        versionCode = 9
-        versionName = "2.2.0"
+        versionCode = 10
+        versionName = "2.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

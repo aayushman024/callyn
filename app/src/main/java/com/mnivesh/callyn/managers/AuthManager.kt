@@ -20,13 +20,27 @@ class AuthManager(context: Context) {
 
     fun isLoggedIn(): Boolean = prefs.contains(AUTH_TOKEN) && !getToken().isNullOrEmpty()
 
-    fun saveToken(token: String) {
-        prefs.edit().putString(AUTH_TOKEN, token).apply()
+    fun saveToken(token: String?) {
+        val trimmed = token?.trim()
+        if (trimmed.isNullOrEmpty() || trimmed == "null" || trimmed == "undefined") {
+            return
+        }
+        prefs.edit().putString(AUTH_TOKEN, trimmed).apply()
         updateLastRefreshTime()
     }
     fun getToken(): String? = prefs.getString(AUTH_TOKEN, null)
-    fun saveRefreshToken(token: String?) = prefs.edit().putString(REFRESH_TOKEN, token).apply()
-    fun getRefreshToken(): String? = prefs.getString(REFRESH_TOKEN, null)
+    fun saveRefreshToken(token: String?) {
+        val trimmed = token?.trim()
+        if (trimmed.isNullOrEmpty() || trimmed == "null" || trimmed == "undefined") {
+            return
+        }
+        prefs.edit().putString(REFRESH_TOKEN, trimmed).apply()
+    }
+
+    fun getRefreshToken(): String? {
+        val token = prefs.getString(REFRESH_TOKEN, null)?.trim()
+        return if (!token.isNullOrEmpty() && token != "null" && token != "undefined") token else null
+    }
 
     fun updateLastRefreshTime(timestampMs: Long = System.currentTimeMillis()) {
         prefs.edit().putLong(KEY_LAST_REFRESH_TIME, timestampMs).apply()

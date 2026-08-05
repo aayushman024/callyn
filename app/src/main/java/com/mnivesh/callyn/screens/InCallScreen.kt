@@ -1848,12 +1848,8 @@ fun QuickResponseSheet(
     onMessageSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val messages = listOf(
-        "Can't talk now. What's up?",
-        "I'll call you back later.",
-        "I'm in a meeting.",
-        "Please text me."
-    )
+    val context = LocalContext.current
+    val messages = remember { com.mnivesh.callyn.managers.QuickReplyManager.getQuickReplies(context) }
 
     val isDark = AppTheme.colors.isDark
     val textColor = if (isDark) Color.White else Color(0xFF1C1C1E)
