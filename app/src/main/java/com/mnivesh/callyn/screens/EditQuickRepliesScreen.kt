@@ -25,6 +25,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mnivesh.callyn.managers.FeatureBadgeKey
+import com.mnivesh.callyn.managers.FeatureBadgeManager
 import com.mnivesh.callyn.managers.QuickReplyManager
 import com.mnivesh.callyn.ui.theme.AppTheme
 import com.mnivesh.callyn.ui.theme.sdp
@@ -36,6 +38,12 @@ fun EditQuickRepliesScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val featureBadgeManager = remember { FeatureBadgeManager(context) }
+
+    LaunchedEffect(Unit) {
+        featureBadgeManager.markFeatureVisited(FeatureBadgeKey.QUICK_REPLIES)
+    }
+
     var quickReplies by remember { mutableStateOf(QuickReplyManager.getQuickReplies(context)) }
     var showAddDialog by remember { mutableStateOf(false) }
     var newReplyText by remember { mutableStateOf("") }
@@ -66,47 +74,34 @@ fun EditQuickRepliesScreen(
                         )
                     }
                 },
+                actions = {
+                    TextButton(
+                        onClick = {
+                            newReplyText = ""
+                            showAddDialog = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = primaryBlue,
+                            modifier = Modifier.size(18.sdp())
+                        )
+                        Spacer(modifier = Modifier.width(4.sdp()))
+                        Text(
+                            text = "Add",
+                            color = primaryBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.ssp()
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = surfaceColor
                 )
             )
         },
-        containerColor = surfaceColor,
-        bottomBar = {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.sdp()),
-                color = surfaceColor
-            ) {
-                Button(
-                    onClick = {
-                        newReplyText = ""
-                        showAddDialog = true
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.sdp()),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = primaryBlue,
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(12.sdp())
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.sdp())
-                    )
-                    Spacer(modifier = Modifier.width(8.sdp()))
-                    Text(
-                        "Add Custom Quick Reply",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.ssp()
-                    )
-                }
-            }
-        }
+        containerColor = surfaceColor
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -136,7 +131,7 @@ fun EditQuickRepliesScreen(
                     )
                     Spacer(modifier = Modifier.height(4.sdp()))
                     Text(
-                        "Tap the button below to add your first quick reply.",
+                        "Tap the + button in the app bar to add your first quick reply.",
                         fontSize = 13.ssp(),
                         color = textSecondary
                     )

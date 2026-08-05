@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.border
+import com.mnivesh.callyn.managers.FeatureBadgeManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -519,8 +520,22 @@ fun ContactsScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onOpenDrawer) {
-                            Icon(Icons.Default.Menu, "Menu", tint = AppTheme.colors.textPrimary)
+                        val featureBadgeManager = remember { FeatureBadgeManager(context) }
+                        val showUnvisitedDot = remember(featureBadgeManager) { featureBadgeManager.hasAnyUnvisitedFeature() }
+
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            IconButton(onClick = onOpenDrawer) {
+                                Icon(Icons.Default.Menu, "Menu", tint = AppTheme.colors.textPrimary)
+                            }
+                            if (showUnvisitedDot) {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 10.sdp(), end = 10.sdp())
+                                        .size(8.sdp())
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFEF4444))
+                                )
+                            }
                         }
                     },
                     actions = {

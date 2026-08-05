@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import com.mnivesh.callyn.MainActivity
 import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.FeatureBadgeKey
+import com.mnivesh.callyn.managers.FeatureBadgeManager
 import com.mnivesh.callyn.ui.theme.AppTheme
 
 // --- Access Lists (Unchanged) ---
@@ -53,6 +55,7 @@ sealed class DrawerItemType {
         val icon: ImageVector,
         val tint: Color,
         val isDestructive: Boolean = false,
+        val badgeKey: FeatureBadgeKey? = null,
         val onClick: () -> Unit
     ) : DrawerItemType()
 
@@ -114,7 +117,13 @@ fun AppDrawer(
         }
 
         list.add(
-            DrawerItemType.Action("Edit Quick Replies", Icons.Default.Message, Color(0xFF3B82F6), onClick = onShowEditQuickReplies)
+            DrawerItemType.Action(
+                label = "Edit Quick Replies",
+                icon = Icons.Default.Message,
+                tint = Color(0xFF3B82F6),
+                badgeKey = FeatureBadgeKey.QUICK_REPLIES,
+                onClick = onShowEditQuickReplies
+            )
         )
 
         list.add(DrawerItemType.Divider)
@@ -375,6 +384,9 @@ private fun DrawerActionItem(
     item: DrawerItemType.Action,
     onClose: () -> Unit
 ) {
+    val context = LocalContext.current
+    val featureBadgeManager = remember { FeatureBadgeManager(context) }
+
     val backgroundColor = if (item.isDestructive)
         item.tint.copy(alpha = 0.1f)
     else
@@ -412,13 +424,33 @@ private fun DrawerActionItem(
 
             Spacer(modifier = Modifier.width(16.sdp()))
 
-            Text(
-                text = item.label,
-                fontSize = 14.ssp(),
-                fontWeight = FontWeight.Medium,
-                color = if (item.isDestructive) item.tint else AppTheme.colors.textPrimary,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
-            )
+            ) {
+                Text(
+                    text = item.label,
+                    fontSize = 14.ssp(),
+                    fontWeight = FontWeight.Medium,
+                    color = if (item.isDestructive) item.tint else AppTheme.colors.textPrimary
+                )
+
+                if (item.badgeKey != null && featureBadgeManager.isFeatureUnvisited(item.badgeKey)) {
+                    Spacer(modifier = Modifier.width(8.sdp()))
+                    Surface(
+                        color = Color(0xFFEF4444),
+                        shape = RoundedCornerShape(6.sdp())
+                    ) {
+                        Text(
+                            text = "NEW",
+                            color = Color.White,
+                            fontSize = 10.ssp(),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.sdp(), vertical = 2.sdp())
+                        )
+                    }
+                }
+            }
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
