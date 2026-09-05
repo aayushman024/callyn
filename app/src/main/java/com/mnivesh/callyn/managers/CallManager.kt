@@ -229,7 +229,22 @@ object CallManager {
         }
 
         // --- EMIT STATE atomically to prevent lost updates ---
-        val baseState = currentState ?: CallState(name = finalName, number = displayNumber, pan = "",status = "Connecting")
+        val serviceAudioState = MyInCallService.instance?.callAudioState
+        val initialSpeaker = serviceAudioState?.let { it.route == CallAudioState.ROUTE_SPEAKER } ?: false
+        val initialBluetooth = serviceAudioState?.let { it.route == CallAudioState.ROUTE_BLUETOOTH } ?: false
+        val initialMuted = serviceAudioState?.isMuted ?: false
+        val initialRoutes = serviceAudioState?.supportedRouteMask ?: 0
+
+        val baseState = currentState ?: CallState(
+            name = finalName,
+            number = displayNumber,
+            pan = "",
+            status = "Connecting",
+            isSpeakerOn = initialSpeaker,
+            isBluetoothOn = initialBluetooth,
+            isMuted = initialMuted,
+            availableRoutes = initialRoutes
+        )
         val newState = baseState.copy(
             name = finalName,
             number = displayNumber,
@@ -688,9 +703,25 @@ object CallManager {
     fun rejectCall() {
         _callState.value?.call?.let { if (it.state == Call.STATE_RINGING) it.reject(false, "") else it.disconnect() }
     }
+
+    @SuppressLint("MissingPermission")
+    fun disconnectHandsFreeCall(number: String): Boolean {
+        val normalizedTarget = normalizeNumber(number)
+        val call = registeredCalls.firstOrNull { candidate ->
+            val callNumber = candidate.details.handle?.schemeSpecificPart?.let(::normalizeNumber)
+            val sameNumber = callNumber == normalizedTarget ||
+                    (callNumber != null && callNumber.length >= 10 && normalizedTarget.length >= 10 &&
+                            callNumber.takeLast(10) == normalizedTarget.takeLast(10))
+                sameNumber && candidate.state != Call.STATE_DISCONNECTED &&
+                    candidate.state != Call.STATE_DISCONNECTING
+        } ?: return false
+
+        call.disconnect()
+        return true
+    }
     fun toggleSpeaker() {
         val current = _callState.value ?: return
-        val route = if (current.isSpeakerOn) CallAudioState.ROUTE_EARPIECE else CallAudioState.ROUTE_SPEAKER
+        val route = if (current.isSpeakerOn) CallAudioState.ROUTE_WIRED_OR_EARPIECE else CallAudioState.ROUTE_SPEAKER
         MyInCallService.Companion.instance?.setAudioRoute(route)
     }
     fun toggleMute() { MyInCallService.Companion.instance?.setMuted(!(_callState.value?.isMuted ?: false)) }
@@ -702,7 +733,7 @@ object CallManager {
     fun toggleBluetooth() {
         val current = _callState.value ?: return
         if (!isBluetoothAvailable()) return
-        val newRoute = if (current.isBluetoothOn) CallAudioState.ROUTE_EARPIECE else CallAudioState.ROUTE_BLUETOOTH
+        val newRoute = if (current.isBluetoothOn) CallAudioState.ROUTE_WIRED_OR_EARPIECE else CallAudioState.ROUTE_BLUETOOTH
         MyInCallService.Companion.instance?.setAudioRoute(newRoute)
     }
 

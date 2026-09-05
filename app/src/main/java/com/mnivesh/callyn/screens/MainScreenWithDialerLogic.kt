@@ -7,11 +7,18 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.animateDp
@@ -45,8 +52,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.mnivesh.callyn.CallynApplication
+import com.mnivesh.callyn.InCallActivity
 import com.mnivesh.callyn.components.AppDrawer
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.CallManager
+import com.mnivesh.callyn.managers.CallState
 import com.mnivesh.callyn.managers.DialerManager
 import com.mnivesh.callyn.managers.PermissionManager
 import com.mnivesh.callyn.ui.EmployeeDirectoryScreen
@@ -61,6 +71,12 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import android.content.Intent
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.Color as ComposeColor
 
@@ -73,6 +89,7 @@ sealed class Screen(val route: String) {
     object ShowCallLogs : Screen("show_call_logs")
     object EmployeeDirectory : Screen("employee_directory")
     object EditQuickReplies : Screen("edit_quick_replies")
+    object HandsFree : Screen("hands_free")
 }
 
 /**
@@ -265,15 +282,45 @@ fun MainScreenContent(
                     scope.launch { drawerState.close() }
                     navController.navigate(Screen.EditQuickReplies.route)
                 },
+                onShowHandsFree = {
+                    scope.launch { drawerState.close() }
+                    navController.navigate(Screen.HandsFree.route)
+                },
                 isDarkTheme = isDarkTheme,
                 onThemeToggle = onThemeToggle
             )
         }
     ) {
+        val activeCallState by CallManager.callState.collectAsState()
+        val showCallBanner = activeCallState != null &&
+                activeCallState?.status != "Disconnected" &&
+                activeCallState?.status != "Ended"
+
         Scaffold(
             containerColor = ComposeColor.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            bottomBar = { BottomNavigationBar(navController, missedCallCount) }
+            bottomBar = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    AnimatedVisibility(
+                        visible = showCallBanner,
+                        enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { it },
+                        exit = fadeOut(tween(200)) + slideOutVertically(tween(200)) { it }
+                    ) {
+                        activeCallState?.let { callState ->
+                            ActiveCallStickyBanner(
+                                callState = callState,
+                                onClick = {
+                                    val intent = Intent(context, InCallActivity::class.java).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            )
+                        }
+                    }
+                    BottomNavigationBar(navController, missedCallCount)
+                }
+            }
         ) { padding ->
             NavHost(
                 navController,
@@ -330,6 +377,121 @@ fun MainScreenContent(
                         onBack = { navController.popBackStack() }
                     )
                 }
+                composable(Screen.HandsFree.route) {
+                    HandsFreeScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Sticky green banner displayed above the bottom nav bar when a call is active or ringing.
+ */
+@Composable
+fun ActiveCallStickyBanner(
+    callState: CallState,
+    onClick: () -> Unit
+) {
+    val greenGradient = Brush.horizontalGradient(
+        colors = listOf(
+            ComposeColor(0xFF10B981), // Emerald 500
+            ComposeColor(0xFF059669)  // Emerald 600
+        )
+    )
+
+    val displayName = if (callState.name.isNotBlank() && callState.name != "Unknown") {
+        callState.name
+    } else {
+        callState.number
+    }
+
+    val statusText = when {
+        callState.isIncoming && callState.status == "Ringing" -> "Incoming Call"
+        callState.status == "Ringing" || callState.status == "Dialing" -> "Calling..."
+        callState.isHolding -> "On Hold"
+        else -> "Active Call"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(16.dp),
+                spotColor = ComposeColor(0xFF059669).copy(alpha = 0.4f),
+                ambientColor = ComposeColor(0xFF059669).copy(alpha = 0.2f)
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(brush = greenGradient)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(ComposeColor.White.copy(alpha = 0.22f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = "Active Call",
+                        tint = ComposeColor.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Switch to In-Call Screen",
+                        color = ComposeColor.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (displayName.isNotBlank()) "$statusText • $displayName" else statusText,
+                        color = ComposeColor.White.copy(alpha = 0.88f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(ComposeColor.White.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = "Return to call",
+                    tint = ComposeColor.White,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }

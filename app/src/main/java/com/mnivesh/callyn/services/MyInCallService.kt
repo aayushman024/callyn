@@ -67,6 +67,14 @@ class MyInCallService : InCallService() {
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
+        callAudioState?.let { audioState ->
+            CallManager.updateAudioState(
+                isMuted = audioState.isMuted,
+                isSpeakerOn = audioState.route == CallAudioState.ROUTE_SPEAKER,
+                isBluetoothOn = audioState.route == CallAudioState.ROUTE_BLUETOOTH,
+                availableRoutes = audioState.supportedRouteMask
+            )
+        }
         CallManager.onCallAdded(call)
 
         showNotification()
@@ -116,6 +124,14 @@ class MyInCallService : InCallService() {
         }
 
         if (calls.isEmpty()) {
+            // Reset audio route & mute state so they do not bleed into future calls
+            try {
+                setMuted(false)
+                setAudioRoute(CallAudioState.ROUTE_WIRED_OR_EARPIECE)
+            } catch (e: Exception) {
+                // Ignore failure if telecom is already unbound
+            }
+
             // Kill the proximity sensor when no calls are active
             if (wakeLock?.isHeld == true) {
                 wakeLock?.release()
@@ -222,16 +238,23 @@ class MyInCallService : InCallService() {
         )
 
         // 4. SMART LOGIC: Disable sensor if on Speaker/Bluetooth
+        val isPrimaryActive = CallManager.callState.value?.status.equals("Active", ignoreCase = true)
         if (audioState.route == CallAudioState.ROUTE_SPEAKER || audioState.route == CallAudioState.ROUTE_BLUETOOTH) {
             if (wakeLock?.isHeld == true) wakeLock?.release()
-        } else {
-            // Re-enable if back to Earpiece
-            if (wakeLock?.isHeld == false && !calls.isEmpty()) wakeLock?.acquire()
+        } else if (isPrimaryActive && wakeLock?.isHeld == false && !calls.isEmpty()) {
+            // Re-enable if back to Earpiece and call is active
+            wakeLock?.acquire()
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            setMuted(false)
+            setAudioRoute(CallAudioState.ROUTE_WIRED_OR_EARPIECE)
+        } catch (e: Exception) {
+            // Ignore failure if telecom is already unbound
+        }
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }

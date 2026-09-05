@@ -23,8 +23,8 @@ android {
         applicationId = "com.mnivesh.callyn"
         minSdk = 27 // InCallService requires API 26 (Android 8.0)
         targetSdk = 36
-        versionCode = 11
-        versionName = "2.3.1"
+        versionCode = 12
+        versionName = "2.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -123,6 +123,7 @@ dependencies {
     // Networking
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)  // Was libs.converter.gson
+    implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor) // Was libs.logging.interceptor
     // implementation(libs.okhttp) // This alias doesn't exist and is not needed
     // -------------------------------------------

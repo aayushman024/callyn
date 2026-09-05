@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 object RetrofitInstance {
 
     private const val BASE_URL_PROD = "https://callyn-backend-avh8cae5dpdnckg8.centralindia-01.azurewebsites.net/"
-    private const val BASE_URL_LOCAL = "http://localhost:5500/"
+    private const val BASE_URL_LOCAL = "http://192.168.1.23:5000/"
     private const val BASE_URL_IP = "http://192.168.1.34:5000/"
 
     private var appContext: Context? = null
@@ -42,6 +42,10 @@ object RetrofitInstance {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
+
+    fun handsFreeWebSocketUrl(): String = BASE_URL_PROD
+        .replaceFirst("https://", "wss://")
+        .replaceFirst("http://", "ws://") + "ws/hands-free"
 
     val api: ApiService by lazy {
         retrofit.create(ApiService::class.java)

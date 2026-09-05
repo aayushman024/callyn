@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.CallLog
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
@@ -16,6 +17,7 @@ import android.util.Log
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,6 +31,14 @@ class DialerManager(
     private val context: Context,
     private val permissionManager: PermissionManager
 ) {
+
+    enum class HandsFreeDialResult {
+        STARTED,
+        NOT_DEFAULT_DIALER,
+        MISSING_CALL_PERMISSION,
+        NO_SIM,
+        FAILED
+    }
 
     private var defaultDialerLauncher: ActivityResultLauncher<Intent>? = null
 
@@ -194,6 +204,51 @@ class DialerManager(
             Log.e(TAG, "Smart dial failed", e)
             crashlytics.recordException(e)
             Toast.makeText(context, "Call failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Places a call without UI permission/default-dialer flows for the hands-free service. */
+    @SuppressLint("MissingPermission")
+    fun dialHandsFree(number: String, isWorkCall: Boolean = true): HandsFreeDialResult {
+        if (!isDefaultDialer()) return HandsFreeDialResult.NOT_DEFAULT_DIALER
+        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return HandsFreeDialResult.MISSING_CALL_PERMISSION
+        }
+
+        val cleanNumber = number.filter { it.isDigit() || it == '+' || it == '*' || it == '#' }
+        if (cleanNumber.isBlank()) return HandsFreeDialResult.FAILED
+
+        val stripped = cleanNumber.removePrefix("+")
+        val numberToDial = when {
+            cleanNumber.contains('*') || cleanNumber.contains('#') -> cleanNumber
+            stripped.startsWith("1800") || stripped.startsWith("1860") || stripped.startsWith("0") -> stripped
+            cleanNumber.startsWith("+") -> cleanNumber
+            cleanNumber.length > 10 -> "+$cleanNumber"
+            else -> cleanNumber
+        }
+
+        return try {
+            val telecomManager = context.getSystemService(TelecomManager::class.java)
+            val subscriptionManager = context.getSystemService(SubscriptionManager::class.java)
+            val activeSims = subscriptionManager.activeSubscriptionInfoList
+            if (activeSims.isNullOrEmpty()) return HandsFreeDialResult.NO_SIM
+
+            val preferredSlot = if (isWorkCall) SimManager.workSimSlot ?: SimManager.personalSimSlot else SimManager.personalSimSlot
+            val selectedSim = preferredSlot?.let { slot -> activeSims.find { it.simSlotIndex == slot } }
+            val callExtras = Bundle()
+
+            selectedSim?.let { sim ->
+                findHandleForSubId(telecomManager, sim.subscriptionId)?.let { handle ->
+                    callExtras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+                }
+            }
+            Log.d(TAG, "Placing hands-free call through TelecomManager; slot=${selectedSim?.simSlotIndex ?: "default"}")
+            telecomManager.placeCall(Uri.fromParts("tel", numberToDial, null), callExtras)
+            HandsFreeDialResult.STARTED
+        } catch (e: Exception) {
+            Log.e(TAG, "Hands-free dial failed", e)
+            FirebaseCrashlytics.getInstance().recordException(e)
+            HandsFreeDialResult.FAILED
         }
     }
 

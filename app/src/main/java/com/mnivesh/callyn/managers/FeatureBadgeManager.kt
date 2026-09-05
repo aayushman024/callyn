@@ -4,7 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 
 enum class FeatureBadgeKey(val prefKey: String) {
-    QUICK_REPLIES("feature_quick_replies_visited")
+    QUICK_REPLIES("feature_quick_replies_visited"),
+    HANDS_FREE("feature_hands_free_visited")
     // Easily add future features here, e.g.:
     // CALL_LOGS("feature_call_logs_visited")
 }

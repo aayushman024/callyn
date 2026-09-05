@@ -50,9 +50,13 @@ import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.db.CrmContact
 import com.mnivesh.callyn.managers.SearchHistoryManager
 import com.mnivesh.callyn.tabs.CrmContactCard
+import com.mnivesh.callyn.utils.ParsedSearchQuery
+import com.mnivesh.callyn.utils.SearchEngine
 import com.mnivesh.callyn.viewmodels.CrmUiState
 import com.mnivesh.callyn.viewmodels.RecentCallUiItem
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 fun String.matchesQuery(query: String): Boolean {
@@ -132,137 +136,61 @@ fun SearchOverlay(
             if (internalQuery.isBlank()) {
                 debouncedQuery = ""
             } else {
-                delay(300)
+                delay(250)
                 debouncedQuery = internalQuery
             }
         }
 
         LaunchedEffect(Unit) { searchFocusRequester.requestFocus() }
 
-        // [!code ++] Enhanced Filter Call Logs: Query + Universal Filter + Type Filter
-        val filteredCallLogs = remember(debouncedQuery, callLogs, selectedFilter, callTypeFilter) {
-            if (debouncedQuery.isBlank()) emptyList() else {
-                callLogs.take(500)
-                    .filter { log ->
-                        // 1. Match Query
-                        val matchesQuery = log.name.matchesQuery(debouncedQuery) ||
-                                log.number.contains(debouncedQuery)
+        // Background Search Computation (Dispatched off Main Thread)
+        var filteredCallLogs by remember { mutableStateOf(emptyList<RecentCallUiItem>()) }
+        var combinedResults by remember { mutableStateOf(emptyList<Any>()) }
 
-                        // 2. Match Universal Filter (Personal/Work)
-                        val matchesUniversal = when (selectedFilter) {
-                            "Personal" -> log.type == "Personal"
-                            "Work", "Employee" -> log.type == "Work"
-                            else -> true
-                        }
-
-                        // 3. Match Call Type Filter (Incoming/Outgoing/Missed)
-                        val matchesType = when (callTypeFilter) {
-                            "Incoming" -> log.isIncoming
-                            "Outgoing" -> !log.isIncoming
-                            "Missed" -> log.isMissed
-                            else -> true
-                        }
-
-                        matchesQuery && matchesUniversal && matchesType
-                    }
-                    .distinctBy { it.number } // Keep only the latest log per number
-            }
-        }
-
-        // --- Enhanced Filtering Logic (Contacts) ---
-        val combinedResults = remember(
+        LaunchedEffect(
             debouncedQuery,
+            callLogs,
             selectedFilter,
+            callTypeFilter,
             myContacts,
             deviceContacts,
             workContacts,
             department,
             searchCrmData,
-            crmUiState
+            crmUiState,
+            userName
         ) {
-            if (debouncedQuery.isBlank()) emptyList<Any>() else {
-                val isCodeSearch = debouncedQuery.length == 6
-                val results = mutableListOf<Any>()
+            if (debouncedQuery.isBlank()) {
+                filteredCallLogs = emptyList()
+                combinedResults = emptyList()
+            } else {
+                withContext(Dispatchers.Default) {
+                    val parsed = ParsedSearchQuery.parse(debouncedQuery)
 
-                fun AppContact.matches(): Boolean {
-                    return name.matchesQuery(debouncedQuery) ||
-                            familyHead.matchesQuery(debouncedQuery) ||
-                            pan.contains(debouncedQuery, true) ||
-                            (department == "Management" && number.contains(debouncedQuery)) ||
-                            (isCodeSearch && uniqueCode.equals(debouncedQuery, ignoreCase = true))
+                    val logs = SearchEngine.filterCallLogs(
+                        callLogs = callLogs,
+                        query = parsed,
+                        selectedFilter = selectedFilter,
+                        callTypeFilter = callTypeFilter,
+                        maxResults = 50
+                    )
+
+                    val contacts = SearchEngine.filterContacts(
+                        query = parsed,
+                        selectedFilter = selectedFilter,
+                        myContacts = myContacts,
+                        deviceContacts = deviceContacts,
+                        workContacts = workContacts,
+                        crmUiState = crmUiState,
+                        searchCrmData = searchCrmData,
+                        department = department,
+                        userName = userName,
+                        maxResults = 80
+                    )
+
+                    filteredCallLogs = logs
+                    combinedResults = contacts
                 }
-
-                if (selectedFilter == "All" || selectedFilter == "Personal") {
-                    results.addAll(deviceContacts.filter { contact ->
-                        contact.name.matchesQuery(debouncedQuery) ||
-                                contact.numbers.any { it.number.contains(debouncedQuery) }
-                    })
-                }
-
-                if (selectedFilter == "All" || selectedFilter == "Work") {
-                    results.addAll(myContacts.filter { it.matches() })
-                }
-
-                if (selectedFilter == "All" || selectedFilter == "Employee") {
-                    results.addAll(workContacts.filter {
-                        it.rshipManager.equals("Employee", ignoreCase = true) && it.matches()
-                    })
-                }
-
-                if (searchCrmData) {
-                    val crmList = crmUiState.tickets + crmUiState.investmentLeads + crmUiState.insuranceLeads
-                    val filteredCrm = crmList.filter { contact ->
-                        val passModule = when (selectedFilter) {
-                            "All" -> true
-                            "Tickets" -> contact.module.equals("Tickets", true)
-                            "Investment Leads" -> contact.module.equals("Investment_leads", true)
-                            "Insurance Leads" -> contact.module.equals("Insurance_Leads", true)
-                            "Personal", "Work", "Employee" -> false
-                            else -> false
-                        }
-                        if (!passModule) return@filter false
-
-                        contact.name.matchesQuery(debouncedQuery) ||
-                                contact.number.contains(debouncedQuery) ||
-                                contact.recordId.contains(debouncedQuery, true) ||
-                                (contact.product?.contains(debouncedQuery, true) == true) ||
-                                contact.ownerName.matchesQuery(debouncedQuery)
-                    }
-                    results.addAll(filteredCrm)
-                }
-
-                results.sortedWith(
-                    compareBy<Any> { item ->
-                        val isNumericSearch = debouncedQuery.all { it.isDigit() }
-                        if (isNumericSearch) {
-                            if (item is DeviceContact) 0 else 1
-                        } else {
-                            0
-                        }
-                    }.thenBy { item ->
-                        if (item is AppContact && item.rshipManager.equals(userName, ignoreCase = true)) 0 else 1
-                    }.thenBy { item ->
-                        if (isCodeSearch && item is AppContact && item.uniqueCode.equals(debouncedQuery, ignoreCase = true)) 0 else 1
-                    }.thenBy { item ->
-                        if (item is AppContact) {
-                            when {
-                                item.name.contains(debouncedQuery, true) -> 0
-                                item.familyHead.contains(debouncedQuery, true) -> 1
-                                item.pan.contains(debouncedQuery, true) -> 2
-                                else -> 3
-                            }
-                        } else {
-                            0
-                        }
-                    }.thenBy { item ->
-                        when (item) {
-                            is AppContact -> item.name.lowercase()
-                            is DeviceContact -> item.name.lowercase()
-                            is CrmContact -> item.name.lowercase()
-                            else -> ""
-                        }
-                    }
-                )
             }
         }
 
@@ -387,7 +315,10 @@ fun SearchOverlay(
                                 }
                             }
                         }
-                        items(filteredCallLogs) { log ->
+                        items(
+                            items = filteredCallLogs,
+                            key = { "call_${it.id}_${it.number}_${it.date}" }
+                        ) { log ->
                             RecentCallItem(
                                 log = log,
                                 onBodyClick = {
@@ -429,7 +360,17 @@ fun SearchOverlay(
                         }
                     }
 
-                    items(combinedResults) { item ->
+                    items(
+                        items = combinedResults,
+                        key = { item ->
+                            when (item) {
+                                is AppContact -> "app_${item.id}"
+                                is DeviceContact -> "device_${item.id}"
+                                is CrmContact -> "crm_${item.localId}_${item.recordId}"
+                                else -> item.hashCode()
+                            }
+                        }
+                    ) { item ->
                         val onResultClick: () -> Unit = {
                             com.mnivesh.callyn.managers.SearchHistoryManager.addSearch(context, debouncedQuery)
                             searchHistory = com.mnivesh.callyn.managers.SearchHistoryManager.getHistory(context)
@@ -497,28 +438,42 @@ fun SearchOverlay(
                                 .padding(horizontal = 16.sdp(), vertical = 10.sdp()),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(modifier = Modifier.weight(1f)) {
-                                if (internalQuery.isEmpty()) {
-                                    Text(
-                                        "Search...",
-                                        color = AppTheme.colors.textSecondary,
-                                        fontSize = 14.ssp()
+                            androidx.compose.foundation.text.BasicTextField(
+                                value = internalQuery,
+                                onValueChange = { internalQuery = it },
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = AppTheme.colors.textPrimary,
+                                    fontSize = 14.ssp(),
+                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                        includeFontPadding = false
                                     )
+                                ),
+                                singleLine = true,
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF3B82F6)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .focusRequester(searchFocusRequester),
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        contentAlignment = Alignment.CenterStart,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        if (internalQuery.isEmpty()) {
+                                            Text(
+                                                "Search...",
+                                                color = AppTheme.colors.textSecondary,
+                                                fontSize = 14.ssp(),
+                                                style = androidx.compose.ui.text.TextStyle(
+                                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(
+                                                        includeFontPadding = false
+                                                    )
+                                                )
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
                                 }
-                                androidx.compose.foundation.text.BasicTextField(
-                                    value = internalQuery,
-                                    onValueChange = { internalQuery = it },
-                                    textStyle = androidx.compose.ui.text.TextStyle(
-                                        color = AppTheme.colors.textPrimary,
-                                        fontSize = 14.ssp()
-                                    ),
-                                    singleLine = true,
-                                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Color(0xFF3B82F6)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .focusRequester(searchFocusRequester)
-                                )
-                            }
+                            )
                             if (internalQuery.isNotEmpty()) {
                                 Spacer(modifier = Modifier.width(8.sdp()))
                                 Icon(

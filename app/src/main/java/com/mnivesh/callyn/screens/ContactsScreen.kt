@@ -494,6 +494,7 @@ fun ContactsScreen(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.ssp()
                             )
+                            HandsFreeStatusIndicator(modifier = Modifier.padding(start = 8.sdp()))
                             if (department == "Management" || department == "IT Desk") {
                                 Spacer(modifier = Modifier.width(8.sdp()))
                                 Surface(
