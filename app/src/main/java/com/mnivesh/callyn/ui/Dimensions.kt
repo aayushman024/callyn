@@ -13,7 +13,19 @@ private const val BASE_HEIGHT = 890f
 fun Int.sdp() = (this * scaleWidth()).dp
 
 @Composable
+fun Float.sdp() = (this * scaleWidth()).dp
+
+@Composable
+fun Double.sdp() = (this.toFloat() * scaleWidth()).dp
+
+@Composable
 fun Int.ssp() = (this * scaleText()).sp
+
+@Composable
+fun Float.ssp() = (this * scaleText()).sp
+
+@Composable
+fun Double.ssp() = (this.toFloat() * scaleText()).sp
 
 @Composable
 fun scaleWidth(): Float {

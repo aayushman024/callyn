@@ -69,7 +69,8 @@ fun ModernBottomSheet(
     onDismiss: () -> Unit,
     onShowHistory: () -> Unit,
     onCall: (Int?) -> Unit,
-    onRequestSubmit: (String) -> Unit
+    onRequestSubmit: (String) -> Unit,
+    onToggleFavorite: ((AppContact) -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     var showShareCodeDialog by remember { mutableStateOf(false) }
@@ -85,6 +86,8 @@ fun ModernBottomSheet(
     var selfWhatsAppPhone by remember { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    var isFavorite by remember(contact.id, contact.isFavorite) { mutableStateOf(contact.isFavorite) }
 
     var isNumberVisible by remember { mutableStateOf(false) }
     var isHistoryExpanded by remember { mutableStateOf(initialHistoryExpanded) }
@@ -193,16 +196,31 @@ fun ModernBottomSheet(
                         Box(modifier = Modifier.align(Alignment.TopEnd)) {
                             Row {
                                 IconButton(
-                                    onClick = { showShareCodeDialog = true },
+                                    onClick = {
+                                        val newFav = !isFavorite
+                                        isFavorite = newFav
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        if (newFav) {
+                                            Toast.makeText(context, "${contact.name} marked as favourite", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "${contact.name} removed from favourites", Toast.LENGTH_SHORT).show()
+                                        }
+                                        onToggleFavorite?.invoke(contact)
+                                    },
                                     colors = IconButtonDefaults.iconButtonColors(
                                         containerColor = surfaceColor,
-                                        contentColor = textSecondary
+                                        contentColor = if (isFavorite) Color(0xFFF59E0B) else textSecondary
                                     ),
                                     modifier = Modifier
                                         .size(40.sdp())
                                         .clip(CircleShape)
                                 ) {
-                                    Icon(Icons.Default.Share, "Share Code", modifier = Modifier.size(20.sdp()))
+                                    Icon(
+                                        imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarOutline,
+                                        contentDescription = if (isFavorite) "Favourite" else "Not Favourite",
+                                        tint = if (isFavorite) Color(0xFFF59E0B) else textSecondary,
+                                        modifier = Modifier.size(20.sdp())
+                                    )
                                 }
                                 Spacer(modifier = Modifier.width(8.sdp()))
 
@@ -232,6 +250,27 @@ fun ModernBottomSheet(
                                     modifier = Modifier.background(surfaceColor),
                                     offset = DpOffset((-12).dp, 0.sdp())
                                 ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                "Share Contact Code",
+                                                color = textPrimary,
+                                                fontSize = 14.ssp()
+                                            )
+                                        },
+                                        onClick = {
+                                            showMenu = false
+                                            showShareCodeDialog = true
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Share,
+                                                null,
+                                                tint = workColor,
+                                                modifier = Modifier.size(18.sdp())
+                                            )
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -390,12 +429,15 @@ fun ModernBottomSheet(
                                     .height(64.sdp())
                                     .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF3B82F6), spotColor = Color(0xFF3B82F6)),
                                 shape = RoundedCornerShape(20.sdp()),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6)), // Blue
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF3B82F6),
+                                    contentColor = Color.Black
+                                ), // Blue
                                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                             ) {
                                 Row(horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Default.Phone, contentDescription = null)
-                                    Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.Phone, contentDescription = null, tint = Color.Black)
+                                    Text("  SIM 1", fontSize = 16.ssp(), fontWeight = FontWeight.Bold, color = Color.Black)
                                 }
                             }
 
@@ -407,12 +449,15 @@ fun ModernBottomSheet(
                                     .height(64.sdp())
                                     .shadow(8.sdp(), RoundedCornerShape(20.sdp()), ambientColor = Color(0xFF10B981), spotColor = Color(0xFF10B981)),
                                 shape = RoundedCornerShape(20.sdp()),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)), // Green
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF10B981),
+                                    contentColor = Color.Black
+                                ), // Green
                                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                             ) {
                                 Row(horizontalArrangement = Arrangement.Center) {
-                                    Icon(Icons.Default.Phone, contentDescription = null)
-                                    Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.Phone, contentDescription = null, tint = Color.Black)
+                                    Text("  SIM 2", fontSize = 16.ssp(), fontWeight = FontWeight.Bold, color = Color.Black)
                                 }
                             }
                         }
@@ -425,15 +470,19 @@ fun ModernBottomSheet(
                                 .height(64.sdp())
                                 .shadow(12.sdp(), RoundedCornerShape(20.sdp()), ambientColor = primaryColor, spotColor = primaryColor),
                             shape = RoundedCornerShape(20.sdp()),
-                            colors = ButtonDefaults.buttonColors(containerColor = primaryColor),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = primaryColor,
+                                contentColor = Color.Black
+                            ),
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.sdp(), pressedElevation = 4.sdp())
                         ) {
-                            Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()))
+                            Icon(Icons.Default.Call, null, modifier = Modifier.size(24.sdp()), tint = Color.Black)
                             Spacer(modifier = Modifier.width(12.sdp()))
                             Text(
                                 text = if (isWorkContact && SimManager.workSimSlot != null) "Call (Work SIM)" else "Call",
                                 fontSize = 18.ssp(),
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
                             )
                         }
                     }

@@ -208,6 +208,12 @@ fun AppDrawer(
                     isDarkTheme = isDarkTheme,
                     onThemeToggle = onThemeToggle
                 )
+                DrawerWhatsNewRow(
+                    onClick = {
+                        onClose()
+                        (context as? MainActivity)?.showWhatsNew()
+                    }
+                )
             }
 
             // Divider before Logout
@@ -497,6 +503,45 @@ private fun DrawerThemeToggleRow(
                 uncheckedThumbColor = AppTheme.colors.textSecondary,
                 uncheckedTrackColor = AppTheme.colors.border
             )
+        )
+    }
+}
+
+// --- What's New Row ---
+
+@Composable
+private fun DrawerWhatsNewRow(
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 20.sdp(), vertical = 12.sdp()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.AutoAwesome,
+            contentDescription = null,
+            tint = Color(0xFF38BDF8),
+            modifier = Modifier.size(20.sdp())
+        )
+
+        Spacer(modifier = Modifier.width(16.sdp()))
+
+        Text(
+            text = "What's new",
+            fontSize = 14.ssp(),
+            fontWeight = FontWeight.Medium,
+            color = AppTheme.colors.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = AppTheme.colors.textSecondary.copy(alpha = 0.4f),
+            modifier = Modifier.size(18.sdp())
         )
     }
 }

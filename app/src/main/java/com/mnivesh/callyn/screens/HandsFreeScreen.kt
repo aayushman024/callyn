@@ -186,7 +186,7 @@ fun HandsFreeScreen(
             InfoCard(
                 icon = Icons.Default.Info,
                 title = "How it works",
-                body = "Use the Call button on the Operations Dashboard to automatically call the client using your mobile phone."
+                body = "Visit ops.mnivesh.com and click on the Call button to place a call directly from the web dashboard. The call will automatically be made from this device."
             )
 
             Card(
@@ -255,7 +255,8 @@ private fun InfoCard(
                 Text(
                     text = body,
                     color = AppTheme.colors.textSecondary,
-                    fontSize = 13.ssp()
+                    fontSize = 13.ssp(),
+                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
                 )
             }
         }

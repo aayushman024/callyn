@@ -324,6 +324,12 @@ class ContactsViewModel(
         job.await()
     }
 
+    fun toggleFavorite(contact: AppContact) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.toggleFavorite(contact)
+        }
+    }
+
     override fun onCleared() {
         application.contentResolver.unregisterContentObserver(contactsObserver)
         super.onCleared()

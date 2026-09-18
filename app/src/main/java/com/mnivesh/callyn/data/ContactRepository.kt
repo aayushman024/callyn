@@ -54,8 +54,12 @@ class ContactRepository(
         if (ids.isNotEmpty()) personalCallLogDao.deleteByIds(ids)
     }
 
+    private fun getContactFavoriteKey(name: String, number: String, pan: String?): String {
+        return "${name.trim().lowercase()}|${number.trim()}|${(pan ?: "").trim().lowercase()}"
+    }
+
     // [!code change] Updated getEmployees function
-    suspend fun getEmployees(token: String, forceRefresh: Boolean = false): Result<List<EmployeeDirectory>> {
+    suspend fun getEmployees(token: String, forceRefresh: Boolean = false, preloadedFavoriteKeys: Set<String>? = null): Result<List<EmployeeDirectory>> {
         if (!forceRefresh && cachedEmployees != null) {
             return Result.success(cachedEmployees!!)
         }
@@ -64,6 +68,10 @@ class ContactRepository(
             val response = apiService.getEmployeePhoneDetails("Bearer $token")
             if (response.isSuccessful && response.body() != null) {
                 cachedEmployees = response.body()
+
+                val existingFavoriteKeys = preloadedFavoriteKeys ?: contactDao.getFavoriteContacts().map {
+                    getContactFavoriteKey(it.name, it.number, it.pan)
+                }.toSet()
 
                 // 1. Map Employees to AppContact Entity
                 val employeeContacts = cachedEmployees!!.map { employee ->
@@ -77,6 +85,7 @@ class ContactRepository(
                         aum = "0",
                         dob = null,
                         familyAum = "0",
+                        isFavorite = existingFavoriteKeys.contains(getContactFavoriteKey(employee.name, employee.phone, employee.email))
                     )
                 }
 
@@ -106,6 +115,9 @@ class ContactRepository(
             val response = apiService.getContacts("Bearer $token", managerName)
 
             if (response.isSuccessful && response.body() != null) {
+                val existingFavoriteKeys = contactDao.getFavoriteContacts().map {
+                    getContactFavoriteKey(it.name, it.number, it.pan)
+                }.toSet()
                 val networkContacts = response.body()!!
                 val dbContacts = networkContacts.map {
                     AppContact(
@@ -117,7 +129,8 @@ class ContactRepository(
                         familyHead = it.familyHead,
                         rshipManager = it.rshipManager,
                         aum = it.aum,
-                        familyAum = it.familyAum
+                        familyAum = it.familyAum,
+                        isFavorite = existingFavoriteKeys.contains(getContactFavoriteKey(it.name, it.number, it.pan))
                     )
                 }
                 contactDao.deleteAll()
@@ -125,7 +138,7 @@ class ContactRepository(
                 Log.d(TAG, "Successfully refreshed local database.")
 
                 //insert employees data
-                getEmployees(token, forceRefresh = true)
+                getEmployees(token, forceRefresh = true, preloadedFavoriteKeys = existingFavoriteKeys)
 
                 // Pre-warm cache for contacts belonging to user/employee
                 com.mnivesh.callyn.utils.ContactCache.preWarmAppContacts(dbContacts, managerName)
@@ -257,6 +270,10 @@ class ContactRepository(
 
     suspend fun insertWorkLog(log: WorkCallLog) {
         workCallLogDao.insert(log)
+    }
+
+    suspend fun toggleFavorite(contact: AppContact) {
+        contactDao.updateFavorite(contact.id, !contact.isFavorite)
     }
 
     suspend fun clearAllData() {

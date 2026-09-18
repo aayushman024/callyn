@@ -39,6 +39,7 @@ import com.mnivesh.callyn.managers.ThemeManager
 import com.mnivesh.callyn.screens.ConflictResolutionScreen
 import com.mnivesh.callyn.screens.LoadingDetailsScreen
 import com.mnivesh.callyn.screens.MainScreenWithDialerLogic
+import com.mnivesh.callyn.components.WhatsNewDialog
 import com.mnivesh.callyn.ui.UpdateDialog
 import com.mnivesh.callyn.ui.ZohoLoginScreen
 import com.mnivesh.callyn.ui.theme.CallynTheme
@@ -121,6 +122,8 @@ class MainActivity : ComponentActivity() {
             val uiState by mainViewModel.uiState.collectAsStateWithLifecycle()
             val updateState by mainViewModel.updateState.collectAsStateWithLifecycle()
             val showUpdateDialog by mainViewModel.showUpdateDialog.collectAsStateWithLifecycle()
+            val showWhatsNewDialog by mainViewModel.showWhatsNewDialog.collectAsStateWithLifecycle()
+            val whatsNewVersion by mainViewModel.whatsNewVersion.collectAsStateWithLifecycle()
 
             val themeManager = remember { ThemeManager(this@MainActivity) }
             var isDarkTheme by remember { mutableStateOf<Boolean>(themeManager.isDarkTheme()) }
@@ -226,6 +229,13 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                if (showWhatsNewDialog && whatsNewVersion != null) {
+                    WhatsNewDialog(
+                        versionInfo = whatsNewVersion!!,
+                        onDismiss = { mainViewModel.dismissWhatsNewDialog() }
+                    )
+                }
+
                 Surface(modifier = Modifier.fillMaxSize()) {
                     when (val state = uiState) {
                         is MainActivityUiState.Loading -> {
@@ -308,6 +318,7 @@ class MainActivity : ComponentActivity() {
         }
         if (authManager.isLoggedIn()) {
             mainViewModel.checkForUpdates()
+            mainViewModel.checkWhatsNew()
             syncDeviceDetails()
         }
 
@@ -358,6 +369,13 @@ class MainActivity : ComponentActivity() {
         mainViewModel.checkForUpdates(isManualCheck = true) { message ->
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * Manual What's New popup display triggered by user.
+     */
+    fun showWhatsNew() {
+        mainViewModel.checkWhatsNew(isManual = true)
     }
 
     /**

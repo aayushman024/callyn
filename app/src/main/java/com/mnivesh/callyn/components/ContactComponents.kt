@@ -23,7 +23,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,53 +97,101 @@ fun getHighlightedText(text: String, query: String): AnnotatedString {
 // --- Shared UI Components ---
 
 @Composable
-fun CustomTabContent(text: String, icon: Any, count: Int?, isSelected: Boolean) {
+fun CustomTabContent(
+    text: String,
+    icon: Any,
+    count: Int?,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier
+) {
     val isDark = AppTheme.colors.isDark
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        if (icon is androidx.compose.ui.graphics.vector.ImageVector) {
+    val activeColor = if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)
+    val inactiveColor = AppTheme.colors.textSecondary
+
+    val animatedTextColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isSelected) (if (isDark) Color(0xFFF1F5F9) else Color(0xFF0F172A)) else inactiveColor,
+        animationSpec = androidx.compose.animation.core.tween(200),
+        label = "tab_text_color"
+    )
+
+    val animatedIconTint by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isSelected) activeColor else inactiveColor,
+        animationSpec = androidx.compose.animation.core.tween(200),
+        label = "tab_icon_tint"
+    )
+
+    Row(
+        modifier = modifier
+            .padding(vertical = 6.sdp(), horizontal = 4.sdp()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        if (icon is ImageVector) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isSelected) Color(0xFF3B82F6) else AppTheme.colors.textSecondary,
+                tint = animatedIconTint,
                 modifier = Modifier.size(18.sdp())
             )
+            Spacer(modifier = Modifier.width(6.sdp()))
         } else if (icon is Painter) {
             Icon(
                 painter = icon,
                 contentDescription = null,
                 tint = Color.Unspecified,
-                modifier = Modifier.size(28.sdp())
+                modifier = Modifier.size(20.sdp())
             )
+            Spacer(modifier = Modifier.width(6.sdp()))
         }
 
-        Spacer(modifier = Modifier.width(8.sdp()))
-
-        // force single line, let text ellipsize if tab width gets constrained
         Text(
             text = text,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 15.ssp(),
-            color = if (isSelected) Color(0xFF3B82F6) else AppTheme.colors.textSecondary,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+            fontSize = 14.ssp(),
+            color = animatedTextColor,
+            style = TextStyle(
+                platformStyle = PlatformTextStyle(
+                    includeFontPadding = false
+                ),
+                lineHeight = 16.ssp()
+            ),
             maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
+            softWrap = false
         )
 
-        if(count != null) {
-            Spacer(modifier = Modifier.width(8.sdp()))
+        if (count != null && count > 0) {
+            Spacer(modifier = Modifier.width(6.sdp()))
+            val displayCount = if (count > 9999) "${count / 1000}k" else count.toString()
+            val badgeBg = if (isSelected) {
+                activeColor.copy(alpha = if (isDark) 0.25f else 0.12f)
+            } else {
+                if (isDark) Color(0xFF334155).copy(alpha = 0.5f) else Color(0xFFCBD5E1).copy(alpha = 0.5f)
+            }
+            val badgeTextColor = if (isSelected) {
+                if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8)
+            } else {
+                inactiveColor
+            }
+
             Box(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .background(if (isSelected) AppTheme.colors.textPrimary.copy(alpha = 0.15f) else AppTheme.colors.textPrimary.copy(alpha = 0.08f))
-                    .padding(horizontal = 6.sdp(), vertical = 2.sdp())
+                    .background(badgeBg)
+                    .padding(horizontal = 7.sdp(), vertical = 3.sdp()),
+                contentAlignment = Alignment.Center
             ) {
-                // prevent wrapping for large numbers like 24682
                 Text(
-                    text = count.toString(),
-                    fontSize = 12.ssp(),
+                    text = displayCount,
+                    fontSize = 11.5.ssp(),
                     fontWeight = FontWeight.Bold,
-                    color = if (isSelected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary,
+                    color = badgeTextColor,
+                    style = TextStyle(
+                        platformStyle = PlatformTextStyle(
+                            includeFontPadding = false
+                        ),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 12.ssp()
+                    ),
                     maxLines = 1,
                     softWrap = false
                 )
@@ -152,6 +202,21 @@ fun CustomTabContent(text: String, icon: Any, count: Int?, isSelected: Boolean) 
 
 @Composable
 fun FavoriteContactItem(contact: DeviceContact, onClick: () -> Unit) {
+    val avatarColor = getColorForName(contact.name)
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.sdp()).clickable(onClick = onClick)) {
+        Box(
+            modifier = Modifier.size(64.sdp()).clip(CircleShape).background(Brush.linearGradient(listOf(avatarColor, avatarColor.copy(alpha = 0.7f)))),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(getInitials(contact.name), color = Color.White, fontSize = 22.ssp(), fontWeight = FontWeight.Bold)
+        }
+        Spacer(modifier = Modifier.height(8.sdp()))
+        Text(contact.name.split(" ").first(), color = AppTheme.colors.textPrimary.copy(alpha = 0.9f), fontSize = 12.ssp(), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+    }
+}
+
+@Composable
+fun FavoriteContactItem(contact: AppContact, onClick: () -> Unit) {
     val avatarColor = getColorForName(contact.name)
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.sdp()).clickable(onClick = onClick)) {
         Box(

@@ -19,7 +19,9 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +31,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -356,6 +359,9 @@ fun ContactsScreen(
     val favoriteContacts = remember(deviceContacts, searchQuery) {
         if (searchQuery.isBlank()) deviceContacts.filter { it.isStarred } else emptyList()
     }
+    val favoriteWorkContacts = remember(myContacts, searchQuery) {
+        if (searchQuery.isBlank()) myContacts.filter { it.isFavorite } else emptyList()
+    }
 
     LaunchedEffect(searchQuery, workContacts, myContacts, department, deviceContacts) {
         if (searchQuery.isBlank()) {
@@ -587,10 +593,10 @@ fun ContactsScreen(
         ) { innerPadding ->
             Column(modifier = Modifier.padding(innerPadding)) {
 
-                // TAB LAYOUT MODIFICATIONS
+                // TAB LAYOUT WITH GLASS MORPHISM PILL INDICATOR
                 val configuration = LocalConfiguration.current
                 val screenWidth = configuration.screenWidthDp.dp
-                val tabWidth = screenWidth * 0.4f
+                val tabWidth = (screenWidth * 0.35f).coerceAtLeast(120.sdp())
 
                 Column(
                     modifier = Modifier
@@ -605,73 +611,142 @@ fun ContactsScreen(
                             )
                         )
                 ) {
-                    Spacer(modifier = Modifier.height(16.sdp()))
+                    Spacer(modifier = Modifier.height(8.sdp()))
 
-                    // Create separate interaction sources to disable ripples
-                    val interactionSource1 = remember { MutableInteractionSource() }
-                    val interactionSource2 = remember { MutableInteractionSource() }
-                    val interactionSource3 = remember { MutableInteractionSource() }
+                    val tabScrollState = rememberScrollState()
+                    val density = androidx.compose.ui.platform.LocalDensity.current
 
-                    CompositionLocalProvider(LocalRippleConfiguration provides null) {
-                        ScrollableTabRow(
-                            selectedTabIndex = selectedTabIndex,
-                            containerColor = Color.Transparent,
-                            contentColor = AppTheme.colors.textPrimary,
-                            edgePadding = 0.sdp(),
-                            indicator = { tabPositions ->
-                                if (selectedTabIndex < tabPositions.size) {
-                                    TabRowDefaults.SecondaryIndicator(
-                                        Modifier.tabIndicatorOffset(
-                                            tabPositions[selectedTabIndex]
-                                        ), color = Color(0xFF3B82F6), height = 3.sdp()
-                                    )
-                                }
-                            },
-                            divider = { HorizontalDivider(color = AppTheme.colors.border) },
-                            modifier = Modifier.fillMaxWidth()
+                    val targetOffset = tabWidth * selectedTabIndex
+                    val animatedIndicatorOffset by animateDpAsState(
+                        targetValue = targetOffset,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "tab_pill_offset"
+                    )
+
+                    val horizontalPadding = 16.sdp()
+                    // Auto-scroll selected tab into view smoothly
+                    LaunchedEffect(selectedTabIndex) {
+                        val targetScrollDp = targetOffset - (screenWidth - tabWidth) / 2
+                        val totalContentWidthDp = tabWidth * 3 + horizontalPadding * 2
+                        val maxScrollDp = (totalContentWidthDp - screenWidth).coerceAtLeast(0.dp)
+                        val clampedDp = targetScrollDp.coerceIn(0.dp, maxScrollDp)
+                        val targetPx = with(density) { clampedDp.roundToPx() }
+                        tabScrollState.animateScrollTo(targetPx)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(tabScrollState)
+                            .padding(horizontal = 16.sdp(), vertical = 4.sdp())
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(18.sdp()),
+                            color = if (AppTheme.colors.isDark) Color(0xFF1E293B).copy(alpha = 0.6f) else Color(0xFFE2E8F0).copy(alpha = 0.7f),
+                            border = BorderStroke(
+                                1.sdp(),
+                                if (AppTheme.colors.isDark) Color(0xFF334155).copy(alpha = 0.5f) else Color(0xFFCBD5E1).copy(alpha = 0.6f)
+                            )
                         ) {
-                            Tab(
-                                selected = selectedTabIndex == 0,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                                text = {
-                                    CustomTabContent(
-                                        "Personal",
-                                        Icons.Default.Person,
-                                        deviceContacts.size,
-                                        selectedTabIndex == 0
-                                    )
-                                },
-                                modifier = Modifier.width(tabWidth),
-                                interactionSource = interactionSource1
-                            )
-                            Tab(
-                                selected = selectedTabIndex == 1,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                                text = {
-                                    CustomTabContent(
-                                        "Work",
-                                        Icons.Default.BusinessCenter,
-                                        myContacts.size,
-                                        selectedTabIndex == 1
-                                    )
-                                },
-                                modifier = Modifier.width(tabWidth),
-                                interactionSource = interactionSource2
-                            )
-                            Tab(
-                                selected = selectedTabIndex == 2,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
-                                text = {
-                                    CustomTabContent(
-                                        "CRM Data",
-                                        icon = painterResource(id = R.drawable.zoho_logo),
-                                        null,
-                                        selectedTabIndex == 2
-                                    )
-                                },
-                                modifier = Modifier.width(tabWidth),
-                                interactionSource = interactionSource3
-                            )
+                            Box(
+                                modifier = Modifier.padding(4.sdp())
+                            ) {
+                                // Glassmorphic Floating Pill Indicator for Active Tab
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = animatedIndicatorOffset)
+                                        .width(tabWidth)
+                                        .height(42.sdp())
+                                        .shadow(
+                                            elevation = if (AppTheme.colors.isDark) 0.dp else 2.dp,
+                                            shape = RoundedCornerShape(14.sdp()),
+                                            clip = false
+                                        )
+                                        .clip(RoundedCornerShape(14.sdp()))
+                                        .background(
+                                            if (AppTheme.colors.isDark) Color(0xFF334155) else Color(0xFFFFFFFF)
+                                        )
+                                        .border(
+                                            width = if (AppTheme.colors.isDark) 1.sdp() else 0.5.sdp(),
+                                            color = if (AppTheme.colors.isDark) Color(0xFF475569).copy(alpha = 0.6f) else Color(0xFFE2E8F0),
+                                            shape = RoundedCornerShape(14.sdp())
+                                        )
+                                )
+
+                                // 3 Tabs
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Tab 0: Personal
+                                    Box(
+                                        modifier = Modifier
+                                            .width(tabWidth)
+                                            .height(42.sdp())
+                                            .clip(RoundedCornerShape(14.sdp()))
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) {
+                                                scope.launch { pagerState.animateScrollToPage(0) }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CustomTabContent(
+                                            text = "Personal",
+                                            icon = Icons.Default.Person,
+                                            count = deviceContacts.size,
+                                            isSelected = selectedTabIndex == 0
+                                        )
+                                    }
+
+                                    // Tab 1: Work
+                                    Box(
+                                        modifier = Modifier
+                                            .width(tabWidth)
+                                            .height(42.sdp())
+                                            .clip(RoundedCornerShape(14.sdp()))
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) {
+                                                scope.launch { pagerState.animateScrollToPage(1) }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CustomTabContent(
+                                            text = "Work",
+                                            icon = Icons.Default.BusinessCenter,
+                                            count = myContacts.size,
+                                            isSelected = selectedTabIndex == 1
+                                        )
+                                    }
+
+                                    // Tab 2: CRM Data
+                                    Box(
+                                        modifier = Modifier
+                                            .width(tabWidth)
+                                            .height(42.sdp())
+                                            .clip(RoundedCornerShape(14.sdp()))
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) {
+                                                scope.launch { pagerState.animateScrollToPage(2) }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CustomTabContent(
+                                            text = "CRM Data",
+                                            icon = painterResource(id = R.drawable.zoho_logo),
+                                            count = null,
+                                            isSelected = selectedTabIndex == 2
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -785,6 +860,7 @@ fun ContactsScreen(
                                     uiState = uiState,
                                     workContacts = workContacts,
                                     filteredWorkContacts = filteredWorkContacts,
+                                    favoriteContacts = favoriteWorkContacts,
                                     searchQuery = searchQuery,
                                     listState = workListState,
                                     shimmerOffset = shimmerOffset,
@@ -857,6 +933,10 @@ fun ContactsScreen(
                     } else {
                         Toast.makeText(context, "Authentication Error", Toast.LENGTH_SHORT).show()
                     }
+                },
+                onToggleFavorite = { contact ->
+                    viewModel.toggleFavorite(contact)
+                    selectedWorkContact = contact.copy(isFavorite = !contact.isFavorite)
                 }
             )
         }

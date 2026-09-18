@@ -509,7 +509,7 @@ fun BottomNavigationBar(navController: NavController, missedCallCount: Int) {
     
     val bg = AppTheme.colors.background
     val surfaceColor = AppTheme.colors.surface.copy(alpha = if (isDark) 0.95f else 0.98f)
-    val activeColor = ComposeColor(0xFF3B82F6)
+    val activeColor = if (isDark) ComposeColor(0xFF60A5FA) else ComposeColor(0xFF3B82F6)
     
     val borderColor = if (isDark) ComposeColor.White.copy(alpha = 0.06f) else ComposeColor.Black.copy(alpha = 0.06f)
     val shadowColor = if (isDark) ComposeColor.Black.copy(alpha = 0.5f) else ComposeColor.Black.copy(alpha = 0.08f)
@@ -605,12 +605,12 @@ fun BottomNavItem(
     
     val transition = updateTransition(targetState = selected, label = "navItemTransition")
     
-    val activePillBg = activeColor.copy(alpha = if (isDark) 0.12f else 0.08f)
+    val activePillBg = activeColor.copy(alpha = if (isDark) 0.16f else 0.08f)
     val itemBgColor by transition.animateColor(label = "bgColor") { isSelected ->
         if (isSelected) activePillBg else ComposeColor.Transparent
     }
     
-    val inactiveColor = if (isDark) ComposeColor.White.copy(alpha = 0.38f) else ComposeColor.Black.copy(alpha = 0.38f)
+    val inactiveColor = if (isDark) ComposeColor.White.copy(alpha = 0.65f) else ComposeColor.Black.copy(alpha = 0.38f)
     val iconColor by transition.animateColor(label = "iconColor") { isSelected ->
         if (isSelected) activeColor else inactiveColor
     }

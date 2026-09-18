@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
-@Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class, PersonalCallLog::class], version = 16, exportSchema = false)
+@Database(entities = [AppContact::class, WorkCallLog::class, CrmContact::class, PersonalCallLog::class], version = 17, exportSchema = false)
 abstract class ContactDatabase : RoomDatabase() {
 
     abstract fun contactDao(): ContactDao
@@ -37,7 +37,8 @@ abstract class ContactDatabase : RoomDatabase() {
                     .openHelperFactory(factory)
                     .addMigrations(
                         DatabaseMigrations.MIGRATION_14_15,
-                        DatabaseMigrations.MIGRATION_15_16
+                        DatabaseMigrations.MIGRATION_15_16,
+                        DatabaseMigrations.MIGRATION_16_17
                     )
                     .fallbackToDestructiveMigration()
                     .build()

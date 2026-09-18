@@ -10,6 +10,8 @@ import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.VersionManager
+import com.mnivesh.callyn.managers.WhatsNewManager
+import com.mnivesh.callyn.managers.WhatsNewVersion
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +47,7 @@ sealed class MainActivityUiState {
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val authManager = AuthManager(application)
+    private val whatsNewManager = WhatsNewManager(application)
 
     private val _uiState = MutableStateFlow<MainActivityUiState>(MainActivityUiState.Loading)
     val uiState: StateFlow<MainActivityUiState> = _uiState.asStateFlow()
@@ -54,6 +57,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _showUpdateDialog = MutableStateFlow(false)
     val showUpdateDialog: StateFlow<Boolean> = _showUpdateDialog.asStateFlow()
+
+    private val _showWhatsNewDialog = MutableStateFlow(false)
+    val showWhatsNewDialog: StateFlow<Boolean> = _showWhatsNewDialog.asStateFlow()
+
+    private val _whatsNewVersion = MutableStateFlow<WhatsNewVersion?>(null)
+    val whatsNewVersion: StateFlow<WhatsNewVersion?> = _whatsNewVersion.asStateFlow()
 
     /**
      * Updates the main UI state.
@@ -75,6 +84,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun dismissUpdateDialog() {
         _showUpdateDialog.value = false
+    }
+
+    /**
+     * Checks if the What's New popup should be shown for the current version (exactly once),
+     * or forces display if [isManual] is true.
+     */
+    fun checkWhatsNew(isManual: Boolean = false) {
+        if (isManual) {
+            val release = whatsNewManager.getWhatsNewForVersion() ?: whatsNewManager.getLatestWhatsNew()
+            if (release != null) {
+                _whatsNewVersion.value = release
+                _showWhatsNewDialog.value = true
+            }
+        } else {
+            if (whatsNewManager.shouldShowWhatsNew()) {
+                val release = whatsNewManager.getWhatsNewForVersion()
+                if (release != null) {
+                    _whatsNewVersion.value = release
+                    _showWhatsNewDialog.value = true
+                }
+            }
+        }
+    }
+
+    /**
+     * Dismisses the What's New dialog and marks the version as seen.
+     */
+    fun dismissWhatsNewDialog() {
+        _showWhatsNewDialog.value = false
+        whatsNewManager.markWhatsNewSeen()
     }
 
     /**

@@ -39,10 +39,11 @@ class RetryInterceptor : Interceptor {
         var exception: Exception? = null
         var tryCount = 0
 
-        // Only retry GET requests
-        val isGetRequest = request.method == "GET"
+        // Check if request body can be retried (one-shot bodies cannot be re-sent)
+        val canRetry = request.body?.isOneShot() != true
+        val retryLimit = if (canRetry) maxRetries else 1
 
-        while (tryCount < if (isGetRequest) maxRetries else 1) {
+        while (tryCount < retryLimit) {
             try {
                 // Apply dynamic timeout
                 response = chain
@@ -51,16 +52,16 @@ class RetryInterceptor : Interceptor {
                     .withWriteTimeout(currentTimeout, TimeUnit.SECONDS)
                     .proceed(request)
 
-                // If response is successful, or it's not a GET request, break out of loop
-                if (response.isSuccessful || !isGetRequest) {
+                // If response is successful, break out of loop
+                if (response.isSuccessful) {
                     break
                 }
                 
-                // If response is not successful, we retry if it's a 5xx error or something.
-                if (response.code in 500..599) {
+                // If response is not successful, retry on 5xx server errors, 408 (Request Timeout), or 429 (Too Many Requests)
+                if (response.code in 500..599 || response.code == 408 || response.code == 429) {
                      response.close() // Close before retrying
                 } else {
-                     break // Don't retry client errors (4xx)
+                     break // Don't retry other client errors (400, 401, 403, 404, etc.)
                 }
 
             } catch (e: Exception) {
@@ -69,7 +70,7 @@ class RetryInterceptor : Interceptor {
                     throw e
                 }
                 exception = e
-                Log.e("RetryInterceptor", "Request failed on attempt ${tryCount + 1}", e)
+                Log.e("RetryInterceptor", "Request (${request.method} ${request.url}) failed on attempt ${tryCount + 1}", e)
                 response?.close()
                 response = null
             }
@@ -77,13 +78,14 @@ class RetryInterceptor : Interceptor {
             tryCount++
             
             // If we are going to retry, apply exponential backoff/delay and increase timeout
-            if (tryCount < maxRetries && isGetRequest && (response == null || !response.isSuccessful)) {
-                // Delay: 1s, then 2s (with a little jitter)
+            if (tryCount < retryLimit && (response == null || !response.isSuccessful)) {
+                // Delay: 1s, then 2s
                 val delayMs = (1000L * tryCount)
                 try {
                     Thread.sleep(delayMs)
                 } catch (ie: InterruptedException) {
                     Thread.currentThread().interrupt()
+                    break
                 }
                 
                 // Increase timeout slightly for next attempt: 10s -> 15s -> 20s

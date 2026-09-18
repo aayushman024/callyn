@@ -45,6 +45,12 @@ interface ContactDao {
     @Query("SELECT * FROM contacts WHERE name = :name LIMIT 1")
     suspend fun getContactByName(name: String): AppContact?
 
+    @Query("UPDATE contacts SET isFavorite = :isFavorite WHERE id = :contactId")
+    suspend fun updateFavorite(contactId: Int, isFavorite: Boolean)
+
+    @Query("SELECT * FROM contacts WHERE isFavorite = 1")
+    suspend fun getFavoriteContacts(): List<AppContact>
+
     /**
      * Deletes all contacts from the table.
      * This is used before a refresh.

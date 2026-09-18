@@ -24,6 +24,7 @@ data class AppContact(
     val familyHead: String,
     val aum: String?,
     val familyAum: String?,
+    val isFavorite: Boolean = false
 ) {
     /**
      * HIGH-SPEED OPTIMIZATION:
