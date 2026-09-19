@@ -36,13 +36,13 @@ object RetrofitInstance {
 
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL_LOCAL)
+            .baseUrl(BASE_URL_PROD)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }
 
-    fun handsFreeWebSocketUrl(): String = BASE_URL_LOCAL
+    fun handsFreeWebSocketUrl(): String = BASE_URL_PROD
         .replaceFirst("https://", "wss://")
         .replaceFirst("http://", "ws://") + "ws/hands-free"
 

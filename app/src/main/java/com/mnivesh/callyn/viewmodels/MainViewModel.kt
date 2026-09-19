@@ -9,6 +9,8 @@ import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.components.DeviceContact
 import com.mnivesh.callyn.db.AppContact
 import com.mnivesh.callyn.managers.AuthManager
+import com.mnivesh.callyn.managers.DrawerFeatureFlags
+import com.mnivesh.callyn.managers.RemoteConfigManager
 import com.mnivesh.callyn.managers.VersionManager
 import com.mnivesh.callyn.managers.WhatsNewManager
 import com.mnivesh.callyn.managers.WhatsNewVersion
@@ -63,6 +65,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _whatsNewVersion = MutableStateFlow<WhatsNewVersion?>(null)
     val whatsNewVersion: StateFlow<WhatsNewVersion?> = _whatsNewVersion.asStateFlow()
+
+    val drawerFeatureFlags: StateFlow<DrawerFeatureFlags> = RemoteConfigManager.featureFlags
 
     /**
      * Updates the main UI state.

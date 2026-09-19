@@ -29,10 +29,16 @@ class FeatureBadgeManager(context: Context) {
     }
 
     /**
-     * Checks if ANY feature is still unvisited.
+     * Checks if ANY enabled feature is still unvisited.
      * Used for displaying the red dot indicator on the app drawer hamburger icon.
      */
-    fun hasAnyUnvisitedFeature(): Boolean {
-        return FeatureBadgeKey.entries.any { isFeatureUnvisited(it) }
+    fun hasAnyUnvisitedFeature(featureFlags: DrawerFeatureFlags = RemoteConfigManager.featureFlags.value): Boolean {
+        return FeatureBadgeKey.entries.any { key ->
+            val isEnabled = when (key) {
+                FeatureBadgeKey.QUICK_REPLIES -> featureFlags.isQuickRepliesEnabled
+                FeatureBadgeKey.HANDS_FREE -> featureFlags.isHandsFreeEnabled
+            }
+            isEnabled && isFeatureUnvisited(key)
+        }
     }
 }

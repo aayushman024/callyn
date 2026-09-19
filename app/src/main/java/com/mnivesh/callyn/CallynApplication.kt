@@ -10,6 +10,7 @@ import com.mnivesh.callyn.data.ContactRepository
 import com.mnivesh.callyn.db.ContactDatabase
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.CallManager
+import com.mnivesh.callyn.managers.RemoteConfigManager
 import com.mnivesh.callyn.managers.TokenRefreshManager
 import com.mnivesh.callyn.workers.TokenRefreshWorker
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +42,7 @@ class CallynApplication : Application() {
         super.onCreate()
         RetrofitInstance.init(this)
         CallManager.initialize(repository, this)
+        RemoteConfigManager.initialize()
 
         // Enqueue periodic WorkManager background refresh task
         TokenRefreshWorker.enqueuePeriodicWork(this)

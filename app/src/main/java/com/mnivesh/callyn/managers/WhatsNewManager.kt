@@ -50,12 +50,8 @@ class WhatsNewManager(context: Context) {
                 title = "What's New in v2.4.0",
                 features = listOf(
                     WhatsNewFeature(
-                        title = "Hands-Free Calling",
-                        description = "Use seamless calling from the Operations Dashboard in just a click."
-                    ),
-                    WhatsNewFeature(
                         title = "Favourite Work Contacts",
-                        description = "You can now mark you work contacts as favourite for a quicker access."
+                        description = "You can now mark you work contacts as favourite for a quicker access. Open any client modal and tap the star icon at top right to add them to your favourites."
                     ),
                     WhatsNewFeature(
                         title = "In-Call Indicator",

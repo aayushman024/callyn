@@ -30,6 +30,7 @@ import com.mnivesh.callyn.api.version
 import com.mnivesh.callyn.managers.AuthManager
 import com.mnivesh.callyn.managers.FeatureBadgeKey
 import com.mnivesh.callyn.managers.FeatureBadgeManager
+import com.mnivesh.callyn.managers.RemoteConfigManager
 import com.mnivesh.callyn.ui.theme.AppTheme
 import com.mnivesh.callyn.ui.theme.sdp
 import com.mnivesh.callyn.ui.theme.ssp
@@ -73,19 +74,23 @@ fun AppDrawer(
     val email = remember { authManager.getUserEmail() ?: "" }
     val workPhone = remember { authManager.getWorkPhone() ?: "Not Alloted" }
 
+    val featureFlags by RemoteConfigManager.featureFlags.collectAsState()
+
     val configuration = LocalConfiguration.current
     val drawerWidth = min(320.sdp(), configuration.screenWidthDp.dp * 0.85f)
 
-    val directoryItems = remember(department) {
+    val directoryItems = remember(department, featureFlags) {
         val list = mutableListOf<DrawerAction>()
-        list.add(
-            DrawerAction(
-                label = "Employee directory",
-                icon = Icons.Default.Groups,
-                tint = Color(0xFFF472B6), // Pink
-                onClick = onShowDirectory
+        if (featureFlags.isEmployeeDirectoryEnabled) {
+            list.add(
+                DrawerAction(
+                    label = "Employee directory",
+                    icon = Icons.Default.Groups,
+                    tint = Color(0xFFF472B6), // Pink
+                    onClick = onShowDirectory
+                )
             )
-        )
+        }
 //        list.add(
 //            DrawerAction(
 //                label = "Sync work contacts",
@@ -97,7 +102,7 @@ fun AppDrawer(
 //                }
 //            )
 //        )
-        if (MANAGEMENT_ROLES.contains(department)) {
+        if (featureFlags.isUserStatusEnabled && MANAGEMENT_ROLES.contains(department)) {
             list.add(
                 DrawerAction(
                     label = "User status",
@@ -110,18 +115,20 @@ fun AppDrawer(
         list
     }
 
-    val callingItems = remember(department, email) {
+    val callingItems = remember(department, email, featureFlags) {
         val list = mutableListOf<DrawerAction>()
-        list.add(
-            DrawerAction(
-                label = "Hands-free calling",
-                icon = Icons.Default.HeadsetMic,
-                tint = Color(0xFF38BDF8), // Sky Blue
-                badgeKey = FeatureBadgeKey.HANDS_FREE,
-                onClick = onShowHandsFree
+        if (featureFlags.isHandsFreeEnabled) {
+            list.add(
+                DrawerAction(
+                    label = "Hands-free calling",
+                    icon = Icons.Default.HeadsetMic,
+                    tint = Color(0xFF38BDF8), // Sky Blue
+                    badgeKey = FeatureBadgeKey.HANDS_FREE,
+                    onClick = onShowHandsFree
+                )
             )
-        )
-        if (department != "GUEST") {
+        }
+        if (featureFlags.isCallLogsEnabled && department != "GUEST") {
             val isManagement = department == "Management" || ADMIN_EMAILS.contains(email)
             val callLogLabel = if (isManagement) "Call logs" else "Call notes"
             val callLogIcon = if (isManagement) Icons.Default.History else Icons.Default.EditNote
@@ -135,15 +142,17 @@ fun AppDrawer(
                 )
             )
         }
-        list.add(
-            DrawerAction(
-                label = "Quick replies",
-                icon = Icons.Default.Message,
-                tint = Color(0xFF3B82F6), // Blue
-                badgeKey = FeatureBadgeKey.QUICK_REPLIES,
-                onClick = onShowEditQuickReplies
+        if (featureFlags.isQuickRepliesEnabled) {
+            list.add(
+                DrawerAction(
+                    label = "Quick replies",
+                    icon = Icons.Default.Message,
+                    tint = Color(0xFF3B82F6), // Blue
+                    badgeKey = FeatureBadgeKey.QUICK_REPLIES,
+                    onClick = onShowEditQuickReplies
+                )
             )
-        )
+        }
         list
     }
 
@@ -177,43 +186,58 @@ fun AppDrawer(
                     .verticalScroll(rememberScrollState())
             ) {
                 // Directory Section
-                DrawerSectionHeader(title = "Directory")
-                directoryItems.forEach { item ->
-                    DrawerActionRow(item = item, onClose = onClose)
+                if (directoryItems.isNotEmpty()) {
+                    DrawerSectionHeader(title = "Directory")
+                    directoryItems.forEach { item ->
+                        DrawerActionRow(item = item, onClose = onClose)
+                    }
                 }
 
                 // Divider between Directory and Calling
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp()),
-                    color = AppTheme.colors.border.copy(alpha = 0.5f),
-                    thickness = 1.sdp()
-                )
+                if (directoryItems.isNotEmpty() && (callingItems.isNotEmpty() || featureFlags.isThemeToggleEnabled || featureFlags.isWhatsNewEnabled)) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp()),
+                        color = AppTheme.colors.border.copy(alpha = 0.5f),
+                        thickness = 1.sdp()
+                    )
+                }
 
                 // Calling Section
-                DrawerSectionHeader(title = "Calling")
-                callingItems.forEach { item ->
-                    DrawerActionRow(item = item, onClose = onClose)
+                if (callingItems.isNotEmpty()) {
+                    DrawerSectionHeader(title = "Calling")
+                    callingItems.forEach { item ->
+                        DrawerActionRow(item = item, onClose = onClose)
+                    }
                 }
 
                 // Divider between Calling and Preferences
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp()),
-                    color = AppTheme.colors.border.copy(alpha = 0.5f),
-                    thickness = 1.sdp()
-                )
+                if (callingItems.isNotEmpty() && (featureFlags.isThemeToggleEnabled || featureFlags.isWhatsNewEnabled)) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 20.sdp(), vertical = 8.sdp()),
+                        color = AppTheme.colors.border.copy(alpha = 0.5f),
+                        thickness = 1.sdp()
+                    )
+                }
 
                 // Preferences Section
-                DrawerSectionHeader(title = "Preferences")
-                DrawerThemeToggleRow(
-                    isDarkTheme = isDarkTheme,
-                    onThemeToggle = onThemeToggle
-                )
-                DrawerWhatsNewRow(
-                    onClick = {
-                        onClose()
-                        (context as? MainActivity)?.showWhatsNew()
+                val hasPreferences = featureFlags.isThemeToggleEnabled || featureFlags.isWhatsNewEnabled
+                if (hasPreferences) {
+                    DrawerSectionHeader(title = "Preferences")
+                    if (featureFlags.isThemeToggleEnabled) {
+                        DrawerThemeToggleRow(
+                            isDarkTheme = isDarkTheme,
+                            onThemeToggle = onThemeToggle
+                        )
                     }
-                )
+                    if (featureFlags.isWhatsNewEnabled) {
+                        DrawerWhatsNewRow(
+                            onClick = {
+                                onClose()
+                                (context as? MainActivity)?.showWhatsNew()
+                            }
+                        )
+                    }
+                }
             }
 
             // Divider before Logout

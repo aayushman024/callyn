@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.border
 import com.mnivesh.callyn.managers.FeatureBadgeManager
+import com.mnivesh.callyn.managers.RemoteConfigManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -527,8 +528,11 @@ fun ContactsScreen(
                         }
                     },
                     navigationIcon = {
+                        val featureFlags by RemoteConfigManager.featureFlags.collectAsState()
                         val featureBadgeManager = remember { FeatureBadgeManager(context) }
-                        val showUnvisitedDot = remember(featureBadgeManager) { featureBadgeManager.hasAnyUnvisitedFeature() }
+                        val showUnvisitedDot = remember(featureBadgeManager, featureFlags) {
+                            featureBadgeManager.hasAnyUnvisitedFeature(featureFlags)
+                        }
 
                         Box(contentAlignment = Alignment.TopEnd) {
                             IconButton(onClick = onOpenDrawer) {
